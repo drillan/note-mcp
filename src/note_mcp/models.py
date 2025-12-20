@@ -75,6 +75,7 @@ class Article(BaseModel):
         status: Publication status
         tags: List of hashtags (without # prefix)
         eyecatch_image_key: Eyecatch image key (if set)
+        prev_access_key: Preview access key for draft articles
         created_at: Creation timestamp (ISO 8601)
         updated_at: Last update timestamp (ISO 8601)
         published_at: Publication timestamp (ISO 8601)
@@ -88,6 +89,7 @@ class Article(BaseModel):
     status: ArticleStatus
     tags: list[str] = []
     eyecatch_image_key: str | None = None
+    prev_access_key: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
     published_at: str | None = None
@@ -242,6 +244,7 @@ def from_api_response(data: dict[str, object]) -> Article:
         status=ArticleStatus(status_str),
         tags=tags,
         eyecatch_image_key=str(data.get("eyecatch_image_key")) if data.get("eyecatch_image_key") else None,
+        prev_access_key=str(data.get("prev_access_key")) if data.get("prev_access_key") else None,
         created_at=str(data.get("created_at")) if data.get("created_at") else None,
         updated_at=str(data.get("updated_at")) if data.get("updated_at") else None,
         published_at=str(data.get("publish_at")) if data.get("publish_at") else None,
