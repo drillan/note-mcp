@@ -30,6 +30,7 @@ class TestLoginFlow:
             mock_page = AsyncMock()
             mock_page.goto = AsyncMock()
             mock_page.wait_for_url = AsyncMock()
+            mock_page.url = "https://note.com/login"  # Simulate being on login page
             mock_page.context = AsyncMock()
             mock_page.context.cookies = AsyncMock(
                 return_value=[
@@ -37,7 +38,9 @@ class TestLoginFlow:
                     {"name": "_note_session_v5", "value": "session456"},
                 ]
             )
+            mock_page.evaluate = AsyncMock(return_value=None)
 
+            mock_manager.close = AsyncMock()
             mock_manager.get_page = AsyncMock(return_value=mock_page)
 
             # Mock session manager
@@ -67,6 +70,7 @@ class TestLoginFlow:
             mock_page = AsyncMock()
             mock_page.goto = AsyncMock()
             mock_page.wait_for_url = AsyncMock()
+            mock_page.url = "https://note.com/login"  # Simulate being on login page
             mock_page.context = AsyncMock()
             mock_page.context.cookies = AsyncMock(
                 return_value=[
@@ -74,7 +78,9 @@ class TestLoginFlow:
                     {"name": "_note_session_v5", "value": "session456"},
                 ]
             )
+            mock_page.evaluate = AsyncMock(return_value=None)
 
+            mock_manager.close = AsyncMock()
             mock_manager.get_page = AsyncMock(return_value=mock_page)
 
             with patch("note_mcp.auth.browser.SessionManager") as mock_session_manager_class:
@@ -106,14 +112,17 @@ class TestExtractSessionCookies:
         assert result["_note_session_v5"] == "session456"
         assert "other_cookie" not in result
 
-    def test_extract_cookies_missing_auth_token(self) -> None:
-        """Test extraction when auth token is missing."""
+    def test_extract_cookies_auth_token_optional(self) -> None:
+        """Test extraction succeeds without auth token (it's optional)."""
         cookies = [
             {"name": "_note_session_v5", "value": "session456"},
         ]
 
-        with pytest.raises(ValueError, match="auth_token"):
-            extract_session_cookies(cookies)
+        result = extract_session_cookies(cookies)
+
+        # note_gql_auth_token is optional, so extraction should succeed
+        assert result["_note_session_v5"] == "session456"
+        assert "note_gql_auth_token" not in result
 
     def test_extract_cookies_missing_session(self) -> None:
         """Test extraction when session cookie is missing."""

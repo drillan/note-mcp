@@ -79,6 +79,50 @@ async def note_logout() -> str:
 
 
 @mcp.tool()
+async def note_set_username(
+    username: Annotated[str, "note.comのユーザー名（URLに表示される名前、例: your_username）"],
+) -> str:
+    """ユーザー名を手動で設定します。
+
+    ログイン時にユーザー名の自動取得に失敗した場合に使用します。
+    ユーザー名はnote.comのプロフィールURLから確認できます。
+    例: https://note.com/your_username → your_username
+
+    Args:
+        username: note.comのユーザー名
+
+    Returns:
+        設定結果のメッセージ
+    """
+    from note_mcp.models import Session
+
+    if not _session_manager.has_session():
+        return "セッションが存在しません。先にnote_loginを実行してください。"
+
+    session = _session_manager.load()
+    if session is None:
+        return "セッションの読み込みに失敗しました。note_loginで再ログインしてください。"
+
+    # Validate username format
+    import re
+
+    if not re.match(r"^[a-zA-Z0-9_-]+$", username):
+        return "無効なユーザー名です。英数字、アンダースコア、ハイフンのみ使用できます。"
+
+    # Create updated session with new username
+    updated_session = Session(
+        cookies=session.cookies,
+        user_id=username,  # Use username as user_id
+        username=username,
+        expires_at=session.expires_at,
+        created_at=session.created_at,
+    )
+
+    _session_manager.save(updated_session)
+    return f"ユーザー名を '{username}' に設定しました。"
+
+
+@mcp.tool()
 async def note_create_draft(
     title: Annotated[str, "記事のタイトル"],
     body: Annotated[str, "記事の本文（Markdown形式）"],

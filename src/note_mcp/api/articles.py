@@ -129,32 +129,37 @@ async def list_articles(
     Raises:
         NoteAPIError: If API request fails
     """
-    # Build query parameters
+    # Build query parameters using the v2 creators endpoint
+    # Reference: https://note.com/karupoimou/n/n5d8124747158
     params: dict[str, Any] = {
+        "kind": "note",
         "page": page,
-        "limit": min(limit, 10),  # Max 10 as per API contract
     }
 
     # Add status filter if specified
     if status is not None:
         params["status"] = status.value
 
+    # Use the username-specific endpoint to get the user's own articles
     async with NoteAPIClient(session) as client:
-        response = await client.get(f"/v3/users/{session.user_id}/notes", params=params)
+        response = await client.get(f"/v2/creators/{session.username}/contents", params=params)
 
-    # Parse response
+    # Parse response - v2 endpoint returns different structure
     data = response.get("data", {})
-    notes_data = data.get("notesByAuthor", {})
 
-    contents = notes_data.get("contents", [])
-    total_count = notes_data.get("totalCount", 0)
-    is_last_page = notes_data.get("isLastPage", True)
+    # The v2 endpoint returns contents directly in data
+    contents = data.get("contents", [])
+    total_count = data.get("totalCount", len(contents))
+    is_last_page = data.get("isLastPage", True)
 
     # Convert each article
     articles: list[Article] = []
     for item in contents:
         article = from_api_response(item)
         articles.append(article)
+
+    # Apply limit client-side if needed (v2 may not support limit param)
+    articles = articles[:limit]
 
     return ArticleListResult(
         articles=articles,

@@ -229,32 +229,31 @@ class TestListArticles:
         """Test successful article listing."""
         session = create_mock_session()
 
+        # Mock response matches /v2/creators/{username}/contents API structure
         mock_response = {
             "data": {
-                "notesByAuthor": {
-                    "contents": [
-                        {
-                            "id": "123",
-                            "key": "n123",
-                            "name": "Article 1",
-                            "status": "published",
-                            "createdAt": "2024-01-01T00:00:00Z",
-                            "updatedAt": "2024-01-02T00:00:00Z",
-                            "noteUrl": "https://note.com/testuser/n/n123",
-                        },
-                        {
-                            "id": "456",
-                            "key": "n456",
-                            "name": "Article 2",
-                            "status": "draft",
-                            "createdAt": "2024-01-03T00:00:00Z",
-                            "updatedAt": "2024-01-04T00:00:00Z",
-                            "noteUrl": "https://note.com/testuser/n/n456",
-                        },
-                    ],
-                    "totalCount": 2,
-                    "isLastPage": True,
-                }
+                "contents": [
+                    {
+                        "id": "123",
+                        "key": "n123",
+                        "name": "Article 1",
+                        "status": "published",
+                        "createdAt": "2024-01-01T00:00:00Z",
+                        "updatedAt": "2024-01-02T00:00:00Z",
+                        "noteUrl": "https://note.com/testuser/n/n123",
+                    },
+                    {
+                        "id": "456",
+                        "key": "n456",
+                        "name": "Article 2",
+                        "status": "draft",
+                        "createdAt": "2024-01-03T00:00:00Z",
+                        "updatedAt": "2024-01-04T00:00:00Z",
+                        "noteUrl": "https://note.com/testuser/n/n456",
+                    },
+                ],
+                "totalCount": 2,
+                "isLastPage": True,
             }
         }
 
@@ -279,22 +278,21 @@ class TestListArticles:
         """Test listing articles with status filter."""
         session = create_mock_session()
 
+        # Mock response matches /v2/creators/{username}/contents API structure
         mock_response = {
             "data": {
-                "notesByAuthor": {
-                    "contents": [
-                        {
-                            "id": "123",
-                            "key": "n123",
-                            "name": "Draft Article",
-                            "status": "draft",
-                            "createdAt": "2024-01-01T00:00:00Z",
-                            "updatedAt": "2024-01-02T00:00:00Z",
-                        }
-                    ],
-                    "totalCount": 1,
-                    "isLastPage": True,
-                }
+                "contents": [
+                    {
+                        "id": "123",
+                        "key": "n123",
+                        "name": "Draft Article",
+                        "status": "draft",
+                        "createdAt": "2024-01-01T00:00:00Z",
+                        "updatedAt": "2024-01-02T00:00:00Z",
+                    }
+                ],
+                "totalCount": 1,
+                "isLastPage": True,
             }
         }
 
@@ -315,22 +313,21 @@ class TestListArticles:
         """Test listing articles with pagination."""
         session = create_mock_session()
 
+        # Mock response matches /v2/creators/{username}/contents API structure
         mock_response = {
             "data": {
-                "notesByAuthor": {
-                    "contents": [
-                        {
-                            "id": "789",
-                            "key": "n789",
-                            "name": "Page 2 Article",
-                            "status": "published",
-                            "createdAt": "2024-01-01T00:00:00Z",
-                            "updatedAt": "2024-01-02T00:00:00Z",
-                        }
-                    ],
-                    "totalCount": 11,
-                    "isLastPage": False,
-                }
+                "contents": [
+                    {
+                        "id": "789",
+                        "key": "n789",
+                        "name": "Page 2 Article",
+                        "status": "published",
+                        "createdAt": "2024-01-01T00:00:00Z",
+                        "updatedAt": "2024-01-02T00:00:00Z",
+                    }
+                ],
+                "totalCount": 11,
+                "isLastPage": False,
             }
         }
 

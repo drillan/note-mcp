@@ -20,10 +20,11 @@ if TYPE_CHECKING:
 # note.com URLs
 NOTE_LOGIN_URL = "https://note.com/login"
 NOTE_HOME_URL = "https://note.com/"
-NOTE_DASHBOARD_URL = "https://note.com/dashboard"
+NOTE_ACCOUNT_SETTINGS_URL = "https://note.com/settings/account"
 
-# Required cookie names
-REQUIRED_COOKIES = ["note_gql_auth_token", "_note_session_v5"]
+# Required cookie names (note_gql_auth_token is optional, set on-demand by note.com)
+REQUIRED_COOKIES = ["_note_session_v5"]
+OPTIONAL_COOKIES = ["note_gql_auth_token", "XSRF-TOKEN"]
 
 # Default timeout for login (5 minutes)
 DEFAULT_LOGIN_TIMEOUT = 300
@@ -36,32 +37,123 @@ def extract_session_cookies(cookies: list[dict[str, Any]]) -> dict[str, str]:
         cookies: List of cookie dictionaries from Playwright
 
     Returns:
-        Dictionary with required cookie name-value pairs
+        Dictionary with required and optional cookie name-value pairs
 
     Raises:
         ValueError: If required cookies are missing
     """
     result: dict[str, str] = {}
 
+    all_cookies = REQUIRED_COOKIES + OPTIONAL_COOKIES
     for cookie in cookies:
         name = cookie.get("name", "")
-        if name in REQUIRED_COOKIES:
+        if name in all_cookies:
             result[name] = cookie.get("value", "")
 
-    # Validate required cookies
-    if "note_gql_auth_token" not in result:
-        raise ValueError("Missing required cookie: note_gql_auth_token")
-    if "_note_session_v5" not in result:
-        raise ValueError("Missing required cookie: _note_session_v5")
+    # Validate required cookies only
+    for required_cookie in REQUIRED_COOKIES:
+        if required_cookie not in result:
+            raise ValueError(f"Missing required cookie: {required_cookie}")
 
     return result
 
 
-async def get_current_user(cookies: dict[str, str]) -> dict[str, Any]:
+async def get_user_from_browser(page: Any) -> dict[str, Any]:
+    """Get user info from browser page using JavaScript.
+
+    Extracts user information from note.com's account settings page.
+    Uses the profile link element to extract the username.
+
+    Args:
+        page: Playwright page object (should be on /settings/account page)
+
+    Returns:
+        User info dictionary with 'id' and 'urlname' fields
+
+    Raises:
+        ValueError: If user info cannot be retrieved
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # Try to get user info from note.com's account settings page
+    user_info = await page.evaluate("""
+        () => {
+            // Method 1: Best method - find <a href="/settings/account/note_id"> and get <p> inside
+            // Structure: <a href="/settings/account/note_id"><div><h3>note ID</h3><p>USERNAME</p></div></a>
+            const noteIdLink = document.querySelector('a[href="/settings/account/note_id"]');
+            if (noteIdLink) {
+                const pElement = noteIdLink.querySelector('p');
+                if (pElement) {
+                    const username = (pElement.textContent || '').trim();
+                    if (username && /^[a-zA-Z0-9_-]+$/.test(username)) {
+                        return { id: '', urlname: username };
+                    }
+                }
+            }
+
+            // Method 2: Try __NEXT_DATA__ (Next.js server-side props)
+            if (window.__NEXT_DATA__ && window.__NEXT_DATA__.props) {
+                const pageProps = window.__NEXT_DATA__.props.pageProps;
+                if (pageProps && pageProps.currentUser) {
+                    return {
+                        id: String(pageProps.currentUser.id || ''),
+                        urlname: pageProps.currentUser.urlname || ''
+                    };
+                }
+            }
+
+            // Method 3: Search localStorage for user info
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key) {
+                    try {
+                        const value = localStorage.getItem(key);
+                        const data = JSON.parse(value);
+                        const search = (obj, depth = 0) => {
+                            if (depth > 5 || !obj || typeof obj !== 'object') return null;
+                            if (obj.urlname && typeof obj.urlname === 'string') {
+                                return obj.urlname;
+                            }
+                            for (const v of Object.values(obj)) {
+                                const result = search(v, depth + 1);
+                                if (result) return result;
+                            }
+                            return null;
+                        };
+                        const urlname = search(data);
+                        if (urlname) {
+                            return { id: '', urlname: urlname };
+                        }
+                    } catch (e) {
+                        // Skip non-JSON values
+                    }
+                }
+            }
+
+            // Return empty if no username found
+            return { id: '', urlname: '' };
+        }
+    """)
+
+    logger.debug(f"Browser user info result: {user_info}")
+
+    if user_info and (user_info.get("id") or user_info.get("urlname")):
+        return {
+            "id": str(user_info.get("id", "")),
+            "urlname": user_info.get("urlname", ""),
+        }
+
+    raise ValueError("Could not retrieve user info from browser")
+
+
+async def get_current_user(cookies: dict[str, str], xsrf_token: str | None = None) -> dict[str, Any]:
     """Get current user info from note.com API.
 
     Args:
         cookies: Session cookies for authentication
+        xsrf_token: XSRF token for CSRF protection
 
     Returns:
         User info dictionary with 'id' and 'urlname' fields
@@ -75,12 +167,17 @@ async def get_current_user(cookies: dict[str, str]) -> dict[str, Any]:
         # Build cookie header
         cookie_header = "; ".join(f"{k}={v}" for k, v in cookies.items())
 
+        # Build headers with XSRF token if available
+        headers: dict[str, str] = {
+            "Cookie": cookie_header,
+            "Accept": "application/json",
+        }
+        if xsrf_token:
+            headers["X-XSRF-TOKEN"] = xsrf_token
+
         response = await client.get(
             "https://note.com/api/v1/stats/pv",
-            headers={
-                "Cookie": cookie_header,
-                "Accept": "application/json",
-            },
+            headers=headers,
         )
 
         if response.status_code != 200:
@@ -98,10 +195,7 @@ async def get_current_user(cookies: dict[str, str]) -> dict[str, Any]:
             # Try alternative endpoint
             response = await client.get(
                 "https://note.com/api/v2/self",
-                headers={
-                    "Cookie": cookie_header,
-                    "Accept": "application/json",
-                },
+                headers=headers,
             )
 
             if response.status_code != 200:
@@ -121,9 +215,8 @@ async def get_current_user(cookies: dict[str, str]) -> dict[str, Any]:
 async def login_with_browser(timeout: int = DEFAULT_LOGIN_TIMEOUT) -> Session:
     """Open browser for manual login and extract session.
 
-    Opens the note.com login page in a visible browser window.
-    Waits for user to complete login manually.
-    Extracts session cookies and creates a Session object.
+    If a saved session exists, injects cookies into browser to restore session.
+    Otherwise, opens the note.com login page for manual login.
 
     Args:
         timeout: Maximum time to wait for login (seconds)
@@ -135,37 +228,213 @@ async def login_with_browser(timeout: int = DEFAULT_LOGIN_TIMEOUT) -> Session:
         TimeoutError: If login is not completed within timeout
         ValueError: If required cookies are not found
     """
+    import logging
+
+    # Configure logging to file for debugging
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler("/tmp/note_mcp_login.log"),
+            logging.StreamHandler(),
+        ],
+    )
+    logger = logging.getLogger(__name__)
+
     manager = BrowserManager.get_instance()
+
+    # Close existing browser to ensure fresh context
+    logger.info("Closing existing browser...")
+    await manager.close()
+
+    # Get fresh page
+    logger.info("Getting fresh page...")
     page = await manager.get_page()
 
-    # Navigate to login page
-    await page.goto(NOTE_LOGIN_URL)
+    # Check for saved session and inject cookies if available
+    session_manager = SessionManager()
+    saved_session = session_manager.load()
 
-    # Wait for user to complete login (redirected to home or dashboard)
-    try:
-        await page.wait_for_url(
-            lambda url: url.startswith(NOTE_HOME_URL) or url.startswith(NOTE_DASHBOARD_URL),
-            timeout=timeout * 1000,  # Convert to milliseconds
-        )
-    except Exception as e:
-        raise TimeoutError(f"Login not completed within {timeout} seconds") from e
+    if saved_session and not saved_session.is_expired() and saved_session.cookies:
+        logger.info("Found saved session, injecting cookies into browser...")
+        # Convert saved cookies to Playwright format
+        playwright_cookies: list[dict[str, Any]] = []
+        for name, value in saved_session.cookies.items():
+            playwright_cookies.append(
+                {
+                    "name": name,
+                    "value": value,
+                    "domain": ".note.com",
+                    "path": "/",
+                }
+            )
+        await page.context.add_cookies(playwright_cookies)  # type: ignore[arg-type]
+        logger.info(f"Injected {len(playwright_cookies)} cookies")
+
+        # Navigate to home page to check if session is valid
+        logger.info(f"Navigating to {NOTE_HOME_URL} to verify session...")
+        await page.goto(NOTE_HOME_URL, wait_until="domcontentloaded")
+    else:
+        logger.info("No saved session or session expired, navigating to login page...")
+        # Navigate to login page
+        await page.goto(NOTE_LOGIN_URL, wait_until="domcontentloaded")
+
+    current_url = page.url
+    logger.info(f"Current URL after navigation: {current_url}")
+
+    # Define what a logged-in URL looks like
+    def is_logged_in(url: str) -> bool:
+        # Must be on note.com but NOT on login-related pages
+        if not url.startswith(NOTE_HOME_URL):
+            return False
+        # Exclude login and auth pages
+        login_paths = ["/login", "/signup", "/auth", "/oauth"]
+        result = all(f"note.com{path}" not in url for path in login_paths)
+        logger.debug(f"is_logged_in({url}) = {result}")
+        return result
+
+    # Check if already logged in (URL changed during navigation)
+    if is_logged_in(current_url):
+        logger.info("Already logged in, extracting cookies...")
+    else:
+        # Wait for user to complete login (redirected away from login page)
+        # This will block until user manually logs in via the browser
+        logger.info("Waiting for user to complete login...")
+        try:
+            await page.wait_for_url(
+                is_logged_in,
+                timeout=timeout * 1000,  # Convert to milliseconds
+            )
+            logger.info("Login detected!")
+        except Exception as e:
+            raise TimeoutError(f"Login not completed within {timeout} seconds") from e
+
+    # Navigate to account settings page to ensure all cookies are set
+    # and to extract user info from the profile link
+    logger.info(f"Navigating to account settings to extract user info: {NOTE_ACCOUNT_SETTINGS_URL}")
+    await page.goto(NOTE_ACCOUNT_SETTINGS_URL, wait_until="domcontentloaded")
+    # Wait a bit for cookies to be set
+    import asyncio
+
+    await asyncio.sleep(1)
+    logger.info(f"Account settings URL: {page.url}")
 
     # Extract cookies from browser context
-    browser_cookies = await page.context.cookies()
-    # Convert Cookie objects to dicts for extraction
-    cookie_dicts: list[dict[str, Any]] = [
-        {"name": c.get("name", ""), "value": c.get("value", "")} for c in browser_cookies
-    ]
-    cookies = extract_session_cookies(cookie_dicts)
+    logger.info("Extracting cookies from browser context...")
+    final_cookies = await page.context.cookies()
+    logger.info(f"Found {len(final_cookies)} cookies")
 
-    # Get user info
-    user_info = await get_current_user(cookies)
+    # Log cookie names for debugging
+    cookie_names = [c.get("name", "") for c in final_cookies]
+    logger.info(f"Cookie names: {cookie_names}")
+
+    # Convert Cookie objects to dicts for extraction
+    final_cookie_dicts: list[dict[str, Any]] = [
+        {"name": c.get("name", ""), "value": c.get("value", "")} for c in final_cookies
+    ]
+    cookies = extract_session_cookies(final_cookie_dicts)
+
+    # Extract XSRF token for API calls
+    xsrf_token: str | None = None
+    for cookie in final_cookies:
+        if cookie.get("name") == "XSRF-TOKEN":
+            xsrf_token = cookie.get("value")
+            break
+
+    # Get user info - try multiple methods
+    user_id = ""
+    username = ""
+
+    # Method 1: Try to get from browser page first (most reliable)
+    try:
+        user_info = await get_user_from_browser(page)
+        user_id = user_info["id"]
+        username = user_info["urlname"]
+        logger.info(f"User info from browser: {username} (ID: {user_id})")
+    except ValueError as e:
+        logger.debug(f"Browser method failed: {e}")
+
+    # Method 2: Click on profile avatar/link and extract username from URL
+    if not username:
+        try:
+            logger.info("Trying to get username by clicking on profile link...")
+
+            # Try to find and click the profile avatar/link in header
+            # This usually appears as an image link that navigates to /{username}
+            clicked = await page.evaluate("""
+                () => {
+                    // Look for profile avatar in header (usually an img wrapped in an anchor)
+                    const headerAvatars = document.querySelectorAll('header a img, header button img');
+                    for (const img of headerAvatars) {
+                        const link = img.closest('a');
+                        if (link) {
+                            const href = link.getAttribute('href');
+                            // Check if it looks like a profile link
+                            if (href && href.match(/^\\/[a-zA-Z0-9_-]+$/)) {
+                                link.click();
+                                return href;
+                            }
+                        }
+                    }
+
+                    // Try clicking on any link in header that matches username pattern
+                    const headerLinks = document.querySelectorAll('header a[href^="/"]');
+                    const systemPaths = ['login', 'signup', 'search', 'notifications',
+                        'settings', 'premium', 'contests', 'hashtag', 'sitesettings',
+                        'explore', 'ranking', 'magazine', 'api', 'n', 'm', 'note'];
+                    for (const link of headerLinks) {
+                        const href = link.getAttribute('href');
+                        if (href) {
+                            const match = href.match(/^\\/([a-zA-Z0-9_-]+)$/);
+                            if (match && !systemPaths.includes(match[1].toLowerCase())) {
+                                link.click();
+                                return href;
+                            }
+                        }
+                    }
+
+                    return null;
+                }
+            """)
+
+            if clicked:
+                logger.info(f"Clicked on profile link: {clicked}")
+                # Wait for navigation
+                await asyncio.sleep(1)
+
+                # Extract username from current URL
+                current_url = page.url
+                logger.info(f"Current URL after navigation: {current_url}")
+
+                # Parse URL to get username: https://note.com/{username}
+                import re
+
+                match = re.match(r"https://note\.com/([a-zA-Z0-9_-]+)", current_url)
+                if match:
+                    username = match.group(1)
+                    user_id = username
+                    logger.info(f"Extracted username from URL: {username}")
+        except Exception as e:
+            logger.debug(f"Profile navigation method failed: {e}")
+
+    # Method 3: Fallback to API if browser method failed
+    if not username:
+        try:
+            user_info = await get_current_user(cookies, xsrf_token=xsrf_token)
+            user_id = user_info["id"]
+            username = user_info["urlname"]
+            logger.info(f"User info from API: {username} (ID: {user_id})")
+        except ValueError as e:
+            logger.warning(f"Could not retrieve user info (login still successful): {e}")
+            # Use placeholder values - session is still valid
+            user_id = "unknown"
+            username = "unknown"
 
     # Create session
     session = Session(
         cookies=cookies,
-        user_id=user_info["id"],
-        username=user_info["urlname"],
+        user_id=user_id,
+        username=username,
         expires_at=None,  # No explicit expiry from cookies
         created_at=int(time.time()),
     )
