@@ -5,7 +5,7 @@ Provides functionality to show article preview in browser.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from note_mcp.browser.manager import BrowserManager
 
@@ -13,8 +13,8 @@ if TYPE_CHECKING:
     from note_mcp.models import Session
 
 
-# note.com base URL
-NOTE_BASE_URL = "https://note.com"
+# note.com editor URL
+NOTE_EDITOR_URL = "https://editor.note.com"
 
 
 async def show_preview(
@@ -33,12 +33,25 @@ async def show_preview(
     Raises:
         RuntimeError: If browser navigation fails
     """
-    # Build edit page URL
-    edit_url = f"{NOTE_BASE_URL}/{session.username}/n/{article_key}/edit"
+    # Build edit page URL using editor.note.com
+    edit_url = f"{NOTE_EDITOR_URL}/notes/{article_key}/edit/"
 
     # Get browser page
     manager = BrowserManager.get_instance()
     page = await manager.get_page()
+
+    # Inject session cookies into browser context
+    playwright_cookies: list[dict[str, Any]] = []
+    for name, value in session.cookies.items():
+        playwright_cookies.append(
+            {
+                "name": name,
+                "value": value,
+                "domain": ".note.com",
+                "path": "/",
+            }
+        )
+    await page.context.add_cookies(playwright_cookies)  # type: ignore[arg-type]
 
     # Navigate to edit page
     await page.goto(edit_url)

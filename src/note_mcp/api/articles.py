@@ -28,7 +28,7 @@ async def create_draft(
 ) -> Article:
     """Create a new draft article.
 
-    Converts Markdown body to HTML before sending to API.
+    Uses browser automation to create the draft via note.com's web interface.
 
     Args:
         session: Authenticated session
@@ -38,30 +38,11 @@ async def create_draft(
         Created Article object
 
     Raises:
-        NoteAPIError: If API request fails
+        RuntimeError: If draft creation fails
     """
-    # Convert Markdown to HTML
-    html_body = markdown_to_html(article_input.body)
+    from note_mcp.browser.create_draft import create_draft_via_browser
 
-    # Build request payload
-    payload: dict[str, Any] = {
-        "name": article_input.title,
-        "body": html_body,
-        "status": "draft",
-    }
-
-    # Add tags if present
-    if article_input.tags:
-        # Normalize tags (remove # prefix if present)
-        normalized_tags = [tag.lstrip("#") for tag in article_input.tags]
-        payload["hashtags"] = [{"hashtag": {"name": tag}} for tag in normalized_tags]
-
-    async with NoteAPIClient(session) as client:
-        response = await client.post("/v3/notes", json=payload)
-
-    # Parse response
-    article_data = response.get("data", {})
-    return from_api_response(article_data)
+    return await create_draft_via_browser(session, article_input)
 
 
 async def update_article(
@@ -71,7 +52,7 @@ async def update_article(
 ) -> Article:
     """Update an existing article.
 
-    Converts Markdown body to HTML before sending to API.
+    Uses browser automation to update the article via note.com's web interface.
 
     Args:
         session: Authenticated session
@@ -82,31 +63,40 @@ async def update_article(
         Updated Article object
 
     Raises:
-        NoteAPIError: If API request fails
+        RuntimeError: If article update fails
     """
-    # Convert Markdown to HTML if body is provided
-    html_body = markdown_to_html(article_input.body) if article_input.body else ""
+    from note_mcp.browser.update_article import update_article_via_browser
 
-    # Build request payload
-    payload: dict[str, Any] = {
-        "name": article_input.title,
-    }
+    return await update_article_via_browser(session, article_id, article_input)
 
-    # Only include body if provided
-    if html_body:
-        payload["body"] = html_body
 
-    # Add tags if present
-    if article_input.tags:
-        normalized_tags = [tag.lstrip("#") for tag in article_input.tags]
-        payload["hashtags"] = [{"hashtag": {"name": tag}} for tag in normalized_tags]
+async def get_article(
+    session: Session,
+    article_id: str,
+) -> Article:
+    """Get article content by ID.
 
-    async with NoteAPIClient(session) as client:
-        response = await client.put(f"/v3/notes/{article_id}", json=payload)
+    Retrieves article content via browser automation.
+    Use this to retrieve existing content before editing.
 
-    # Parse response
-    article_data = response.get("data", {})
-    return from_api_response(article_data)
+    Recommended workflow:
+    1. get_article(article_id) - retrieve current content
+    2. Edit content as needed
+    3. update_article(article_id, ...) - save changes
+
+    Args:
+        session: Authenticated session
+        article_id: ID of the article to retrieve
+
+    Returns:
+        Article object with title, body, and status
+
+    Raises:
+        RuntimeError: If article retrieval fails
+    """
+    from note_mcp.browser.get_article import get_article_via_browser
+
+    return await get_article_via_browser(session, article_id)
 
 
 async def list_articles(

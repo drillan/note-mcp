@@ -68,8 +68,11 @@ class NoteAPIClient:
             await self._client.aclose()
             self._client = None
 
-    def _build_headers(self) -> dict[str, str]:
+    def _build_headers(self, include_xsrf: bool = False) -> dict[str, str]:
         """Build request headers with authentication.
+
+        Args:
+            include_xsrf: Whether to include X-XSRF-TOKEN header (for POST/PUT/DELETE)
 
         Returns:
             Headers dictionary with Accept and Cookie if session exists
@@ -82,6 +85,12 @@ class NoteAPIClient:
         if self.session is not None:
             cookie_parts = [f"{k}={v}" for k, v in self.session.cookies.items()]
             headers["Cookie"] = "; ".join(cookie_parts)
+
+            # Add XSRF token for mutating requests
+            if include_xsrf:
+                xsrf_token = self.session.cookies.get("XSRF-TOKEN")
+                if xsrf_token:
+                    headers["X-XSRF-TOKEN"] = xsrf_token
 
         return headers
 
@@ -131,7 +140,7 @@ class NoteAPIClient:
             raise NoteAPIError(
                 code=ErrorCode.ARTICLE_NOT_FOUND,
                 message="Resource not found.",
-                details={"status_code": status},
+                details={"status_code": status, "response": response.text},
             )
         elif status == 429:
             raise NoteAPIError(
@@ -211,7 +220,7 @@ class NoteAPIClient:
         await self._check_rate_limit()
         self._track_request()
 
-        headers = self._build_headers()
+        headers = self._build_headers(include_xsrf=True)
 
         # Don't set Content-Type for multipart (httpx handles it)
         if json is not None:
@@ -254,7 +263,7 @@ class NoteAPIClient:
         await self._check_rate_limit()
         self._track_request()
 
-        headers = self._build_headers()
+        headers = self._build_headers(include_xsrf=True)
         if json is not None:
             headers["Content-Type"] = "application/json"
 
@@ -284,7 +293,7 @@ class NoteAPIClient:
         await self._check_rate_limit()
         self._track_request()
 
-        headers = self._build_headers()
+        headers = self._build_headers(include_xsrf=True)
         response = await self._client.delete(path, headers=headers)
 
         if not response.is_success:

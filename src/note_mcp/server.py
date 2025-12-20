@@ -9,7 +9,7 @@ from typing import Annotated
 
 from fastmcp import FastMCP
 
-from note_mcp.api.articles import create_draft, list_articles, publish_article, update_article
+from note_mcp.api.articles import create_draft, get_article, list_articles, publish_article, update_article
 from note_mcp.api.images import upload_image
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
@@ -161,6 +161,46 @@ async def note_create_draft(
 
 
 @mcp.tool()
+async def note_get_article(
+    article_id: Annotated[str, "取得する記事のID"],
+) -> str:
+    """記事の内容を取得します。
+
+    指定したIDの記事のタイトル、本文、ステータスを取得します。
+    記事を編集する前に既存内容を確認する際に使用します。
+
+    推奨ワークフロー:
+    1. note_get_article で既存内容を取得
+    2. 取得した内容を元に編集を決定
+    3. note_update_article で更新を保存
+
+    Args:
+        article_id: 取得する記事のID
+
+    Returns:
+        記事の内容（タイトル、本文、ステータス）
+    """
+    session = _session_manager.load()
+    if session is None or session.is_expired():
+        return "セッションが無効です。note_loginでログインしてください。"
+
+    try:
+        article = await get_article(session, article_id)
+    except RuntimeError as e:
+        return f"記事の取得に失敗しました: {e}"
+
+    tag_info = f"\nタグ: {', '.join(article.tags)}" if article.tags else ""
+
+    return f"""記事を取得しました。
+
+タイトル: {article.title}
+ステータス: {article.status.value}{tag_info}
+
+本文:
+{article.body}"""
+
+
+@mcp.tool()
 async def note_update_article(
     article_id: Annotated[str, "更新する記事のID"],
     title: Annotated[str, "新しいタイトル"],
@@ -169,6 +209,7 @@ async def note_update_article(
 ) -> str:
     """既存の記事を更新します。
 
+    編集前にnote_get_articleで既存内容を取得することを推奨します。
     Markdown形式の本文をHTMLに変換してnote.comに送信します。
 
     Args:

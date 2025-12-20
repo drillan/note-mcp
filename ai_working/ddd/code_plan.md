@@ -1084,3 +1084,480 @@ Code is ready when:
 ✅ Code plan complete and detailed
 ➡️ Get user approval
 ➡️ When approved, run: `/ddd:4-code`
+
+---
+
+# Phase 6: note_get_article Implementation Plan
+
+**Added**: 2025-12-20
+**Based on**: Phase 1 plan.md Section 11 + Phase 2 README.md updates
+
+---
+
+## Summary
+
+`note_get_article` MCPツールを追加し、既存記事の内容（タイトル、本文、タグ、ステータス）を取得可能にする。これにより、`note_update_article`の前に既存内容を確認し、「追記」「一部修正」などの編集操作が可能になる。
+
+**推奨ワークフロー**:
+1. `note_get_article(article_id)` で既存内容を取得
+2. AI/ユーザーが編集内容を決定
+3. `note_update_article(article_id, ...)` で保存
+
+---
+
+## Files to Change
+
+### File: `src/note_mcp/browser/get_article.py` (NEW)
+
+**Purpose**: ブラウザベースの記事内容取得
+**Current State**: 存在しない（新規作成）
+**Required Changes**: 新規作成
+
+**Specific Implementation**:
+```python
+"""Browser-based article retrieval for note.com."""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+from typing import TYPE_CHECKING, Any
+
+from note_mcp.browser.manager import BrowserManager
+from note_mcp.models import Article, ArticleStatus
+
+if TYPE_CHECKING:
+    from note_mcp.models import Session
+
+NOTE_EDITOR_URL = "https://editor.note.com"
+
+
+async def get_article_via_browser(
+    session: Session,
+    article_id: str,
+) -> Article:
+    """Get article content via browser automation.
+
+    Navigates to the article's edit page and extracts content.
+
+    Args:
+        session: Authenticated session
+        article_id: ID of the article to retrieve
+
+    Returns:
+        Article object with content
+
+    Raises:
+        RuntimeError: If article retrieval fails
+    """
+    manager = BrowserManager.get_instance()
+    page = await manager.get_page()
+
+    # Inject session cookies
+    playwright_cookies: list[dict[str, Any]] = []
+    for name, value in session.cookies.items():
+        playwright_cookies.append({
+            "name": name,
+            "value": value,
+            "domain": ".note.com",
+            "path": "/",
+        })
+    await page.context.add_cookies(playwright_cookies)
+
+    # Navigate to edit page
+    edit_url = f"{NOTE_EDITOR_URL}/notes/{article_id}/edit/"
+    await page.goto(edit_url, wait_until="domcontentloaded")
+
+    # Wait for network idle
+    with contextlib.suppress(Exception):
+        await page.wait_for_load_state("networkidle", timeout=10000)
+
+    await asyncio.sleep(2)  # Wait for JS initialization
+
+    # Verify navigation
+    if article_id not in page.url:
+        raise RuntimeError(f"Failed to navigate to article. URL: {page.url}")
+
+    # Wait for editor
+    with contextlib.suppress(Exception):
+        await page.wait_for_selector(".ProseMirror", state="visible", timeout=10000)
+
+    await asyncio.sleep(1)
+
+    # Extract title
+    title = ""
+    title_selectors = [
+        'input[placeholder*="タイトル"]',
+        'textarea[placeholder*="タイトル"]',
+    ]
+    for selector in title_selectors:
+        try:
+            title_el = page.locator(selector).first
+            if await title_el.count() > 0:
+                title = await title_el.input_value()
+                break
+        except Exception:
+            continue
+
+    # Extract body (plain text via innerText)
+    body = ""
+    try:
+        body_el = page.locator(".ProseMirror").first
+        if await body_el.count() > 0:
+            body = await body_el.inner_text()
+    except Exception:
+        pass
+
+    return Article(
+        id=article_id,
+        key=article_id,
+        title=title,
+        body=body,
+        status=ArticleStatus.DRAFT,  # Default, actual status unknown from editor
+        tags=[],  # Tags not easily extractable from editor UI
+    )
+```
+
+**Dependencies**: `browser/manager.py`, `models.py`
+**Agent Suggestion**: modular-builder
+
+---
+
+### File: `src/note_mcp/api/articles.py` (MODIFY)
+
+**Purpose**: 記事操作API
+**Current State**: `create_draft`, `update_article`, `list_articles`, `publish_article` が存在
+**Required Changes**: `get_article()` 関数を追加
+
+**Specific Modifications**:
+
+1. **Add import**:
+```python
+# 既存importに追加なし（browser importはget_article内で遅延import）
+```
+
+2. **Add function** (既存関数の後に追加):
+```python
+async def get_article(
+    session: Session,
+    article_id: str,
+) -> Article:
+    """Get article content by ID.
+
+    Retrieves article content via browser automation.
+
+    Args:
+        session: Authenticated session
+        article_id: ID of the article to retrieve
+
+    Returns:
+        Article object with content
+
+    Raises:
+        RuntimeError: If article retrieval fails
+    """
+    from note_mcp.browser.get_article import get_article_via_browser
+
+    return await get_article_via_browser(session, article_id)
+```
+
+**Dependencies**: `browser/get_article.py`
+**Agent Suggestion**: modular-builder
+
+---
+
+### File: `src/note_mcp/server.py` (MODIFY)
+
+**Purpose**: MCPサーバー定義
+**Current State**: 10個のMCPツールが登録済み
+**Required Changes**: `note_get_article` ツールを追加
+
+**Specific Modifications**:
+
+1. **Add import** (line 13あたり):
+```python
+from note_mcp.api.articles import create_draft, get_article, list_articles, publish_article, update_article
+```
+
+2. **Add tool** (line 161あたり、`note_update_article`の前に追加):
+```python
+@mcp.tool()
+async def note_get_article(
+    article_id: Annotated[str, "取得する記事のID"],
+) -> str:
+    """記事の内容を取得します。
+
+    指定したIDの記事のタイトル、本文、ステータスを取得します。
+    記事の編集前に既存内容を確認する際に使用します。
+
+    Args:
+        article_id: 取得する記事のID
+
+    Returns:
+        記事の内容（タイトル、本文、ステータス）
+    """
+    session = _session_manager.load()
+    if session is None or session.is_expired():
+        return "セッションが無効です。note_loginでログインしてください。"
+
+    try:
+        article = await get_article(session, article_id)
+    except RuntimeError as e:
+        return f"記事の取得に失敗しました: {e}"
+
+    return f"""記事を取得しました。
+
+タイトル: {article.title}
+ステータス: {article.status.value}
+タグ: {', '.join(article.tags) if article.tags else 'なし'}
+
+本文:
+{article.body}"""
+```
+
+**Dependencies**: `api/articles.py`
+**Agent Suggestion**: modular-builder
+
+---
+
+### File: `tests/integration/test_article_operations.py` (MODIFY)
+
+**Purpose**: 記事操作の統合テスト
+**Current State**: `TestCreateDraft`, `TestUpdateArticle`, `TestShowPreview`, `TestListArticles`, `TestPublishArticle` が存在
+**Required Changes**: `TestGetArticle` クラスを追加
+
+**Specific Modifications**:
+
+Add test class (line 201あたり、`TestListArticles`の前に追加):
+```python
+class TestGetArticle:
+    """Tests for get_article function."""
+
+    @pytest.mark.asyncio
+    async def test_get_article_success(self) -> None:
+        """Test successful article retrieval via browser."""
+        from note_mcp.api.articles import get_article
+        from note_mcp.models import Article
+
+        session = create_mock_session()
+
+        mock_article = Article(
+            id="123456",
+            key="n1234567890ab",
+            title="Existing Article",
+            body="This is the existing content.\n\nWith multiple paragraphs.",
+            status=ArticleStatus.DRAFT,
+            tags=[],
+        )
+
+        with patch("note_mcp.browser.get_article.get_article_via_browser") as mock_get:
+            mock_get.return_value = mock_article
+
+            article = await get_article(session, "123456")
+
+            assert article.id == "123456"
+            assert article.title == "Existing Article"
+            assert "existing content" in article.body
+            mock_get.assert_called_once_with(session, "123456")
+
+    @pytest.mark.asyncio
+    async def test_get_article_preserves_newlines(self) -> None:
+        """Test that article body preserves newlines."""
+        from note_mcp.api.articles import get_article
+        from note_mcp.models import Article
+
+        session = create_mock_session()
+
+        mock_article = Article(
+            id="123",
+            key="n123",
+            title="Test",
+            body="Line 1\n\nLine 2\n\nLine 3",
+            status=ArticleStatus.DRAFT,
+            tags=[],
+        )
+
+        with patch("note_mcp.browser.get_article.get_article_via_browser") as mock_get:
+            mock_get.return_value = mock_article
+
+            article = await get_article(session, "123")
+
+            assert article.body.count("\n") >= 2
+```
+
+**Dependencies**: なし
+**Agent Suggestion**: test-coverage
+
+---
+
+## Implementation Chunks
+
+### Chunk 1: Browser Get Article Module
+
+**Files**:
+- `src/note_mcp/browser/get_article.py` (NEW)
+
+**Description**: ブラウザベースの記事取得機能を実装。既存の`update_article.py`のパターンを踏襲。
+
+**Why first**: 他のファイルがこのモジュールに依存する。
+
+**Test strategy**: Chunk 3でモックを使った統合テストを追加
+
+**Dependencies**: None (uses existing browser/manager.py)
+
+**Commit point**: After file creation with basic structure
+
+---
+
+### Chunk 2: API Layer Integration
+
+**Files**:
+- `src/note_mcp/api/articles.py` (MODIFY)
+- `src/note_mcp/server.py` (MODIFY)
+
+**Description**: `get_article()` 関数と `note_get_article` MCPツールを追加。
+
+**Why second**: Chunk 1の実装に依存。
+
+**Test strategy**: Chunk 3でテストを追加
+
+**Dependencies**: Chunk 1
+
+**Commit point**: After integration complete
+
+---
+
+### Chunk 3: Tests
+
+**Files**:
+- `tests/integration/test_article_operations.py` (MODIFY)
+
+**Description**: `get_article` のテストを追加。
+
+**Why third**: 実装完了後にテストを追加。
+
+**Test strategy**:
+- `pytest tests/integration/test_article_operations.py -v`
+
+**Dependencies**: Chunk 1, 2
+
+**Commit point**: After all tests pass
+
+---
+
+## Agent Orchestration Strategy
+
+### Primary Agent
+
+**modular-builder** - For all implementation:
+```
+Task modular-builder: "Implement note_get_article according to
+Phase 6 code plan. Create browser/get_article.py, modify
+api/articles.py and server.py"
+```
+
+### Execution Strategy
+
+**Sequential Execution**:
+```
+Chunk 1 (browser module) → Chunk 2 (API + server) → Chunk 3 (tests)
+```
+
+**Reason**: Each chunk depends on the previous one.
+
+---
+
+## Testing Strategy
+
+### Unit Tests
+
+なし（ブラウザ操作は統合テストでモック）
+
+### Integration Tests
+
+**File: tests/integration/test_article_operations.py**
+- Test `get_article()` with mocked browser
+- Test newline preservation in body
+
+### User Testing Plan
+
+**Commands to run**:
+```bash
+# Run all article operation tests
+uv run pytest tests/integration/test_article_operations.py -v
+
+# Run only get_article tests
+uv run pytest tests/integration/test_article_operations.py::TestGetArticle -v
+
+# Run full check
+uv run ruff check --fix . && uv run ruff format . && uv run mypy .
+```
+
+**Manual E2E test**:
+```
+1. note_login でログイン
+2. note_create_draft でテスト記事を作成
+3. note_get_article で内容を取得
+4. 取得した内容を確認
+5. 末尾に追記して note_update_article で更新
+6. note_get_article で更新後の内容を確認
+```
+
+---
+
+## Philosophy Compliance
+
+### Ruthless Simplicity
+
+- 既存パターン（update_article.py）を踏襲
+- 1つのファイル追加、2つのファイル修正のみ
+- APIフォールバックなし（ブラウザベースのみ）
+
+### Modular Design
+
+- `browser/get_article.py` は自己完結モジュール
+- `Article` モデルを共通インターフェースとして使用
+
+---
+
+## Commit Strategy
+
+### Single Commit
+
+```
+feat: Add note_get_article tool for retrieving article content
+
+- Add browser/get_article.py for browser-based content extraction
+- Add get_article() function to api/articles.py
+- Add note_get_article MCP tool to server.py
+- Add tests for get_article functionality
+
+This enables the recommended edit workflow:
+1. note_get_article() to retrieve existing content
+2. User/AI decides on edits
+3. note_update_article() to save changes
+
+🤖 Generated with [Amplifier](https://github.com/microsoft/amplifier)
+
+Co-Authored-By: Amplifier <240397093+microsoft-amplifier@users.noreply.github.com>
+```
+
+---
+
+## Success Criteria
+
+Phase 6 is ready when:
+
+- [ ] `note_get_article(article_id)` で記事内容が取得できる
+- [ ] 取得した本文がプレーンテキスト（改行維持）
+- [ ] コード品質チェック通過（ruff, mypy）
+- [ ] テスト通過
+- [ ] README.mdが更新済み（Phase 2で完了）
+
+---
+
+## Next Steps
+
+✅ Phase 6 code plan complete
+➡️ Get user approval
+➡️ When approved, run: `/ddd:4-code`

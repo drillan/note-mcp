@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from note_mcp.api.articles import create_draft, list_articles, publish_article, update_article
+from note_mcp.api.articles import create_draft, get_article, list_articles, publish_article, update_article
 from note_mcp.browser.preview import show_preview
 from note_mcp.models import ArticleInput, ArticleStatus, Session
 
@@ -32,7 +32,9 @@ class TestCreateDraft:
 
     @pytest.mark.asyncio
     async def test_create_draft_success(self) -> None:
-        """Test successful draft creation."""
+        """Test successful draft creation via browser."""
+        from note_mcp.models import Article
+
         session = create_mock_session()
         article_input = ArticleInput(
             title="Test Article",
@@ -40,27 +42,17 @@ class TestCreateDraft:
             tags=["test", "python"],
         )
 
-        mock_response = {
-            "data": {
-                "id": "123456",
-                "key": "n1234567890ab",
-                "name": "Test Article",
-                "body": "<h1>Hello</h1>\n<p>This is a test article.</p>\n",
-                "status": "draft",
-                "hashtags": [
-                    {"hashtag": {"name": "test"}},
-                    {"hashtag": {"name": "python"}},
-                ],
-                "noteUrl": "https://note.com/testuser/n/n1234567890ab",
-            }
-        }
+        mock_article = Article(
+            id="123456",
+            key="n1234567890ab",
+            title="Test Article",
+            body="<h1>Hello</h1>\n<p>This is a test article.</p>\n",
+            status=ArticleStatus.DRAFT,
+            tags=["test", "python"],
+        )
 
-        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client_class.return_value = mock_client
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock()
-            mock_client.post = AsyncMock(return_value=mock_response)
+        with patch("note_mcp.browser.create_draft.create_draft_via_browser") as mock_create:
+            mock_create.return_value = mock_article
 
             article = await create_draft(session, article_input)
 
@@ -69,41 +61,35 @@ class TestCreateDraft:
             assert article.status == ArticleStatus.DRAFT
             assert "test" in article.tags
             assert "python" in article.tags
+            mock_create.assert_called_once_with(session, article_input)
 
     @pytest.mark.asyncio
     async def test_create_draft_converts_markdown_to_html(self) -> None:
-        """Test that Markdown is converted to HTML."""
+        """Test that create_draft delegates to browser function."""
+        from note_mcp.models import Article
+
         session = create_mock_session()
         article_input = ArticleInput(
             title="Test",
             body="**Bold** and *italic*",
         )
 
-        mock_response = {
-            "data": {
-                "id": "123",
-                "key": "n123",
-                "name": "Test",
-                "body": "<p><strong>Bold</strong> and <em>italic</em></p>\n",
-                "status": "draft",
-                "hashtags": [],
-            }
-        }
+        mock_article = Article(
+            id="123",
+            key="n123",
+            title="Test",
+            body="<p><strong>Bold</strong> and <em>italic</em></p>\n",
+            status=ArticleStatus.DRAFT,
+            tags=[],
+        )
 
-        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client_class.return_value = mock_client
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock()
-            mock_client.post = AsyncMock(return_value=mock_response)
+        with patch("note_mcp.browser.create_draft.create_draft_via_browser") as mock_create:
+            mock_create.return_value = mock_article
 
             await create_draft(session, article_input)
 
-            # Verify that the post was called
-            mock_client.post.assert_called_once()
-            call_args = mock_client.post.call_args
-            # The body should be HTML, not Markdown
-            assert "body" in call_args[1]["json"]
+            # Verify that the browser function was called with correct arguments
+            mock_create.assert_called_once_with(session, article_input)
 
 
 class TestUpdateArticle:
@@ -173,6 +159,84 @@ class TestUpdateArticle:
             assert article.title == "New Title Only"
 
 
+class TestGetArticle:
+    """Tests for get_article function."""
+
+    @pytest.mark.asyncio
+    async def test_get_article_success(self) -> None:
+        """Test successful article retrieval via browser."""
+        from note_mcp.models import Article
+
+        session = create_mock_session()
+
+        mock_article = Article(
+            id="123456",
+            key="n1234567890ab",
+            title="Existing Article",
+            body="This is the existing content.\n\nWith multiple paragraphs.",
+            status=ArticleStatus.DRAFT,
+            tags=[],
+        )
+
+        with patch("note_mcp.browser.get_article.get_article_via_browser") as mock_get:
+            mock_get.return_value = mock_article
+
+            article = await get_article(session, "123456")
+
+            assert article.id == "123456"
+            assert article.title == "Existing Article"
+            assert "existing content" in article.body
+            mock_get.assert_called_once_with(session, "123456")
+
+    @pytest.mark.asyncio
+    async def test_get_article_preserves_newlines(self) -> None:
+        """Test that article body preserves newlines."""
+        from note_mcp.models import Article
+
+        session = create_mock_session()
+
+        mock_article = Article(
+            id="123",
+            key="n123",
+            title="Test",
+            body="Line 1\n\nLine 2\n\nLine 3",
+            status=ArticleStatus.DRAFT,
+            tags=[],
+        )
+
+        with patch("note_mcp.browser.get_article.get_article_via_browser") as mock_get:
+            mock_get.return_value = mock_article
+
+            article = await get_article(session, "123")
+
+            assert article.body.count("\n") >= 2
+
+    @pytest.mark.asyncio
+    async def test_get_article_returns_article_object(self) -> None:
+        """Test that get_article returns proper Article object."""
+        from note_mcp.models import Article
+
+        session = create_mock_session()
+
+        mock_article = Article(
+            id="789",
+            key="n789",
+            title="Test Title",
+            body="Test body content",
+            status=ArticleStatus.DRAFT,
+            tags=[],
+        )
+
+        with patch("note_mcp.browser.get_article.get_article_via_browser") as mock_get:
+            mock_get.return_value = mock_article
+
+            article = await get_article(session, "789")
+
+            assert isinstance(article, Article)
+            assert article.title == "Test Title"
+            assert article.status == ArticleStatus.DRAFT
+
+
 class TestShowPreview:
     """Tests for show_preview function."""
 
@@ -191,21 +255,15 @@ class TestShowPreview:
 
             await show_preview(session, "n1234567890ab")
 
-            # Verify navigation to the edit page
+            # Verify navigation to the edit page on editor.note.com
             mock_page.goto.assert_called_once()
             call_args = mock_page.goto.call_args[0][0]
-            assert "note.com/testuser/n/n1234567890ab/edit" in call_args
+            assert call_args == "https://editor.note.com/notes/n1234567890ab/edit/"
 
     @pytest.mark.asyncio
-    async def test_show_preview_uses_session_username(self) -> None:
-        """Test that preview uses the session username."""
-        session = Session(
-            cookies={"note_gql_auth_token": "token"},
-            user_id="123",
-            username="my_custom_username",
-            expires_at=None,
-            created_at=int(time.time()),
-        )
+    async def test_show_preview_uses_article_key(self) -> None:
+        """Test that preview uses the article key in URL."""
+        session = create_mock_session()
 
         with patch("note_mcp.browser.preview.BrowserManager") as mock_manager_class:
             mock_manager = MagicMock()
@@ -218,7 +276,8 @@ class TestShowPreview:
             await show_preview(session, "article123")
 
             call_args = mock_page.goto.call_args[0][0]
-            assert "my_custom_username" in call_args
+            assert "article123" in call_args
+            assert call_args == "https://editor.note.com/notes/article123/edit/"
 
 
 class TestListArticles:

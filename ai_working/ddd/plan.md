@@ -414,6 +414,113 @@ jobs:
 
 ---
 
+## 11. Phase 6: note_get_article 実装 (P1追加)
+
+**追加日**: 2025-12-20
+**理由**: 既存の `note_update_article` が完全上書きのため、「一部修正」「追記」などの編集操作に対応できない
+
+### Problem Statement
+
+現在の `note_update_article` は既存記事の内容を読み取らずに完全上書きするため、AIが適切な編集を行えない。
+
+**ユーザー価値**:
+- 「この記事の末尾に追記して」という指示に対応可能
+- 「タイトルだけ変更して」という指示で本文を維持できる
+- 既存記事の内容を確認してから編集できる
+
+### Proposed Solution
+
+ブラウザベースのアプローチで `note_get_article` を実装。
+
+**推奨ワークフロー**:
+```
+1. note_get_article(article_id) で既存内容を取得
+2. AI/ユーザーが編集内容を決定（追記、修正、置換など）
+3. note_update_article(article_id, title, body, tags) で保存
+```
+
+**実装方式**:
+- `https://editor.note.com/notes/{article_id}/edit/` に移動
+- DOM からタイトルと本文を抽出
+- プレーンテキストとして返す（innerText）
+
+### Files to Change
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/note_mcp/browser/get_article.py` | Create | ブラウザベースの記事取得 |
+| `src/note_mcp/api/articles.py` | Modify | `get_article()` 関数追加 |
+| `src/note_mcp/server.py` | Modify | `note_get_article` MCPツール追加 |
+| `tests/integration/test_article_operations.py` | Modify | テスト追加 |
+| `README.md` | Modify | ツール説明追加 |
+
+### Implementation Chunks
+
+**Chunk 1**: `browser/get_article.py`
+```python
+"""Browser-based article retrieval for note.com."""
+
+async def get_article_via_browser(
+    session: Session,
+    article_id: str,
+) -> Article:
+    manager = BrowserManager.get_instance()
+    page = await manager.get_page()
+
+    # Cookie インジェクション
+    # エディタページに移動
+    # ネットワーク安定待機
+    # タイトル取得: input[placeholder*="タイトル"]
+    # 本文取得: .ProseMirror の innerText
+    # Article オブジェクト構築
+```
+
+**Chunk 2**: `api/articles.py`
+```python
+async def get_article(session: Session, article_id: str) -> Article:
+    from note_mcp.browser.get_article import get_article_via_browser
+    return await get_article_via_browser(session, article_id)
+```
+
+**Chunk 3**: `server.py`
+```python
+@mcp.tool()
+async def note_get_article(
+    article_id: Annotated[str, "取得する記事のID"],
+) -> str:
+    """記事の内容を取得します。"""
+    session = _session_manager.load()
+    if session is None or session.is_expired():
+        return "セッションが無効です。note_loginでログインしてください。"
+
+    article = await get_article(session, article_id)
+    return f"""記事を取得しました。
+
+タイトル: {article.title}
+ステータス: {article.status.value}
+タグ: {', '.join(article.tags) if article.tags else 'なし'}
+
+本文:
+{article.body}
+"""
+```
+
+### Success Criteria
+
+- [ ] `note_get_article(article_id)` で記事内容が取得できる
+- [ ] 取得した内容をそのまま `note_update_article` に渡しても内容が維持される
+- [ ] 「末尾に追記」のワークフローが動作する
+- [ ] コード品質チェック通過（ruff, mypy）
+- [ ] テスト通過
+
+### Philosophy Alignment
+
+- **Ruthless Simplicity**: 既存パターン（update_article）を踏襲、APIフォールバック不要
+- **Modular Design**: `get_article.py` は自己完結モジュール
+- **Clear Interfaces**: `Article` モデルを共通インターフェースとして使用
+
+---
+
 ## Appendix: Reference Documents
 
 - [Feature Specification](../../specs/001-note-mcp/spec.md)

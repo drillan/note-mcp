@@ -1,0 +1,168 @@
+"""Browser-based article update for note.com.
+
+Uses Playwright to update articles via the note.com web interface.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+from typing import TYPE_CHECKING, Any
+
+from note_mcp.browser.manager import BrowserManager
+from note_mcp.models import Article, ArticleStatus
+
+if TYPE_CHECKING:
+    from note_mcp.models import ArticleInput, Session
+
+
+# note.com editor URL
+NOTE_EDITOR_URL = "https://editor.note.com"
+
+
+async def update_article_via_browser(
+    session: Session,
+    article_id: str,
+    article_input: ArticleInput,
+) -> Article:
+    """Update an article via browser automation.
+
+    Navigates to the article's edit page, updates the content,
+    and waits for auto-save to complete.
+
+    Args:
+        session: Authenticated session
+        article_id: ID of the article to update
+        article_input: New article content and metadata
+
+    Returns:
+        Updated Article object
+
+    Raises:
+        RuntimeError: If article update fails
+    """
+    manager = BrowserManager.get_instance()
+    page = await manager.get_page()
+
+    # Inject session cookies into browser context
+    playwright_cookies: list[dict[str, Any]] = []
+    for name, value in session.cookies.items():
+        playwright_cookies.append(
+            {
+                "name": name,
+                "value": value,
+                "domain": ".note.com",
+                "path": "/",
+            }
+        )
+    await page.context.add_cookies(playwright_cookies)  # type: ignore[arg-type]
+
+    # Navigate to article edit page
+    edit_url = f"{NOTE_EDITOR_URL}/notes/{article_id}/edit/"
+    await page.goto(edit_url, wait_until="domcontentloaded")
+
+    # Wait for network to be idle (all initial requests completed)
+    with contextlib.suppress(Exception):
+        await page.wait_for_load_state("networkidle", timeout=10000)
+
+    await asyncio.sleep(2)  # Additional wait for JavaScript initialization
+
+    # Check if we're on the right page
+    current_url = page.url
+    if article_id not in current_url:
+        raise RuntimeError(f"Failed to navigate to article edit page. Current URL: {current_url}")
+
+    # Wait for the editor to be fully ready
+    with contextlib.suppress(Exception):
+        await page.wait_for_selector(".ProseMirror", state="visible", timeout=10000)
+
+    await asyncio.sleep(2)  # Wait for editor initialization to complete
+
+    # Fill the title
+    title_selectors = [
+        'input[placeholder*="タイトル"]',
+        'textarea[placeholder*="タイトル"]',
+        '[data-testid="title-input"]',
+        '[contenteditable="true"]:first-of-type',
+    ]
+    title_filled = False
+    for selector in title_selectors:
+        try:
+            title_element = page.locator(selector).first
+            if await title_element.count() > 0:
+                await title_element.click()
+                await page.keyboard.press("Control+a")
+                await title_element.fill(article_input.title)
+                title_filled = True
+                break
+        except Exception:
+            continue
+
+    if not title_filled:
+        try:
+            await page.keyboard.press("Tab")
+            await page.keyboard.press("Control+a")
+            await page.keyboard.type(article_input.title)
+        except Exception:
+            pass
+
+    # Fill the body
+    await asyncio.sleep(0.5)
+    body_selectors = [
+        ".ProseMirror",
+        '[data-testid="body-editor"]',
+        ".note-body-editor",
+        '[contenteditable="true"]:not(:first-of-type)',
+    ]
+    body_filled = False
+    for selector in body_selectors:
+        try:
+            body_element = page.locator(selector).first
+            if await body_element.count() > 0:
+                await body_element.click()
+                await page.keyboard.press("Control+a")
+                await page.keyboard.type(article_input.body)
+                body_filled = True
+                break
+        except Exception:
+            continue
+
+    if not body_filled:
+        try:
+            await page.keyboard.press("Tab")
+            await page.keyboard.press("Control+a")
+            await page.keyboard.type(article_input.body)
+        except Exception:
+            pass
+
+    # Click save draft button explicitly instead of relying on auto-save
+    await asyncio.sleep(1)
+
+    save_button_selectors = [
+        'button:has-text("下書き保存")',
+        '[data-testid="save-draft-button"]',
+        'button:has-text("保存")',
+        ".save-button",
+    ]
+    for selector in save_button_selectors:
+        try:
+            save_button = page.locator(selector).first
+            if await save_button.count() > 0:
+                await save_button.click()
+                await asyncio.sleep(2)  # Wait for save to complete
+                break
+        except Exception:
+            continue
+
+    # Wait for save confirmation
+    await asyncio.sleep(2)
+
+    # Create Article object with updated info
+    return Article(
+        id=article_id,
+        key=article_id,
+        title=article_input.title,
+        body=article_input.body,
+        status=ArticleStatus.DRAFT,
+        tags=article_input.tags,
+    )
