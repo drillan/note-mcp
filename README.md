@@ -90,18 +90,7 @@ AIアシスタントと一緒に記事を書いてみましょう。
 | `note_publish_article` | 記事を公開 |
 | `note_list_articles` | 記事一覧を取得 |
 | `note_upload_image` | 画像をアップロード |
-
-### APIモードとブラウザモード
-
-記事操作（`note_create_draft`, `note_update_article`, `note_publish_article`）はデフォルトでAPIモードで動作します。`use_browser=True`を指定するとブラウザUIモードで操作できます。
-
-```python
-# APIモード（デフォルト）
-note_create_draft(title="Title", body="Content")
-
-# ブラウザUIモード
-note_create_draft(title="Title", body="Content", use_browser=True)
-```
+| `note_show_preview` | ブラウザで記事プレビューを表示 |
 
 ## Requirements
 
