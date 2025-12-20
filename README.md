@@ -1,114 +1,134 @@
-# Python Project Template
+# note-mcp
 
-Python プロジェクトのテンプレートリポジトリです。
+note.com記事管理用MCPサーバー。AIアシスタント（Claude Code, Claude Desktop等）から直接note.comの記事を作成・編集・公開できます。
 
-## 使い方
+⚠️ **注意**: このプロジェクトはnote.comの非公式APIを使用しています。詳細は[DISCLAIMER.md](DISCLAIMER.md)を参照してください。
 
-### 1. このテンプレートを使用
+## Features
 
-GitHub の "Use this template" ボタンをクリックして新しいリポジトリを作成します。
+- 🔐 **ブラウザ認証**: Playwrightでnote.comにログインし、セッションを安全に保存
+- 📝 **記事作成**: Markdownで記事を作成し、下書きとして保存
+- ✏️ **記事編集**: 既存記事の更新
+- 🚀 **記事公開**: 下書きから公開へのワンステップ変更
+- 🖼️ **画像アップロード**: 記事に挿入する画像のアップロード
+- 📋 **記事一覧**: 自分の記事一覧の取得
 
-### 2. 初期化スクリプトを実行
+## Installation
 
 ```bash
-./scripts/python-init.sh
+# Clone the repository
+git clone https://github.com/your-username/note-mcp.git
+cd note-mcp
+
+# Install dependencies
+uv sync
+
+# Install Playwright browser
+uv run playwright install chromium
 ```
 
-このスクリプトは以下を自動的に実行します：
+## Configuration
 
-- `uv` による Python プロジェクトの初期化
-- Python の `.gitignore` ファイルのダウンロード
-- 開発ツールのインストール（ruff, mypy, pytest）
-- Sphinx ドキュメント環境のセットアップ
-  - Read the Docs テーマの適用
-  - MyST Parser（Markdown サポート）の設定
-  - Mermaid 図のサポート
+### Claude Desktop
 
-### 3. プロジェクト設定
+`~/.config/claude-desktop/config.json`（macOS/Linux）または `%APPDATA%\claude-desktop\config.json`（Windows）に以下を追加:
 
-- プロジェクト名：現在のディレクトリ名が自動的に使用されます
-- 著者名：Git の `user.name` が自動的に使用されます
+```json
+{
+  "mcpServers": {
+    "note-mcp": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "note_mcp"],
+      "cwd": "/path/to/note-mcp"
+    }
+  }
+}
+```
 
-## 含まれるツール
+## Usage
 
-- **uv**: 高速な Python パッケージマネージャー
-- **ruff**: 高速な Python リンター/フォーマッター
-- **mypy**: 静的型チェッカー
-- **pytest**: テストフレームワーク
-- **Sphinx**: ドキュメント生成ツール
-  - sphinx_rtd_theme: Read the Docs テーマ
-  - myst-parser: Markdown サポート
-  - sphinxcontrib-mermaid: Mermaid 図のサポート
+### 1. ログイン
 
-## Claude Code サポート
+```
+note.comにログインしてください
+```
 
-このテンプレートは [Claude Code](https://claude.ai/code) との統合をサポートしています。
+ブラウザが起動し、note.comのログインページが表示されます。手動でログインを完了すると、セッションがOSのキーチェーンに安全に保存されます。
 
-### CLAUDE.md
+### 2. 記事作成
 
-プロジェクト固有の開発ガイドラインを記載するファイルです。Claude Code がこのファイルを参照して、プロジェクトの開発環境や規約を理解します。
+```
+以下の内容でnote.comに下書きを作成してください:
 
-**含まれる情報:**
-- 開発環境のセットアップ方法
-- コード品質ツールの使用方法
-- テスト実行方法
-- 型安全性の要件
-- コーディング規約
-- ドキュメンテーション標準
+タイトル: AIと記事を書く
+本文:
+# はじめに
+AIアシスタントと一緒に記事を書いてみましょう。
+```
 
-**カスタマイズ方法:**
-1. プレースホルダー（`<package-manager>`, `<linter>`等）を実際のツール名に置き換え
-2. プロジェクト固有の開発ルールを追加
-3. Technology Stack Summary セクションを実際の依存関係に更新
+### 3. 画像アップロード
 
-### .claude/ ディレクトリ
+```
+/path/to/image.png をnote.comにアップロードしてください
+```
 
-Claude Code 用の設定とスキルを含むディレクトリです。
+### 4. 記事公開
 
-#### .claude/docs.md
+```
+下書きを公開してください
+```
 
-ドキュメンテーションの作成・管理ガイドラインを記載します。
+## MCP Tools
 
-**含まれる情報:**
-- ドキュメンテーションシステムの設定
-- マークアップ構文のガイドライン
-- トーンとスタイルの規約
-- コードブロックの記述方法
-- ビルド検証の手順
+| Tool | Description |
+|------|-------------|
+| `note_login` | ブラウザでnote.comにログイン |
+| `note_check_auth` | 認証状態を確認 |
+| `note_logout` | ログアウト（セッション削除） |
+| `note_create_draft` | 下書き記事を作成 |
+| `note_update_article` | 記事を更新 |
+| `note_publish_article` | 記事を公開 |
+| `note_list_articles` | 記事一覧を取得 |
+| `note_upload_image` | 画像をアップロード |
 
-**カスタマイズ方法:**
-1. `{{PROJECT_NAME}}` をプロジェクト名に置き換え
-2. 使用するドキュメンテーションシステムに応じて設定を調整
-3. プロジェクト固有のドキュメント規約を追加
+### APIモードとブラウザモード
 
-#### .claude/skills/doc-updater/
+記事操作（`note_create_draft`, `note_update_article`, `note_publish_article`）はデフォルトでAPIモードで動作します。`use_browser=True`を指定するとブラウザUIモードで操作できます。
 
-コード変更時にドキュメントを自動更新する Agent Skill です。
+```python
+# APIモード（デフォルト）
+note_create_draft(title="Title", body="Content")
 
-**機能:**
-- API変更の検知とドキュメント更新
-- 新機能追加時の自動ドキュメント生成提案
-- アーキテクチャ変更の反映
-- ドキュメントビルドエラーチェック
+# ブラウザUIモード
+note_create_draft(title="Title", body="Content", use_browser=True)
+```
 
-詳細は `.claude/skills/doc-updater/README.md` を参照してください。
+## Requirements
 
-### セットアップ手順
+- Python 3.11+
+- デスクトップ環境（Playwrightが動作する環境）
+- note.comアカウント
 
-1. **CLAUDE.md のカスタマイズ:**
-   ```bash
-   # プレースホルダーを実際のツール名に置き換え
-   # 例: <package-manager> → uv
-   # 例: <linter> → ruff
-   ```
+## Development
 
-2. **.claude/docs.md のカスタマイズ:**
-   ```bash
-   # プロジェクト名を置き換え
-   # {{PROJECT_NAME}} → your-project-name
-   ```
+```bash
+# Install dev dependencies
+uv sync --group dev
 
-3. **プロジェクト固有のルール追加:**
-   - CLAUDE.md に開発規約を追加
-   - .claude/docs.md にドキュメント標準を追加
-   - 必要に応じて .claude/skills/ に新しいスキルを追加
+# Run tests
+uv run pytest
+
+# Run linter
+uv run ruff check .
+
+# Run type checker
+uv run mypy .
+```
+
+## License
+
+MIT License
+
+## Disclaimer
+
+このプロジェクトはnote.comとは無関係の非公式ツールです。詳細は[DISCLAIMER.md](DISCLAIMER.md)を参照してください。

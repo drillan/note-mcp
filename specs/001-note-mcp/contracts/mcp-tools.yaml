@@ -1,0 +1,303 @@
+# MCP Tools Contract: note.com MCP Server
+# Date: 2025-12-20
+# Feature: 001-note-mcp
+
+openapi: 3.0.3
+info:
+  title: note.com MCP Server Tools
+  version: 1.0.0
+  description: |
+    note.com記事管理用MCPサーバーのツール定義。
+    各ツールはMCPプロトコルで呼び出される。
+
+# MCP Tools Definition
+x-mcp-tools:
+
+  # Authentication Tools
+  - name: note_login
+    description: |
+      note.comにログインし、認証セッションを取得する。
+      ブラウザが起動しログインページが表示されるので、
+      ユーザーが手動でログインを完了する必要がある。
+    inputSchema:
+      type: object
+      properties:
+        timeout_seconds:
+          type: integer
+          description: ログイン完了待機時間（秒）
+          default: 300
+      required: []
+    outputSchema:
+      type: object
+      properties:
+        success:
+          type: boolean
+        username:
+          type: string
+        message:
+          type: string
+
+  - name: note_check_auth
+    description: |
+      現在の認証状態を確認する。
+      セッションが有効かどうか、有効期限などを返す。
+    inputSchema:
+      type: object
+      properties: {}
+      required: []
+    outputSchema:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+        username:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+  - name: note_logout
+    description: |
+      note.comからログアウトし、保存されたセッションを削除する。
+    inputSchema:
+      type: object
+      properties: {}
+      required: []
+    outputSchema:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+
+  # Article Tools
+  - name: note_create_draft
+    description: |
+      note.comに記事の下書きを作成する。
+      作成後、ブラウザでプレビューが表示される。
+      デフォルトはAPIモード。use_browser=trueでブラウザUIモードに切り替え可能。
+    inputSchema:
+      type: object
+      properties:
+        title:
+          type: string
+          description: 記事タイトル
+        body:
+          type: string
+          description: 記事本文（Markdown形式）
+        tags:
+          type: array
+          items:
+            type: string
+          description: ハッシュタグ（オプション）
+        use_browser:
+          type: boolean
+          description: |
+            trueの場合、ブラウザUIモードで操作する。
+            デフォルトはfalse（APIモード）。
+          default: false
+      required:
+        - title
+        - body
+    outputSchema:
+      type: object
+      properties:
+        success:
+          type: boolean
+        article_id:
+          type: string
+        article_key:
+          type: string
+        preview_url:
+          type: string
+        message:
+          type: string
+
+  - name: note_update_article
+    description: |
+      既存の記事（下書きまたは公開済み）を更新する。
+      更新後、ブラウザでプレビューが表示される。
+      デフォルトはAPIモード。use_browser=trueでブラウザUIモードに切り替え可能。
+    inputSchema:
+      type: object
+      properties:
+        article_id:
+          type: string
+          description: 更新する記事のID
+        title:
+          type: string
+          description: 新しいタイトル（省略時は変更なし）
+        body:
+          type: string
+          description: 新しい本文（Markdown形式、省略時は変更なし）
+        tags:
+          type: array
+          items:
+            type: string
+          description: 新しいタグ（省略時は変更なし）
+        use_browser:
+          type: boolean
+          description: |
+            trueの場合、ブラウザUIモードで操作する。
+            デフォルトはfalse（APIモード）。
+          default: false
+      required:
+        - article_id
+    outputSchema:
+      type: object
+      properties:
+        success:
+          type: boolean
+        article_id:
+          type: string
+        preview_url:
+          type: string
+        message:
+          type: string
+
+  - name: note_publish_article
+    description: |
+      記事を公開する。新規作成と同時に公開、または
+      既存の下書きを公開状態に変更できる。
+      デフォルトはAPIモード。use_browser=trueでブラウザUIモードに切り替え可能。
+    inputSchema:
+      type: object
+      properties:
+        article_id:
+          type: string
+          description: 公開する下書き記事のID（新規作成時は省略）
+        title:
+          type: string
+          description: 記事タイトル（新規作成時は必須）
+        body:
+          type: string
+          description: 記事本文（Markdown形式、新規作成時は必須）
+        tags:
+          type: array
+          items:
+            type: string
+          description: ハッシュタグ（オプション）
+        use_browser:
+          type: boolean
+          description: |
+            trueの場合、ブラウザUIモードで操作する。
+            デフォルトはfalse（APIモード）。
+          default: false
+      required: []
+    outputSchema:
+      type: object
+      properties:
+        success:
+          type: boolean
+        article_id:
+          type: string
+        published_url:
+          type: string
+        message:
+          type: string
+
+  - name: note_list_articles
+    description: |
+      自分の記事一覧を取得する。
+      ステータスでフィルタリング可能。
+    inputSchema:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - draft
+            - published
+            - all
+          description: フィルタするステータス
+          default: all
+        page:
+          type: integer
+          description: ページ番号（1から開始）
+          default: 1
+        limit:
+          type: integer
+          description: 1ページあたりの記事数
+          default: 10
+          maximum: 10
+      required: []
+    outputSchema:
+      type: object
+      properties:
+        success:
+          type: boolean
+        articles:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              key:
+                type: string
+              title:
+                type: string
+              status:
+                type: string
+              created_at:
+                type: string
+              updated_at:
+                type: string
+              url:
+                type: string
+        total:
+          type: integer
+        page:
+          type: integer
+        has_more:
+          type: boolean
+
+  # Image Tools
+  - name: note_upload_image
+    description: |
+      画像をnote.comにアップロードし、
+      記事内で使用可能なURLを取得する。
+    inputSchema:
+      type: object
+      properties:
+        file_path:
+          type: string
+          description: アップロードする画像のローカルパス
+      required:
+        - file_path
+    outputSchema:
+      type: object
+      properties:
+        success:
+          type: boolean
+        image_key:
+          type: string
+        image_url:
+          type: string
+        message:
+          type: string
+
+# Error Responses
+x-mcp-errors:
+  not_authenticated:
+    description: 認証されていない。ログインが必要。
+    code: NOT_AUTHENTICATED
+  session_expired:
+    description: セッションが期限切れ。再ログインが必要。
+    code: SESSION_EXPIRED
+  article_not_found:
+    description: 指定された記事が見つからない。
+    code: ARTICLE_NOT_FOUND
+  rate_limited:
+    description: レート制限に達した。しばらく待ってからリトライ。
+    code: RATE_LIMITED
+  api_error:
+    description: note.com APIエラー。
+    code: API_ERROR
+  upload_failed:
+    description: 画像アップロードに失敗。
+    code: UPLOAD_FAILED
+  invalid_input:
+    description: 入力パラメータが不正。
+    code: INVALID_INPUT

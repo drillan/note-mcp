@@ -1,0 +1,10 @@
+# DDD Phase 2: Non-Code Files Index
+# Date: 2025-12-20
+# Feature: 001-note-mcp
+
+# Status: [ ] = pending, [x] = complete
+
+[x] pyproject.toml          # Updated: All dependencies added
+[x] README.md                # Rewritten: Project documentation
+[x] DISCLAIMER.md            # Created: 自己責任・無保証の免責事項
+[x] .github/workflows/test.yml # Created: CI configuration

@@ -2,227 +2,180 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Project Constitution
+
+このプロジェクトは `.specify/memory/constitution.md` で定義された原則に従います。
+
+**非交渉的原則（例外なし）**:
+- **Article 1**: Test-First Imperative - すべての実装はTDDに従う
+- **Article 5**: Code Quality Standards - 品質基準の完全遵守
+- **Article 6**: Data Accuracy Mandate - 推測・ハードコード禁止
+- **Article 7**: DRY Principle - コード重複禁止
+- **Article 9**: Python Type Safety Mandate - 包括的な型注釈必須
+- **Article 11**: SpecKit Naming Convention - 標準化された命名規則
+
+実装前に必ず constitution を確認してください。
+
 ## Development Environment
 
 ### Package Management
 
-このセクションには、プロジェクトで使用するパッケージマネージャーとビルドシステムを記載してください。
-
-例:
 ```bash
 # 依存関係のインストール
-<package-manager> install
+uv sync
 
 # 開発用依存関係のインストール
-<package-manager> install --dev
+uv sync --group dev
 
-# 特定のグループをインストール
-<package-manager> install --group <group-name>
+# ドキュメント用依存関係のインストール
+uv sync --group docs
+
+# すべてのグループをインストール
+uv sync --all-groups
 ```
 
 ### Running Tests
 
-このセクションには、テストの実行方法を記載してください。
-
-例:
 ```bash
 # すべてのテストを実行
-<test-command>
+uv run pytest
 
 # 特定のテストファイルを実行
-<test-command> tests/path/to/test_file.py
+uv run pytest tests/path/to/test_file.py
 
 # 詳細出力付きで実行
-<test-command> -v
+uv run pytest -v
+
+# 特定のテストを実行
+uv run pytest tests/test_file.py::TestClass::test_function -v
 ```
 
 ### Code Quality
 
-このセクションには、コード品質ツールの使用方法を記載してください。
-
-例:
 ```bash
-# Linterの実行
-<linter> check .
+# Linterの実行（自動修正あり）
+uv run ruff check --fix .
 
 # フォーマッターの実行
-<formatter> format .
+uv run ruff format .
 
 # 型チェックの実行
-<type-checker> .
+uv run mypy .
 
-# コミット前の完全チェック（推奨）
-<linter> check . && <formatter> format . && <type-checker> .
+# コミット前の完全チェック（必須）
+uv run ruff check --fix . && uv run ruff format . && uv run mypy .
 ```
 
-設定は `pyproject.toml` または各ツールの設定ファイルに記載してください。
+設定は `pyproject.toml` に記載されています。
 
 ### Type Safety
 
-このセクションには、型安全性に関する要件を記載してください。
+**Constitution Article 9** に基づき、型安全性は非交渉的要件です。
 
-推奨事項:
+必須要件:
 - すべての関数、メソッド、変数に型アノテーションを付与
-- 静的型チェックをコミット前に実行
+- コミット前に `uv run mypy .` を実行
 - `Any`型の使用を避け、具体的な型を使用
 - 型エラーは無視せず、必ず解決
 
+## MCP Server Development
+
+このプロジェクトはnote.com用のMCPサーバーです。**Constitution Article 3** に従います。
+
+### MCP Protocol Requirements
+
+- MCPツールは明確なスキーマ定義を持つこと
+- 入力パラメータはPydanticモデルで検証すること
+- エラーレスポンスは適切なMCPエラー形式で返すこと
+
+### Playwright Integration
+
+- ブラウザインスタンスは適切にライフサイクル管理すること
+- 作業ウィンドウの再利用を優先すること
+- セッション情報はOSのセキュアストレージに保存すること
+
+### Session Management
+
+- 認証状態はセッション管理で適切に維持すること
+- セッション期限切れ時は適切なエラーメッセージを返すこと
+
 ## Development Principles
 
-このセクションには、プロジェクトで遵守すべき開発原則を記載してください。
+開発原則の詳細は **Constitution** を参照してください。以下は主要な原則の概要です：
 
-### Test-Driven Development (TDD)
+### Test-Driven Development (Article 1)
 
-テスト駆動開発を推奨します：
-
-実装フロー:
 1. ユニットテストを先に作成
 2. テストをユーザーに承認してもらう
 3. テストが失敗する（Redフェーズ）ことを確認
 4. 実装してテストを通す（Greenフェーズ）
 5. リファクタリング
 
-テスト構成:
-- 機能毎にテストファイルを作成
-- 1機能 = 1テストファイルの対応
-- テストファイル名は対象機能を明確に反映（例: `test_calculator.py` ← `calculator.py`）
+### Documentation Integrity (Article 2)
 
-### Code-Specification Consistency
-
-実装とドキュメントの整合性を保ちます：
-
-必須要件:
 - 実装前に仕様を確認
 - 仕様が曖昧な場合は実装を停止し、明確化を要求
 - ドキュメント変更時はユーザー承認を取得
-- 仕様更新完了後に実装着手
 
-### Code Quality Standards
+### Code Quality (Article 5)
 
-コード品質基準への完全準拠を推奨します：
-
-品質チェック:
-- コミット前に品質ツールを実行（リンター、フォーマッター、型チェッカー）
+- コミット前に品質ツールを実行
 - すべてのエラーを解消してからコミット
-- 時間制約を理由とした品質妥協は避ける
+- 時間制約を理由とした品質妥協は禁止
 
-### Data Accuracy
-
-データの正確性とトレーサビリティを保証します：
+### Data Accuracy (Article 6)
 
 禁止事項:
 - マジックナンバーや固定文字列の直接埋め込み
 - 環境依存値の埋め込み
-- 認証情報・APIキーのコード内保存
 - データ取得失敗時の自動デフォルト値割り当て
-- 推測に基づく値の生成
 
-推奨事項:
-- すべての固定値は名前付き定数として定義
-- 設定値は専用の設定モジュールで一元管理
-- 環境固有値は環境変数または設定ファイルで管理
-- エラーは明示的に処理（例外を発生させる）
+### DRY Principle (Article 7)
 
-例:
-```python
-# ❌ 悪い例
-timeout = 30  # ハードコード
-if not data:
-    data = "default"  # 暗黙的フォールバック
-
-# ✅ 良い例
-TIMEOUT_SECONDS = int(os.environ["API_TIMEOUT"])
-if not data:
-    raise ValueError("Required data is missing")
-```
-
-### DRY (Don't Repeat Yourself)
-
-コードの重複を避けます：
-
-実装前チェック:
-- 既存の実装を検索・確認（Glob, Grepツールの活用）
-- 類似機能の存在を確認
-- 再利用可能なコンポーネントを特定
-
-重複回避:
+- 実装前に既存コードを検索・確認
 - 3回以上の繰り返しパターンは関数化・モジュール化
-- 同一ロジックは共通化
-- 設定駆動アプローチを検討
-
-重複検出時:
-- 作業を停止
-- 既存実装の拡張可能性を評価
-- リファクタリング計画を立案
-
-### Refactoring Policy
-
-既存コードの直接修正を優先します：
-
-基本方針:
-- V2、V3などのバージョン付きクラス作成は避ける
-- 既存クラスを直接修正
-- 後方互換性よりも設計の正しさを優先
-
-リファクタリング前チェック:
-- 影響範囲を特定（依存関係の分析）
-- テストカバレッジを確認
-- ドキュメントの更新計画を立案
+- 重複検出時は作業を停止し、リファクタリング計画を立案
 
 ## Key Development Guidelines
 
 ### Code Style
 
-このセクションには、プロジェクトのコーディング規約を記載してください。
-
-推奨事項:
 - **命名規則**: クラスはPascalCase、関数/変数はsnake_case、定数はUPPER_SNAKE_CASE
-- **型ヒント**: 型アノテーションを積極的に使用
-- **Docstrings**: 標準的なフォーマット（例: Google-style）を使用
-- **行の長さ**: プロジェクトで統一された最大文字数を設定
-- **インポート**: ツールによる自動ソート（stdlib → サードパーティ → ローカル）
+- **型ヒント**: すべての関数・メソッドに型アノテーション（Article 9）
+- **Docstrings**: Google-style形式を推奨（Article 10）
+- **行の長さ**: ruff設定に従う
+- **インポート**: ruffによる自動ソート
 
 ### Documentation Standards
 
-このセクションには、ドキュメンテーション標準を記載してください。
-
-推奨事項:
 - 公開関数、クラス、モジュールには包括的なdocstringを記載
-- 標準的なフォーマット（例: Google-style）を採用
+- Google-style形式を採用
 - Docstringは型アノテーションと一致させる
-- 複雑な関数には使用例を含める
-
-### Testing Strategy
-
-このセクションには、テスト戦略を記載してください。
-
-推奨事項:
-- **単体テスト**: 高速、外部依存なし（モックを使用）
-- **統合テスト**: 中速、外部サービスをモック
-- **E2Eテスト**: 実際の外部サービスを使用、適切にマーク
-- **テストマーカー**: テストの種類や依存関係を示すマーカーを使用
 
 ## Documentation
-
-ドキュメンテーションシステムを使用する場合、このセクションに設定を記載してください。
 
 詳細なガイドラインは `@.claude/docs.md` を参照。
 
 ### File Locations
 
-例:
 - すべてのドキュメント: `docs/*.md`
-- ドキュメント設定: `docs/conf.py`（Sphinxの場合）
-- ビルドシステム: `docs/Makefile`（Sphinxの場合）
+- ドキュメント設定: `docs/conf.py`
+- ビルドシステム: `docs/Makefile`
 
-## Technology Stack Summary
+## Technology Stack
 
-このセクションには、プロジェクトで使用する主要な技術を記載してください。
+- **Runtime**: Python >= 3.11
+- **Package Manager**: uv
+- **Testing**: pytest >= 8.4.1
+- **Linting/Formatting**: ruff >= 0.12.4
+- **Type Checking**: mypy >= 1.19.1
+- **Documentation**: Sphinx >= 8.2.3, MyST-Parser >= 4.0.1
 
-例:
-- **ランタイム**: Python X.X.X
-- **パッケージマネージャー**: <package-manager>
-- **テスト**: <test-framework> >= X.X.X
-- **Linting**: <linter> >= X.X.X
-- **型チェック**: <type-checker> >= X.X.X
-- **ドキュメント**: <doc-generator> >= X.X.X（オプション）
+## Active Technologies
+
+- Python 3.11+ (001-note-mcp)
+
+## Recent Changes
+
+- 001-note-mcp: Added Python 3.11+
+- 2025-12-20: Updated CLAUDE.md based on Constitution v1.0.0
