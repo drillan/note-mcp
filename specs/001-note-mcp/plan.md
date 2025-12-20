@@ -127,18 +127,25 @@ FR-009（ハイブリッドアプローチ）の具体化。**ユーザーがモ
 | macOS | Keychain | 標準対応 |
 | Windows | Credential Vault | 標準対応 |
 | Linux (GNOME) | Secret Service | 標準対応 |
-| Linux (headless/no-GUI) | なし | **フォールバック: 暗号化ファイル保存** |
-| WSL | Windows Credential経由 | 要追加設定 |
+| Linux (headless/no-GUI) | なし | **エラー: 明確な診断情報と設定手順を案内** |
+| WSL | Windows Credential経由 | 要追加設定（設定手順をエラーに含める） |
 
-**フォールバック実装**:
+**エラー処理方針（フォールバックなし）**:
 ```python
 try:
     import keyring
     keyring.get_password("test", "test")  # バックエンド確認
-except keyring.errors.NoKeyringError:
-    # フォールバック: ~/.note-mcp/session.enc（Fernet暗号化）
-    use_encrypted_file_storage()
+except keyring.errors.NoKeyringError as e:
+    # 明確なエラーメッセージで原因究明を支援
+    raise KeyringNotConfiguredError(
+        f"keyringが設定されていません。\n"
+        f"OS: {platform.system()}\n"
+        f"バックエンド: {keyring.get_keyring()}\n"
+        f"設定手順: https://github.com/xxx/note-mcp#keyring-setup"
+    ) from e
 ```
+
+**設計理由**: フォールバックは複雑性を増し、問題の隠蔽につながる。明確なエラーで原因究明を容易にする。
 
 ### ログへの秘匿方針
 
@@ -281,7 +288,7 @@ NOTE_MCP_TEST_MODE=e2e uv run pytest tests/e2e -v --headed
 - [ ] `note_login`ツール: ブラウザ起動→ユーザーログイン→Cookie取得→keyring保存
 - [ ] `note_check_auth`ツール: keyringからセッション読み込み→有効性確認
 - [ ] `note_logout`ツール: keyringからセッション削除
-- [ ] keyringフォールバック（暗号化ファイル）実装
+- [ ] keyringエラー時の診断情報実装（OS、バックエンド、設定手順）
 - [ ] Unit tests: session.py（モック使用）
 - [ ] Integration tests: 認証フロー（モック使用）
 - [ ] 手動E2Eテスト: 実際のnote.comログイン成功

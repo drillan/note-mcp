@@ -1,0 +1,238 @@
+"""Pydantic data models for note-mcp.
+
+This module defines all data models used throughout the note-mcp server,
+including session management, article handling, and error types.
+"""
+
+from __future__ import annotations
+
+import time
+from enum import Enum
+
+from pydantic import BaseModel
+
+
+class Session(BaseModel):
+    """User authentication session.
+
+    Stores authentication state including cookies, user information,
+    and session expiration.
+
+    Attributes:
+        cookies: note.com authentication cookies (note_gql_auth_token, _note_session_v5)
+        user_id: note.com user ID
+        username: note.com username (used in URL paths)
+        expires_at: Session expiration timestamp (Unix timestamp), None if no expiry
+        created_at: Session creation timestamp (Unix timestamp)
+    """
+
+    cookies: dict[str, str]
+    user_id: str
+    username: str
+    expires_at: int | None = None
+    created_at: int
+
+    def is_expired(self) -> bool:
+        """Check if the session has expired.
+
+        Returns:
+            True if session has expired, False otherwise.
+            Returns False if expires_at is None (no expiry set).
+        """
+        if self.expires_at is None:
+            return False
+        return time.time() > self.expires_at
+
+
+class ArticleStatus(str, Enum):
+    """Article publication status."""
+
+    DRAFT = "draft"
+    PUBLISHED = "published"
+    PRIVATE = "private"
+
+
+class Article(BaseModel):
+    """A note.com article.
+
+    Represents an article with all its metadata as stored on note.com.
+
+    Attributes:
+        id: Article ID (note.com internal ID)
+        key: Article key (used in URL path)
+        title: Article title
+        body: Article body content (HTML format)
+        status: Publication status
+        tags: List of hashtags (without # prefix)
+        eyecatch_image_key: Eyecatch image key (if set)
+        created_at: Creation timestamp (ISO 8601)
+        updated_at: Last update timestamp (ISO 8601)
+        published_at: Publication timestamp (ISO 8601)
+        url: Full article URL
+    """
+
+    id: str
+    key: str
+    title: str
+    body: str
+    status: ArticleStatus
+    tags: list[str] = []
+    eyecatch_image_key: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    published_at: str | None = None
+    url: str | None = None
+
+
+class ArticleInput(BaseModel):
+    """Input data for creating or updating an article.
+
+    Attributes:
+        title: Article title
+        body: Article body content (Markdown format)
+        tags: List of hashtags (# prefix optional, will be normalized)
+        eyecatch_image_path: Local path to eyecatch image (optional)
+    """
+
+    title: str
+    body: str
+    tags: list[str] = []
+    eyecatch_image_path: str | None = None
+
+
+class Image(BaseModel):
+    """An uploaded image.
+
+    Attributes:
+        key: note.com image key
+        url: Image URL on note.com
+        original_path: Original local file path
+        size_bytes: File size in bytes (optional)
+        uploaded_at: Upload timestamp (Unix timestamp)
+    """
+
+    key: str
+    url: str
+    original_path: str
+    size_bytes: int | None = None
+    uploaded_at: int
+
+
+class Tag(BaseModel):
+    """A hashtag for articles.
+
+    Attributes:
+        name: Tag name (without # prefix)
+    """
+
+    name: str
+
+    @classmethod
+    def normalize(cls, tag: str) -> str:
+        """Normalize a tag by removing leading # characters.
+
+        Args:
+            tag: Tag string, possibly with # prefix
+
+        Returns:
+            Tag string without # prefix
+        """
+        return tag.lstrip("#")
+
+
+class ErrorCode(str, Enum):
+    """Error codes for note-mcp API errors."""
+
+    NOT_AUTHENTICATED = "not_authenticated"
+    SESSION_EXPIRED = "session_expired"
+    ARTICLE_NOT_FOUND = "article_not_found"
+    RATE_LIMITED = "rate_limited"
+    API_ERROR = "api_error"
+    UPLOAD_FAILED = "upload_failed"
+    INVALID_INPUT = "invalid_input"
+
+
+class NoteAPIError(Exception):
+    """Exception for note.com API errors.
+
+    Attributes:
+        code: Error code
+        message: Human-readable error message
+        details: Additional error details
+    """
+
+    def __init__(
+        self,
+        code: ErrorCode,
+        message: str,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        """Initialize the error.
+
+        Args:
+            code: Error code from ErrorCode enum
+            message: Human-readable error message
+            details: Additional context (e.g., status code, response body)
+        """
+        self.code = code
+        self.message = message
+        self.details = details or {}
+        super().__init__(message)
+
+
+def from_api_response(data: dict[str, object]) -> Article:
+    """Create an Article from note.com API response.
+
+    Args:
+        data: Raw API response dictionary
+
+    Returns:
+        Article instance
+    """
+    # Extract hashtag names from the hashtags array
+    hashtags = data.get("hashtags", [])
+    tags: list[str] = []
+    if isinstance(hashtags, list):
+        for ht in hashtags:
+            if isinstance(ht, dict):
+                hashtag_obj = ht.get("hashtag", {})
+                if isinstance(hashtag_obj, dict):
+                    name = hashtag_obj.get("name", "")
+                    if name:
+                        tags.append(str(name))
+
+    # Map API field names to our model
+    status_str = data.get("status", "draft")
+    if not isinstance(status_str, str):
+        status_str = "draft"
+
+    return Article(
+        id=str(data.get("id", "")),
+        key=str(data.get("key", "")),
+        title=str(data.get("name", "")),
+        body=str(data.get("body", "")),
+        status=ArticleStatus(status_str),
+        tags=tags,
+        eyecatch_image_key=str(data.get("eyecatch_image_key")) if data.get("eyecatch_image_key") else None,
+        created_at=str(data.get("created_at")) if data.get("created_at") else None,
+        updated_at=str(data.get("updated_at")) if data.get("updated_at") else None,
+        published_at=str(data.get("publish_at")) if data.get("publish_at") else None,
+        url=str(data.get("noteUrl")) if data.get("noteUrl") else None,
+    )
+
+
+def to_api_request(article_input: ArticleInput, html_body: str) -> dict[str, object]:
+    """Convert ArticleInput to note.com API request format.
+
+    Args:
+        article_input: Input data from user
+        html_body: HTML-converted body content
+
+    Returns:
+        Dictionary suitable for note.com API request
+    """
+    return {
+        "name": article_input.title,
+        "body": html_body,
+        "status": "draft",
+    }

@@ -333,7 +333,7 @@ jobs:
 - [ ] `note_login` ツール動作
 - [ ] `note_check_auth` ツール動作
 - [ ] `note_logout` ツール動作
-- [ ] keyringフォールバック実装
+- [ ] keyringエラー時の診断情報実装
 - [ ] Unit tests合格
 
 ### Phase 2: 記事操作 (P1)
@@ -410,7 +410,7 @@ jobs:
 | セッション期限短縮 | Low | Medium | 期限検知と再認証導線 |
 | レート制限強化 | Low | Medium | バックオフ戦略実装 |
 | Playwright環境依存 | Low | Medium | ドキュメントで要件明記 |
-| keyring非対応環境 | Medium | Low | 暗号化ファイルフォールバック |
+| keyring非対応環境 | Medium | Low | 明確なエラーメッセージで設定手順を案内 |
 
 ---
 
