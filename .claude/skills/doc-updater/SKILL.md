@@ -1,13 +1,7 @@
 ---
 name: doc-updater
 description: コード変更、API変更、新機能追加時にドキュメントを自動更新します。公開APIやインターフェースの変更、新クラス・関数・モジュールの追加、アーキテクチャの重要な変更、ユーザーからの明示的なドキュメント更新依頼時に起動します。プロジェクトのドキュメント標準に準拠した更新を提案します。
-allowed-tools:
-  - Read
-  - Edit
-  - Write
-  - Glob
-  - Grep
-  - Bash
+allowed-tools: Read Edit Write Glob Grep Bash
 ---
 
 # ドキュメント更新スキル
