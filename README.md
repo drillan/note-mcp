@@ -20,8 +20,18 @@ note.com記事管理用MCPサーバー。AIアシスタント（Claude Code, Cla
 ## Installation
 
 ```bash
+# Install from GitHub
+uv pip install git+https://github.com/drillan/note-mcp.git
+
+# Install Playwright browser
+playwright install chromium
+```
+
+### 開発用インストール
+
+```bash
 # Clone the repository
-git clone https://github.com/your-username/note-mcp.git
+git clone https://github.com/drillan/note-mcp.git
 cd note-mcp
 
 # Install dependencies
@@ -128,6 +138,41 @@ AIが既存内容を把握した上で適切に編集を行います。
 | `note_upload_eyecatch` | アイキャッチ（見出し）画像をアップロード |
 | `note_upload_body_image` | 記事本文用の埋め込み画像をアップロード |
 | `note_show_preview` | ブラウザで記事プレビューを表示 |
+
+## Security
+
+### 認証情報の保存
+
+セッション情報（Cookie、ユーザーID等）はOSのセキュアストレージに暗号化して保存されます：
+
+| OS | 保存先 |
+|----|--------|
+| macOS | Keychain |
+| Windows | Credential Manager |
+| Linux | GNOME Keyring / libsecret |
+
+保存される情報：
+- 認証Cookie（`_note_session_v5`等）
+- ユーザーID・ユーザー名
+- セッション作成日時
+
+### セキュリティ特性
+
+- **OS暗号化**: 各OSのネイティブ暗号化機能を使用
+- **ユーザー分離**: ログインユーザーのみがアクセス可能
+- **自動管理**: `note_login`で保存、`note_logout`で削除
+
+### Linux での追加設定
+
+Linuxでは以下のいずれかが必要です：
+
+```bash
+# Ubuntu/Debian
+sudo apt install gnome-keyring
+
+# または
+sudo apt install libsecret-1-0
+```
 
 ## Requirements
 
