@@ -240,14 +240,19 @@ async def note_update_article(
 @mcp.tool()
 async def note_upload_image(
     file_path: Annotated[str, "アップロードする画像ファイルのパス"],
+    note_id: Annotated[str, "画像を関連付ける記事のID（数字のみ）"],
 ) -> str:
     """画像をnote.comにアップロードします。
 
     JPEG、PNG、GIF、WebP形式の画像をアップロードできます。
     最大ファイルサイズは10MBです。
+    画像は指定した記事のアイキャッチ画像としてアップロードされます。
+
+    note_list_articlesで記事一覧を取得し、IDを確認できます。
 
     Args:
         file_path: アップロードする画像ファイルのパス
+        note_id: 画像を関連付ける記事のID
 
     Returns:
         アップロード結果（画像URLを含む）
@@ -256,7 +261,7 @@ async def note_upload_image(
     if session is None or session.is_expired():
         return "セッションが無効です。note_loginでログインしてください。"
 
-    image = await upload_image(session, file_path)
+    image = await upload_image(session, file_path, note_id=note_id)
     return f"画像をアップロードしました。URL: {image.url}"
 
 

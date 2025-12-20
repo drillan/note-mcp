@@ -63,15 +63,20 @@ def validate_image_file(file_path: str) -> None:
 async def upload_image(
     session: Session,
     file_path: str,
+    note_id: str | None = None,
 ) -> Image:
     """Upload an image to note.com.
 
     Validates the file format and size before uploading.
     Uses multipart/form-data for the upload.
 
+    Note: note.com requires a note_id for image uploads.
+    This endpoint uploads as an eyecatch (header) image.
+
     Args:
         session: Authenticated session
         file_path: Path to the image file
+        note_id: The note ID to associate the image with (required by API)
 
     Returns:
         Image object with upload result
@@ -81,6 +86,13 @@ async def upload_image(
     """
     # Validate file before upload
     validate_image_file(file_path)
+
+    if note_id is None:
+        raise NoteAPIError(
+            code=ErrorCode.INVALID_INPUT,
+            message="note_id is required for image upload",
+            details={"file_path": file_path},
+        )
 
     path = Path(file_path)
     file_size = path.stat().st_size
@@ -104,8 +116,11 @@ async def upload_image(
         "file": (path.name, file_content, content_type),
     }
 
+    # note_id is required by the API
+    data = {"note_id": note_id}
+
     async with NoteAPIClient(session) as client:
-        response = await client.post("/v3/images", files=files)
+        response = await client.post("/v1/image_upload/note_eyecatch", files=files, data=data)
 
     # Parse response
     image_data = response.get("data", {})
