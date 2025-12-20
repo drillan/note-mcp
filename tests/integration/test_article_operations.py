@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from note_mcp.api.articles import create_draft, update_article
+from note_mcp.api.articles import create_draft, list_articles, publish_article, update_article
 from note_mcp.browser.preview import show_preview
 from note_mcp.models import ArticleInput, ArticleStatus, Session
 
@@ -219,3 +219,209 @@ class TestShowPreview:
 
             call_args = mock_page.goto.call_args[0][0]
             assert "my_custom_username" in call_args
+
+
+class TestListArticles:
+    """Tests for list_articles function."""
+
+    @pytest.mark.asyncio
+    async def test_list_articles_success(self) -> None:
+        """Test successful article listing."""
+        session = create_mock_session()
+
+        mock_response = {
+            "data": {
+                "notesByAuthor": {
+                    "contents": [
+                        {
+                            "id": "123",
+                            "key": "n123",
+                            "name": "Article 1",
+                            "status": "published",
+                            "createdAt": "2024-01-01T00:00:00Z",
+                            "updatedAt": "2024-01-02T00:00:00Z",
+                            "noteUrl": "https://note.com/testuser/n/n123",
+                        },
+                        {
+                            "id": "456",
+                            "key": "n456",
+                            "name": "Article 2",
+                            "status": "draft",
+                            "createdAt": "2024-01-03T00:00:00Z",
+                            "updatedAt": "2024-01-04T00:00:00Z",
+                            "noteUrl": "https://note.com/testuser/n/n456",
+                        },
+                    ],
+                    "totalCount": 2,
+                    "isLastPage": True,
+                }
+            }
+        }
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.get = AsyncMock(return_value=mock_response)
+
+            result = await list_articles(session)
+
+            assert len(result.articles) == 2
+            assert result.total == 2
+            assert result.articles[0].id == "123"
+            assert result.articles[0].title == "Article 1"
+            assert result.articles[1].id == "456"
+            assert result.articles[1].status == ArticleStatus.DRAFT
+
+    @pytest.mark.asyncio
+    async def test_list_articles_with_status_filter(self) -> None:
+        """Test listing articles with status filter."""
+        session = create_mock_session()
+
+        mock_response = {
+            "data": {
+                "notesByAuthor": {
+                    "contents": [
+                        {
+                            "id": "123",
+                            "key": "n123",
+                            "name": "Draft Article",
+                            "status": "draft",
+                            "createdAt": "2024-01-01T00:00:00Z",
+                            "updatedAt": "2024-01-02T00:00:00Z",
+                        }
+                    ],
+                    "totalCount": 1,
+                    "isLastPage": True,
+                }
+            }
+        }
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.get = AsyncMock(return_value=mock_response)
+
+            result = await list_articles(session, status=ArticleStatus.DRAFT)
+
+            assert len(result.articles) == 1
+            assert result.articles[0].status == ArticleStatus.DRAFT
+
+    @pytest.mark.asyncio
+    async def test_list_articles_pagination(self) -> None:
+        """Test listing articles with pagination."""
+        session = create_mock_session()
+
+        mock_response = {
+            "data": {
+                "notesByAuthor": {
+                    "contents": [
+                        {
+                            "id": "789",
+                            "key": "n789",
+                            "name": "Page 2 Article",
+                            "status": "published",
+                            "createdAt": "2024-01-01T00:00:00Z",
+                            "updatedAt": "2024-01-02T00:00:00Z",
+                        }
+                    ],
+                    "totalCount": 11,
+                    "isLastPage": False,
+                }
+            }
+        }
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.get = AsyncMock(return_value=mock_response)
+
+            result = await list_articles(session, page=2, limit=10)
+
+            assert result.page == 2
+            assert result.has_more is True
+            assert result.total == 11
+
+
+class TestPublishArticle:
+    """Tests for publish_article function."""
+
+    @pytest.mark.asyncio
+    async def test_publish_existing_draft(self) -> None:
+        """Test publishing an existing draft article."""
+        session = create_mock_session()
+
+        mock_response = {
+            "data": {
+                "id": "123456",
+                "key": "n1234567890ab",
+                "name": "Published Article",
+                "body": "<p>Content</p>",
+                "status": "published",
+                "hashtags": [],
+                "noteUrl": "https://note.com/testuser/n/n1234567890ab",
+            }
+        }
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.post = AsyncMock(return_value=mock_response)
+
+            article = await publish_article(session, article_id="123456")
+
+            assert article.id == "123456"
+            assert article.status == ArticleStatus.PUBLISHED
+            assert article.url == "https://note.com/testuser/n/n1234567890ab"
+
+    @pytest.mark.asyncio
+    async def test_publish_new_article(self) -> None:
+        """Test publishing a new article directly."""
+        session = create_mock_session()
+        article_input = ArticleInput(
+            title="New Published Article",
+            body="# Hello\n\nContent here.",
+            tags=["test"],
+        )
+
+        mock_response = {
+            "data": {
+                "id": "789",
+                "key": "n789",
+                "name": "New Published Article",
+                "body": "<h1>Hello</h1>\n<p>Content here.</p>\n",
+                "status": "published",
+                "hashtags": [{"hashtag": {"name": "test"}}],
+                "noteUrl": "https://note.com/testuser/n/n789",
+            }
+        }
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.post = AsyncMock(return_value=mock_response)
+
+            article = await publish_article(session, article_input=article_input)
+
+            assert article.id == "789"
+            assert article.status == ArticleStatus.PUBLISHED
+            assert "test" in article.tags
+
+    @pytest.mark.asyncio
+    async def test_publish_requires_id_or_input(self) -> None:
+        """Test that publish_article requires either article_id or article_input."""
+        session = create_mock_session()
+
+        with pytest.raises(ValueError) as exc_info:
+            await publish_article(session)
+
+        assert "article_id" in str(exc_info.value) or "article_input" in str(exc_info.value)

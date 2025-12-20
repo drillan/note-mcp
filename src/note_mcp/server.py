@@ -9,12 +9,12 @@ from typing import Annotated
 
 from fastmcp import FastMCP
 
-from note_mcp.api.articles import create_draft, update_article
+from note_mcp.api.articles import create_draft, list_articles, publish_article, update_article
 from note_mcp.api.images import upload_image
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
 from note_mcp.browser.preview import show_preview
-from note_mcp.models import ArticleInput
+from note_mcp.models import ArticleInput, ArticleStatus
 
 # Create MCP server instance
 mcp = FastMCP("note-mcp")
@@ -195,3 +195,95 @@ async def note_show_preview(
 
     await show_preview(session, article_key)
     return f"プレビューを表示しました。記事キー: {article_key}"
+
+
+@mcp.tool()
+async def note_publish_article(
+    article_id: Annotated[str | None, "公開する下書き記事のID（新規作成時は省略）"] = None,
+    title: Annotated[str | None, "記事タイトル（新規作成時は必須）"] = None,
+    body: Annotated[str | None, "記事本文（Markdown形式、新規作成時は必須）"] = None,
+    tags: Annotated[list[str] | None, "記事のタグ（#なしでも可）"] = None,
+) -> str:
+    """記事を公開します。
+
+    既存の下書きを公開するか、新規記事を作成して即公開できます。
+    article_idを指定すると既存の下書きを公開します。
+    title/bodyを指定すると新規記事を作成して公開します。
+
+    Args:
+        article_id: 公開する下書き記事のID（新規作成時は省略）
+        title: 記事タイトル（新規作成時は必須）
+        body: 記事本文（Markdown形式、新規作成時は必須）
+        tags: 記事のタグ（オプション）
+
+    Returns:
+        公開結果のメッセージ（記事URLを含む）
+    """
+    session = _session_manager.load()
+    if session is None or session.is_expired():
+        return "セッションが無効です。note_loginでログインしてください。"
+
+    # Determine whether to publish existing or create new
+    if article_id is not None:
+        # Publish existing draft
+        article = await publish_article(session, article_id=article_id)
+    elif title is not None and body is not None:
+        # Create and publish new article
+        article_input = ArticleInput(
+            title=title,
+            body=body,
+            tags=tags or [],
+        )
+        article = await publish_article(session, article_input=article_input)
+    else:
+        return "article_idまたは（titleとbody）のいずれかを指定してください。"
+
+    url_info = f"、URL: {article.url}" if article.url else ""
+    return f"記事を公開しました。ID: {article.id}{url_info}"
+
+
+@mcp.tool()
+async def note_list_articles(
+    status: Annotated[str | None, "フィルタするステータス（draft/published/all）"] = None,
+    page: Annotated[int, "ページ番号（1から開始）"] = 1,
+    limit: Annotated[int, "1ページあたりの記事数（最大10）"] = 10,
+) -> str:
+    """自分の記事一覧を取得します。
+
+    ステータスでフィルタリングできます。
+
+    Args:
+        status: フィルタするステータス（draft/published/all、省略時はall）
+        page: ページ番号（1から開始）
+        limit: 1ページあたりの記事数（最大10）
+
+    Returns:
+        記事一覧の情報
+    """
+    session = _session_manager.load()
+    if session is None or session.is_expired():
+        return "セッションが無効です。note_loginでログインしてください。"
+
+    # Convert status string to ArticleStatus enum
+    status_filter: ArticleStatus | None = None
+    if status is not None and status != "all":
+        try:
+            status_filter = ArticleStatus(status)
+        except ValueError:
+            return f"無効なステータスです: {status}。draft/published/allのいずれかを指定してください。"
+
+    result = await list_articles(session, status=status_filter, page=page, limit=limit)
+
+    if not result.articles:
+        return "記事が見つかりませんでした。"
+
+    # Format article list
+    lines = [f"記事一覧（{result.total}件中{len(result.articles)}件、ページ{result.page}）:"]
+    for article in result.articles:
+        status_label = "下書き" if article.status == ArticleStatus.DRAFT else "公開済み"
+        lines.append(f"  - [{status_label}] {article.title} (ID: {article.id})")
+
+    if result.has_more:
+        lines.append(f"  （続きはpage={result.page + 1}で取得できます）")
+
+    return "\n".join(lines)

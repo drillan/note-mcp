@@ -174,6 +174,53 @@ class TestToolSchemas:
         required = schema.get("required", [])
         assert "article_key" in required
 
+    def test_note_publish_article_tool_exists(self) -> None:
+        """Test that note_publish_article tool is registered."""
+        tools = get_tools()
+        assert "note_publish_article" in tools
+
+    def test_note_publish_article_schema(self) -> None:
+        """Test note_publish_article tool has correct schema."""
+        tools = get_tools()
+        publish_tool = tools["note_publish_article"]
+
+        assert publish_tool.parameters is not None
+        schema = publish_tool.parameters
+        assert "properties" in schema
+
+        # Optional parameters (can publish existing draft or create new)
+        assert "article_id" in schema["properties"]
+        assert "title" in schema["properties"]
+        assert "body" in schema["properties"]
+        assert "tags" in schema["properties"]
+
+        # All parameters are optional
+        required = schema.get("required", [])
+        assert len(required) == 0
+
+    def test_note_list_articles_tool_exists(self) -> None:
+        """Test that note_list_articles tool is registered."""
+        tools = get_tools()
+        assert "note_list_articles" in tools
+
+    def test_note_list_articles_schema(self) -> None:
+        """Test note_list_articles tool has correct schema."""
+        tools = get_tools()
+        list_tool = tools["note_list_articles"]
+
+        assert list_tool.parameters is not None
+        schema = list_tool.parameters
+        assert "properties" in schema
+
+        # Optional parameters
+        assert "status" in schema["properties"]
+        assert "page" in schema["properties"]
+        assert "limit" in schema["properties"]
+
+        # All parameters are optional
+        required = schema.get("required", [])
+        assert len(required) == 0
+
 
 class TestToolDescriptions:
     """Tests for tool descriptions."""

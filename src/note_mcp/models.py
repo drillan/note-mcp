@@ -140,6 +140,22 @@ class Tag(BaseModel):
         return tag.lstrip("#")
 
 
+class ArticleListResult(BaseModel):
+    """Result of listing articles.
+
+    Attributes:
+        articles: List of articles
+        total: Total number of articles matching the query
+        page: Current page number (1-indexed)
+        has_more: Whether there are more articles to fetch
+    """
+
+    articles: list[Article]
+    total: int
+    page: int
+    has_more: bool
+
+
 class ErrorCode(str, Enum):
     """Error codes for note-mcp API errors."""
 
