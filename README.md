@@ -119,6 +119,7 @@ AIが既存内容を把握した上で適切に編集を行います。
 | `note_login` | ブラウザでnote.comにログイン |
 | `note_check_auth` | 認証状態を確認 |
 | `note_logout` | ログアウト（セッション削除） |
+| `note_set_username` | ユーザー名を設定（セッション復元時に必要） |
 | `note_create_draft` | 下書き記事を作成 |
 | `note_get_article` | 記事内容を取得（タイトル、本文、タグ、ステータス等） |
 | `note_update_article` | 記事を更新（先にnote_get_articleで内容取得を推奨） |
