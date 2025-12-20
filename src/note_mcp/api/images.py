@@ -1,19 +1,67 @@
 """Image upload operations for note.com API.
 
 Provides functionality for uploading images to note.com.
+Supports both eyecatch (header) images and body (inline) images.
 """
 
 from __future__ import annotations
 
+import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from note_mcp.api.client import NoteAPIClient
-from note_mcp.models import ErrorCode, Image, NoteAPIError, Session
+from note_mcp.models import ErrorCode, Image, ImageType, NoteAPIError, Session
 
 if TYPE_CHECKING:
     pass
+
+
+async def _resolve_numeric_note_id(session: Session, note_id: str) -> str:
+    """Resolve note ID to numeric format.
+
+    The image upload API requires numeric note IDs.
+    This function converts key format IDs (e.g., "ne1c111d2073c") to numeric IDs.
+
+    Args:
+        session: Authenticated session
+        note_id: Note ID in either numeric or key format
+
+    Returns:
+        Numeric note ID as string
+
+    Raises:
+        NoteAPIError: If ID resolution fails
+    """
+    # If already numeric, return as-is
+    if note_id.isdigit():
+        return note_id
+
+    # Key format IDs start with "n" followed by alphanumeric characters
+    if not re.match(r"^n[a-z0-9]+$", note_id):
+        raise NoteAPIError(
+            code=ErrorCode.INVALID_INPUT,
+            message=f"Invalid note ID format: {note_id}",
+            details={"note_id": note_id},
+        )
+
+    # Fetch article details to get numeric ID
+    async with NoteAPIClient(session) as client:
+        response = await client.get(f"/v3/notes/{note_id}")
+
+    # Extract numeric ID from response
+    data = response.get("data", {})
+    numeric_id = data.get("id")
+
+    if not numeric_id:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message=f"Failed to resolve note ID: {note_id}",
+            details={"note_id": note_id, "response": response},
+        )
+
+    return str(numeric_id)
 
 
 # Allowed image file extensions
@@ -21,6 +69,14 @@ ALLOWED_EXTENSIONS: set[str] = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 # Maximum file size in bytes (10MB)
 MAX_FILE_SIZE: int = 10 * 1024 * 1024
+
+# API endpoints for different image types
+# Note: Body images use the same endpoint as eyecatch images.
+# The returned URL can be embedded in article body using Markdown syntax.
+IMAGE_UPLOAD_ENDPOINTS: dict[ImageType, str] = {
+    ImageType.EYECATCH: "/v1/image_upload/note_eyecatch",
+    ImageType.BODY: "/v1/image_upload/note_eyecatch",  # Same endpoint - URL works for body embedding
+}
 
 
 def validate_image_file(file_path: str) -> None:
@@ -60,23 +116,22 @@ def validate_image_file(file_path: str) -> None:
         )
 
 
-async def upload_image(
+async def _upload_image_internal(
     session: Session,
     file_path: str,
-    note_id: str | None = None,
+    note_id: str,
+    image_type: ImageType,
 ) -> Image:
-    """Upload an image to note.com.
+    """Internal function for uploading an image to note.com.
 
     Validates the file format and size before uploading.
     Uses multipart/form-data for the upload.
 
-    Note: note.com requires a note_id for image uploads.
-    This endpoint uploads as an eyecatch (header) image.
-
     Args:
         session: Authenticated session
         file_path: Path to the image file
-        note_id: The note ID to associate the image with (required by API)
+        note_id: The note ID to associate the image with (numeric or key format)
+        image_type: Type of image (eyecatch or body)
 
     Returns:
         Image object with upload result
@@ -87,12 +142,8 @@ async def upload_image(
     # Validate file before upload
     validate_image_file(file_path)
 
-    if note_id is None:
-        raise NoteAPIError(
-            code=ErrorCode.INVALID_INPUT,
-            message="note_id is required for image upload",
-            details={"file_path": file_path},
-        )
+    # Resolve note ID to numeric format (API requirement)
+    numeric_note_id = await _resolve_numeric_note_id(session, note_id)
 
     path = Path(file_path)
     file_size = path.stat().st_size
@@ -116,11 +167,14 @@ async def upload_image(
         "file": (path.name, file_content, content_type),
     }
 
-    # note_id is required by the API
-    data = {"note_id": note_id}
+    # note_id is required by the API (must be numeric)
+    data = {"note_id": numeric_note_id}
+
+    # Get endpoint for the image type
+    endpoint = IMAGE_UPLOAD_ENDPOINTS[image_type]
 
     async with NoteAPIClient(session) as client:
-        response = await client.post("/v1/image_upload/note_eyecatch", files=files, data=data)
+        response = await client.post(endpoint, files=files, data=data)
 
     # Parse response
     image_data = response.get("data", {})
@@ -131,4 +185,129 @@ async def upload_image(
         original_path=file_path,
         size_bytes=file_size,
         uploaded_at=int(time.time()),
+        image_type=image_type,
+    )
+
+
+async def upload_eyecatch_image(
+    session: Session,
+    file_path: str,
+    note_id: str,
+) -> Image:
+    """Upload an eyecatch (header) image to note.com.
+
+    Validates the file format and size before uploading.
+    Uses multipart/form-data for the upload.
+
+    Args:
+        session: Authenticated session
+        file_path: Path to the image file
+        note_id: The note ID to associate the image with (required by API)
+
+    Returns:
+        Image object with upload result
+
+    Raises:
+        NoteAPIError: If validation fails or API request fails
+    """
+    return await _upload_image_internal(session, file_path, note_id, ImageType.EYECATCH)
+
+
+async def upload_body_image(
+    session: Session,
+    file_path: str,
+    note_id: str,
+) -> Image:
+    """Upload a body (inline) image to note.com.
+
+    Uses the presigned_post flow to upload directly to S3.
+    This does NOT update the eyecatch image (unlike the eyecatch endpoint).
+    The returned URL can be embedded in article body using Markdown syntax:
+    ![alt text](returned_url)
+
+    Args:
+        session: Authenticated session
+        file_path: Path to the image file
+        note_id: The note ID to associate the image with (for metadata only)
+
+    Returns:
+        Image object with upload result
+
+    Raises:
+        NoteAPIError: If validation fails or API request fails
+    """
+    import httpx
+
+    # Validate file before upload
+    validate_image_file(file_path)
+
+    path = Path(file_path)
+    file_size = path.stat().st_size
+
+    # Step 1: Get presigned POST URL from note.com
+    async with NoteAPIClient(session) as client:
+        response = await client.post(
+            "/v3/images/upload/presigned_post",
+            data={"filename": path.name},
+        )
+
+    presigned_data = response.get("data", {})
+    s3_url = presigned_data.get("action")
+    image_url = presigned_data.get("url")
+    post_fields = presigned_data.get("post", {})
+
+    if not s3_url or not image_url or not post_fields:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Failed to get presigned URL for image upload",
+            details={"response": response},
+        )
+
+    # Step 2: Upload file directly to S3
+    with open(file_path, "rb") as f:
+        file_content = f.read()
+
+    # Build multipart form data with S3 required fields
+    # Order matters for S3 - policy fields first, then file
+    files_data: dict[str, tuple[None, str] | tuple[str, bytes, str]] = {
+        "key": (None, post_fields.get("key", "")),
+        "acl": (None, post_fields.get("acl", "")),
+        "Expires": (None, post_fields.get("Expires", "")),
+        "policy": (None, post_fields.get("policy", "")),
+        "x-amz-credential": (None, post_fields.get("x-amz-credential", "")),
+        "x-amz-algorithm": (None, post_fields.get("x-amz-algorithm", "")),
+        "x-amz-date": (None, post_fields.get("x-amz-date", "")),
+        "x-amz-signature": (None, post_fields.get("x-amz-signature", "")),
+    }
+
+    # Determine content type
+    content_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+    }
+    content_type = content_types.get(path.suffix.lower(), "application/octet-stream")
+
+    # Add file last (S3 requirement)
+    files_data["file"] = (path.name, file_content, content_type)
+
+    async with httpx.AsyncClient() as http_client:
+        s3_response = await http_client.post(s3_url, files=files_data)
+
+        if not s3_response.is_success:
+            raise NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message=f"Failed to upload image to S3: {s3_response.status_code}",
+                details={"status": s3_response.status_code, "response": s3_response.text},
+            )
+
+    return Image(
+        key=post_fields.get("key", ""),
+        url=image_url,
+        original_path=file_path,
+        size_bytes=file_size,
+        uploaded_at=int(time.time()),
+        image_type=ImageType.BODY,
     )

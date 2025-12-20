@@ -9,19 +9,21 @@ class TestMarkdownToHtml:
     def test_heading_conversion(self) -> None:
         """Test converting headings."""
         result = markdown_to_html("# Heading 1")
-        assert "<h1>" in result
+        # note.com format adds name/id attributes
+        assert "<h1 " in result or "<h1>" in result
         assert "Heading 1" in result
 
     def test_heading_level_2(self) -> None:
         """Test converting level 2 headings."""
         result = markdown_to_html("## Heading 2")
-        assert "<h2>" in result
+        assert "<h2 " in result or "<h2>" in result
         assert "Heading 2" in result
 
     def test_paragraph_conversion(self) -> None:
         """Test converting paragraphs."""
         result = markdown_to_html("This is a paragraph.")
-        assert "<p>" in result
+        # note.com format adds name/id attributes
+        assert "<p " in result or "<p>" in result
         assert "This is a paragraph." in result
 
     def test_bold_conversion(self) -> None:
@@ -42,8 +44,8 @@ class TestMarkdownToHtml:
 - Item 2
 - Item 3"""
         result = markdown_to_html(markdown)
-        assert "<ul>" in result
-        assert "<li>" in result
+        assert "<ul " in result or "<ul>" in result
+        assert "<li " in result or "<li>" in result
         assert "Item 1" in result
 
     def test_ordered_list_conversion(self) -> None:
@@ -52,14 +54,14 @@ class TestMarkdownToHtml:
 2. Second
 3. Third"""
         result = markdown_to_html(markdown)
-        assert "<ol>" in result
-        assert "<li>" in result
+        assert "<ol " in result or "<ol>" in result
+        assert "<li " in result or "<li>" in result
         assert "First" in result
 
     def test_code_inline_conversion(self) -> None:
         """Test converting inline code."""
         result = markdown_to_html("Use `code` here.")
-        assert "<code>" in result
+        assert "<code " in result or "<code>" in result
         assert "code" in result
 
     def test_code_block_conversion(self) -> None:
@@ -69,7 +71,7 @@ def hello():
     pass
 ```"""
         result = markdown_to_html(markdown)
-        assert "<code>" in result or "<pre>" in result
+        assert "<code " in result or "<code>" in result or "<pre " in result or "<pre>" in result
         assert "def hello" in result
 
     def test_link_conversion(self) -> None:
@@ -86,10 +88,26 @@ def hello():
         assert 'src="https://example.com/image.png"' in result
         assert 'alt="Alt text"' in result
 
+    def test_image_note_figure_format(self) -> None:
+        """Test images are converted to note.com figure format."""
+        result = markdown_to_html("![Test](https://example.com/test.png)")
+        # Must have figure wrapper with name and id attributes
+        assert "<figure" in result
+        assert 'name="' in result
+        assert 'id="' in result
+        # Must have figcaption
+        assert "<figcaption>" in result
+        assert "</figcaption></figure>" in result
+        # Must have note.com specific img attributes
+        assert 'contenteditable="false"' in result
+        assert 'draggable="false"' in result
+        assert 'width="620"' in result
+        assert 'height="457"' in result
+
     def test_blockquote_conversion(self) -> None:
         """Test converting blockquotes."""
         result = markdown_to_html("> This is a quote")
-        assert "<blockquote>" in result
+        assert "<blockquote " in result or "<blockquote>" in result
         assert "This is a quote" in result
 
     def test_horizontal_rule_conversion(self) -> None:
@@ -112,13 +130,13 @@ def hello():
         """Test converting a large document."""
         markdown = "\n\n".join([f"# Heading {i}\n\nParagraph {i}" for i in range(100)])
         result = markdown_to_html(markdown)
-        assert "<h1>" in result
+        assert "<h1 " in result or "<h1>" in result
         assert "Heading 99" in result
 
     def test_special_characters(self) -> None:
         """Test handling special characters."""
         result = markdown_to_html("Special chars: < > & \" '")
-        assert "<p>" in result
+        assert "<p " in result or "<p>" in result
         # HTML entities should be properly escaped
         assert "&lt;" in result or "<" in result
         assert "&gt;" in result or ">" in result
@@ -130,5 +148,5 @@ This is line 2
 
 This is a new paragraph."""
         result = markdown_to_html(markdown)
-        # Should have paragraphs
-        assert "<p>" in result
+        # Should have paragraphs (with note.com UUID attributes)
+        assert "<p " in result or "<p>" in result

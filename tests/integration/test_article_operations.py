@@ -120,7 +120,8 @@ class TestUpdateArticle:
             mock_client_class.return_value = mock_client
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock()
-            mock_client.put = AsyncMock(return_value=mock_response)
+            # Uses POST to draft_save endpoint
+            mock_client.post = AsyncMock(return_value=mock_response)
 
             article = await update_article(session, "123456", article_input)
 
@@ -152,7 +153,8 @@ class TestUpdateArticle:
             mock_client_class.return_value = mock_client
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock()
-            mock_client.put = AsyncMock(return_value=mock_response)
+            # Uses POST to draft_save endpoint
+            mock_client.post = AsyncMock(return_value=mock_response)
 
             article = await update_article(session, "123456", article_input)
 

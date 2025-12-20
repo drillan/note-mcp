@@ -132,15 +132,15 @@ class TestToolSchemas:
         assert "title" in required
         assert "body" in required
 
-    def test_note_upload_image_tool_exists(self) -> None:
-        """Test that note_upload_image tool is registered."""
+    def test_note_upload_eyecatch_tool_exists(self) -> None:
+        """Test that note_upload_eyecatch tool is registered."""
         tools = get_tools()
-        assert "note_upload_image" in tools
+        assert "note_upload_eyecatch" in tools
 
-    def test_note_upload_image_schema(self) -> None:
-        """Test note_upload_image tool has correct schema."""
+    def test_note_upload_eyecatch_schema(self) -> None:
+        """Test note_upload_eyecatch tool has correct schema."""
         tools = get_tools()
-        upload_tool = tools["note_upload_image"]
+        upload_tool = tools["note_upload_eyecatch"]
 
         assert upload_tool.parameters is not None
         schema = upload_tool.parameters
@@ -148,10 +148,35 @@ class TestToolSchemas:
 
         # Required parameters
         assert "file_path" in schema["properties"]
+        assert "note_id" in schema["properties"]
 
         # Check required fields
         required = schema.get("required", [])
         assert "file_path" in required
+        assert "note_id" in required
+
+    def test_note_upload_body_image_tool_exists(self) -> None:
+        """Test that note_upload_body_image tool is registered."""
+        tools = get_tools()
+        assert "note_upload_body_image" in tools
+
+    def test_note_upload_body_image_schema(self) -> None:
+        """Test note_upload_body_image tool has correct schema."""
+        tools = get_tools()
+        upload_tool = tools["note_upload_body_image"]
+
+        assert upload_tool.parameters is not None
+        schema = upload_tool.parameters
+        assert "properties" in schema
+
+        # Required parameters
+        assert "file_path" in schema["properties"]
+        assert "note_id" in schema["properties"]
+
+        # Check required fields
+        required = schema.get("required", [])
+        assert "file_path" in required
+        assert "note_id" in required
 
     def test_note_show_preview_tool_exists(self) -> None:
         """Test that note_show_preview tool is registered."""

@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from note_mcp.api.client import NoteAPIClient
+from note_mcp.api.images import _resolve_numeric_note_id
 from note_mcp.models import (
     Article,
     ArticleInput,
@@ -52,7 +53,8 @@ async def update_article(
 ) -> Article:
     """Update an existing article.
 
-    Uses browser automation to update the article via note.com's web interface.
+    Uses the note.com API to update the article.
+    Converts Markdown body to HTML as required by the API.
 
     Args:
         session: Authenticated session
@@ -63,11 +65,41 @@ async def update_article(
         Updated Article object
 
     Raises:
-        RuntimeError: If article update fails
+        NoteAPIError: If API request fails
     """
-    from note_mcp.browser.update_article import update_article_via_browser
+    # Resolve to numeric ID (API requirement)
+    numeric_id = await _resolve_numeric_note_id(session, article_id)
 
-    return await update_article_via_browser(session, article_id, article_input)
+    # Convert Markdown to HTML for API
+    html_body = markdown_to_html(article_input.body)
+
+    # Build payload matching note.com editor format
+    # Calculate body length (character count, not byte count)
+    body_length = len(article_input.body)
+
+    payload: dict[str, Any] = {
+        "name": article_input.title,
+        "body": html_body,
+        "body_length": body_length,
+        "index": False,
+        "is_lead_form": False,
+    }
+
+    # Add tags if present
+    if article_input.tags:
+        normalized_tags = [tag.lstrip("#") for tag in article_input.tags]
+        payload["hashtags"] = [{"hashtag": {"name": tag}} for tag in normalized_tags]
+
+    async with NoteAPIClient(session) as client:
+        # Use draft_save endpoint with POST (not PUT)
+        response = await client.post(
+            f"/v1/text_notes/draft_save?id={numeric_id}&is_temp_saved=true",
+            json=payload,
+        )
+
+    # Parse response
+    article_data = response.get("data", {})
+    return from_api_response(article_data)
 
 
 async def get_article(

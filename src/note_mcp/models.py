@@ -52,6 +52,16 @@ class ArticleStatus(str, Enum):
     PRIVATE = "private"
 
 
+class ImageType(str, Enum):
+    """Image upload type.
+
+    Determines which note.com API endpoint to use for image upload.
+    """
+
+    EYECATCH = "eyecatch"  # Header/eyecatch image (見出し画像)
+    BODY = "body"  # Inline/body image (記事内埋め込み画像)
+
+
 class Article(BaseModel):
     """A note.com article.
 
@@ -109,6 +119,7 @@ class Image(BaseModel):
         original_path: Original local file path
         size_bytes: File size in bytes (optional)
         uploaded_at: Upload timestamp (Unix timestamp)
+        image_type: Type of image (eyecatch or body)
     """
 
     key: str
@@ -116,6 +127,7 @@ class Image(BaseModel):
     original_path: str
     size_bytes: int | None = None
     uploaded_at: int
+    image_type: ImageType = ImageType.EYECATCH
 
 
 class Tag(BaseModel):

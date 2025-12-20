@@ -78,19 +78,25 @@ class NoteAPIClient:
             Headers dictionary with Accept and Cookie if session exists
         """
         headers: dict[str, str] = {
-            "Accept": "application/json",
-            "User-Agent": "note-mcp/0.1.0",
+            "Accept": "*/*",
+            "User-Agent": (
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+            ),
         }
 
         if self.session is not None:
             cookie_parts = [f"{k}={v}" for k, v in self.session.cookies.items()]
             headers["Cookie"] = "; ".join(cookie_parts)
 
-            # Add XSRF token for mutating requests
+            # Add XSRF token and editor headers for mutating requests
             if include_xsrf:
                 xsrf_token = self.session.cookies.get("XSRF-TOKEN")
                 if xsrf_token:
                     headers["X-XSRF-TOKEN"] = xsrf_token
+                # Required headers for editor API
+                headers["Origin"] = "https://editor.note.com"
+                headers["Referer"] = "https://editor.note.com/"
+                headers["X-Requested-With"] = "XMLHttpRequest"
 
         return headers
 
@@ -155,9 +161,10 @@ class NoteAPIClient:
                 details={"status_code": status, "response": response.text},
             )
         else:
+            # Include response text in error message for debugging
             raise NoteAPIError(
                 code=ErrorCode.API_ERROR,
-                message=f"API request failed with status {status}.",
+                message=f"API request failed with status {status}. Response: {response.text[:500]}",
                 details={"status_code": status, "response": response.text},
             )
 

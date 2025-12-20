@@ -10,7 +10,7 @@ from typing import Annotated
 from fastmcp import FastMCP
 
 from note_mcp.api.articles import create_draft, get_article, list_articles, publish_article, update_article
-from note_mcp.api.images import upload_image
+from note_mcp.api.images import upload_body_image, upload_eyecatch_image
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
 from note_mcp.browser.preview import show_preview
@@ -238,15 +238,15 @@ async def note_update_article(
 
 
 @mcp.tool()
-async def note_upload_image(
+async def note_upload_eyecatch(
     file_path: Annotated[str, "アップロードする画像ファイルのパス"],
     note_id: Annotated[str, "画像を関連付ける記事のID（数字のみ）"],
 ) -> str:
-    """画像をnote.comにアップロードします。
+    """記事のアイキャッチ（見出し）画像をアップロードします。
 
     JPEG、PNG、GIF、WebP形式の画像をアップロードできます。
     最大ファイルサイズは10MBです。
-    画像は指定した記事のアイキャッチ画像としてアップロードされます。
+    アップロードした画像は記事の見出し画像として設定されます。
 
     note_list_articlesで記事一覧を取得し、IDを確認できます。
 
@@ -261,8 +261,38 @@ async def note_upload_image(
     if session is None or session.is_expired():
         return "セッションが無効です。note_loginでログインしてください。"
 
-    image = await upload_image(session, file_path, note_id=note_id)
-    return f"画像をアップロードしました。URL: {image.url}"
+    image = await upload_eyecatch_image(session, file_path, note_id=note_id)
+    return f"アイキャッチ画像をアップロードしました。URL: {image.url}"
+
+
+@mcp.tool()
+async def note_upload_body_image(
+    file_path: Annotated[str, "アップロードする画像ファイルのパス"],
+    note_id: Annotated[str, "画像を関連付ける記事のID（数字のみ）"],
+) -> str:
+    """記事本文内に埋め込む画像をアップロードします。
+
+    JPEG、PNG、GIF、WebP形式の画像をアップロードできます。
+    最大ファイルサイズは10MBです。
+
+    返されたURLを記事本文にMarkdown形式で挿入してください。
+    例: ![代替テキスト](返されたURL)
+
+    note_list_articlesで記事一覧を取得し、IDを確認できます。
+
+    Args:
+        file_path: アップロードする画像ファイルのパス
+        note_id: 画像を関連付ける記事のID
+
+    Returns:
+        アップロード結果（画像URLを含む）
+    """
+    session = _session_manager.load()
+    if session is None or session.is_expired():
+        return "セッションが無効です。note_loginでログインしてください。"
+
+    image = await upload_body_image(session, file_path, note_id=note_id)
+    return f"本文用画像をアップロードしました。URL: {image.url}\n\nMarkdownで挿入: ![説明]({image.url})"
 
 
 @mcp.tool()
