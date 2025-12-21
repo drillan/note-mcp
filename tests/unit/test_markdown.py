@@ -150,3 +150,28 @@ This is a new paragraph."""
         result = markdown_to_html(markdown)
         # Should have paragraphs (with note.com UUID attributes)
         assert "<p " in result or "<p>" in result
+
+    def test_code_block_preserves_newlines(self) -> None:
+        """Test that code blocks preserve internal newlines.
+
+        note.com requires:
+        - <pre class="codeBlock"> format
+        - Actual newlines preserved inside code blocks
+        """
+        markdown = """```python
+def hello():
+    print("Hello")
+    return True
+```"""
+        result = markdown_to_html(markdown)
+        # Code block must be in note.com format (attribute order matters)
+        assert 'class="codeBlock"' in result
+        assert "<pre " in result
+        assert "<code>" in result  # No language class
+        # The newlines between code lines must be preserved as actual newlines
+        assert "\n" in result
+        # Verify the code content is intact
+        assert "def hello():" in result
+        assert 'print("Hello")' in result or "print(&quot;Hello&quot;)" in result
+        # Verify newlines are between code lines
+        assert "def hello():\n" in result
