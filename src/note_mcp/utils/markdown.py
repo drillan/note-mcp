@@ -8,6 +8,18 @@ import uuid
 
 from markdown_it import MarkdownIt
 
+# Pre-compiled regex patterns for performance
+_TAG_PATTERN = re.compile(
+    r"<(p|h[1-6]|ul|ol|li|blockquote|code|hr|div|span)(\s[^>]*)?>",
+    re.IGNORECASE,
+)
+_PRE_PATTERN = re.compile(r"<pre([^>]*)>(.*?)</pre>", re.DOTALL | re.IGNORECASE)
+_IMG_IN_P_PATTERN = re.compile(
+    r'<p>\s*<img\s+src="([^"]+)"\s+alt="([^"]*)"\s*/?\s*>\s*</p>',
+    re.IGNORECASE,
+)
+_LANGUAGE_CLASS_PATTERN = re.compile(r'<code[^>]*class="language-[^"]*"[^>]*>')
+
 
 def _generate_uuid() -> str:
     """Generate a UUID for note.com element IDs."""
@@ -18,6 +30,7 @@ def _add_uuid_to_elements(html: str) -> str:
     """Add name and id attributes (UUID) to all HTML elements.
 
     note.com requires all elements to have unique name and id attributes.
+    Note: <pre> tags are handled separately by _convert_code_blocks_to_note_format.
 
     Args:
         html: HTML string
@@ -25,12 +38,6 @@ def _add_uuid_to_elements(html: str) -> str:
     Returns:
         HTML with UUID attributes added to all elements
     """
-    # Pattern to match opening tags without name attribute
-    # Matches: <tagname> or <tagname attr="value">
-    tag_pattern = re.compile(
-        r"<(p|h[1-6]|ul|ol|li|blockquote|pre|code|hr|div|span)(\s[^>]*)?>",
-        re.IGNORECASE,
-    )
 
     def add_uuid(match: re.Match[str]) -> str:
         tag_name = match.group(1)
@@ -43,7 +50,7 @@ def _add_uuid_to_elements(html: str) -> str:
         element_id = _generate_uuid()
         return f'<{tag_name} name="{element_id}" id="{element_id}"{attrs}>'
 
-    return tag_pattern.sub(add_uuid, html)
+    return _TAG_PATTERN.sub(add_uuid, html)
 
 
 def _convert_images_to_note_format(html: str) -> str:
@@ -62,12 +69,6 @@ def _convert_images_to_note_format(html: str) -> str:
     Returns:
         HTML with img tags converted to figure format
     """
-    # Pattern to match <p> tags containing only an img tag
-    # markdown-it-py wraps images in <p> tags
-    img_in_p_pattern = re.compile(
-        r'<p>\s*<img\s+src="([^"]+)"\s+alt="([^"]*)"\s*/?\s*>\s*</p>',
-        re.IGNORECASE,
-    )
 
     def replace_img(match: re.Match[str]) -> str:
         src = match.group(1)
@@ -80,7 +81,57 @@ def _convert_images_to_note_format(html: str) -> str:
             f"<figcaption></figcaption></figure>"
         )
 
-    return img_in_p_pattern.sub(replace_img, html)
+    return _IMG_IN_P_PATTERN.sub(replace_img, html)
+
+
+def _convert_code_blocks_to_note_format(html: str) -> str:
+    """Convert code blocks to note.com format and handle newlines.
+
+    note.com requires:
+    - <pre class="codeBlock"> with name and id attributes
+    - <code> without language class
+    - Actual newlines preserved inside code blocks
+    - Newlines removed from other HTML elements
+
+    Uses placeholder approach to preserve newlines in code blocks
+    while removing them from the rest of the HTML.
+
+    Args:
+        html: HTML string with code blocks
+
+    Returns:
+        HTML with code blocks in note.com format
+    """
+    pre_blocks: list[str] = []
+
+    def convert_pre_block(match: re.Match[str]) -> str:
+        """Convert pre block to note.com format and store for later restoration."""
+        content = match.group(2)
+
+        # Generate fresh UUIDs for code blocks
+        element_id = _generate_uuid()
+
+        # Remove language class from <code> tag
+        # markdown-it-py adds class="language-xxx" which note.com doesn't use
+        content = _LANGUAGE_CLASS_PATTERN.sub("<code>", content)
+
+        # Build note.com format: <pre name="..." id="..." class="codeBlock">
+        pre_block = f'<pre name="{element_id}" id="{element_id}" class="codeBlock">{content}</pre>'
+        pre_blocks.append(pre_block)
+
+        return f"__PRE_BLOCK_{len(pre_blocks) - 1}__"
+
+    # Replace pre blocks with placeholders
+    result = _PRE_PATTERN.sub(convert_pre_block, html)
+
+    # Remove newlines from the rest of the HTML
+    result = result.replace("\n", "")
+
+    # Restore pre blocks with their preserved newlines
+    for i, block in enumerate(pre_blocks):
+        result = result.replace(f"__PRE_BLOCK_{i}__", block)
+
+    return result
 
 
 def markdown_to_html(content: str) -> str:
@@ -111,7 +162,7 @@ def markdown_to_html(content: str) -> str:
     # Add UUID to all elements (note.com requirement)
     result = _add_uuid_to_elements(result)
 
-    # Remove all newlines - note.com API expects single-line HTML
-    result = result.replace("\n", "")
+    # Convert code blocks to note.com format and handle newlines
+    result = _convert_code_blocks_to_note_format(result)
 
     return result
