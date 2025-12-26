@@ -1,0 +1,139 @@
+#!/bin/bash
+# docker-entrypoint.sh
+# Playwright用Dockerエントリポイント
+#
+# 環境変数:
+#   USE_XVFB=1     : Xvfbを起動してheadedモードを有効化
+#   VNC_PORT=5900  : VNCサーバーを指定ポートで起動
+#   DISPLAY        : X11ディスプレイ（デフォルト: :99）
+#   XVFB_WHD       : Xvfb解像度（デフォルト: 1920x1080x24）
+
+set -e
+
+# Color output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Cleanup function
+cleanup() {
+    log_info "Cleaning up..."
+
+    # Kill VNC server if running
+    if [ -n "$VNC_PID" ]; then
+        kill $VNC_PID 2>/dev/null || true
+    fi
+
+    # Kill Xvfb if running
+    if [ -n "$XVFB_PID" ]; then
+        kill $XVFB_PID 2>/dev/null || true
+    fi
+}
+
+trap cleanup EXIT
+
+# =============================================================================
+# Xvfb Setup
+# =============================================================================
+start_xvfb() {
+    local display="${DISPLAY:-:99}"
+    local whd="${XVFB_WHD:-1920x1080x24}"
+
+    log_info "Starting Xvfb on display $display with resolution $whd"
+
+    # Parse resolution
+    local width=$(echo $whd | cut -d'x' -f1)
+    local height=$(echo $whd | cut -d'x' -f2)
+    local depth=$(echo $whd | cut -d'x' -f3)
+
+    # Start Xvfb
+    Xvfb $display -screen 0 ${width}x${height}x${depth} -ac +extension GLX +render -noreset &
+    XVFB_PID=$!
+
+    # Wait for Xvfb to start
+    local max_wait=10
+    local waited=0
+    while ! xdpyinfo -display $display >/dev/null 2>&1; do
+        if [ $waited -ge $max_wait ]; then
+            log_error "Xvfb failed to start within ${max_wait} seconds"
+            exit 1
+        fi
+        sleep 0.5
+        waited=$((waited + 1))
+    done
+
+    log_info "Xvfb started successfully (PID: $XVFB_PID)"
+    export DISPLAY=$display
+}
+
+# =============================================================================
+# VNC Server Setup
+# =============================================================================
+start_vnc() {
+    local port="${VNC_PORT:-5900}"
+    local display="${DISPLAY:-:99}"
+
+    log_info "Starting VNC server on port $port"
+
+    # Start x11vnc
+    x11vnc -display $display -forever -shared -rfbport $port -nopw -bg -o /tmp/x11vnc.log
+    VNC_PID=$!
+
+    sleep 1
+
+    if pgrep -x x11vnc > /dev/null; then
+        log_info "VNC server started on port $port"
+        log_info "Connect with: vncviewer localhost:$port"
+    else
+        log_warn "VNC server may not have started correctly. Check /tmp/x11vnc.log"
+    fi
+}
+
+# =============================================================================
+# Main
+# =============================================================================
+
+# Check if we should start Xvfb
+if [ "${USE_XVFB}" = "1" ] || [ "${USE_XVFB}" = "true" ]; then
+    start_xvfb
+
+    # Start VNC if port is specified
+    if [ -n "${VNC_PORT}" ]; then
+        start_vnc
+    fi
+elif [ -n "${DISPLAY}" ] && [ "${DISPLAY}" != ":99" ]; then
+    # Using external display (X11 forwarding)
+    log_info "Using external display: $DISPLAY"
+
+    # Verify display is accessible
+    if ! xdpyinfo >/dev/null 2>&1; then
+        log_warn "Cannot connect to display $DISPLAY. Make sure X11 forwarding is configured correctly."
+    fi
+else
+    # Headless mode
+    log_info "Running in headless mode"
+    log_info "To enable headed mode, set USE_XVFB=1 or provide DISPLAY"
+fi
+
+# Print environment info
+log_info "Environment:"
+log_info "  DISPLAY=$DISPLAY"
+log_info "  PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-not set}"
+log_info "  Python: $(python --version 2>&1)"
+
+# Execute the command
+log_info "Executing: $@"
+exec "$@"

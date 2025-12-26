@@ -180,6 +180,130 @@ sudo apt install libsecret-1-0
 - デスクトップ環境（Playwrightが動作する環境）
 - note.comアカウント
 
+## Docker
+
+Dockerを使用してPlaywright環境を構築できます。複数の実行モードをサポートしています。
+
+### ビルド
+
+```bash
+docker build -t note-mcp .
+```
+
+### 実行モード
+
+#### 1. Headless（デフォルト）
+
+CI/CD環境やバックグラウンド実行向け:
+
+```bash
+# docker-compose使用
+docker compose run --rm test
+
+# 直接実行
+docker run --rm --ipc=host note-mcp uv run pytest -v
+```
+
+#### 2. Headed with Xvfb
+
+Xvfbを使用したheadedモード（仮想ディスプレイ上でブラウザを起動）:
+
+```bash
+docker compose run --rm test-headed
+
+# 直接実行
+docker run --rm --ipc=host -e USE_XVFB=1 -e HEADED=1 note-mcp uv run pytest -v
+```
+
+> **Note**: `HEADED=1`環境変数を使用するには、テストコード内で`os.environ.get("HEADED")`をチェックしてブラウザの`headless`オプションを制御する必要があります。
+
+#### 3. VNC経由での視覚確認
+
+VNCクライアントでブラウザ操作をリアルタイム確認:
+
+```bash
+# バックグラウンドで起動
+docker compose up -d test-vnc
+
+# VNCで接続
+vncviewer localhost:5900
+
+# ログ確認（必要な場合）
+docker compose logs -f test-vnc
+
+# 終了時
+docker compose down
+```
+
+#### 4. X11 forwarding（Linux/WSL2）
+
+ホストのディスプレイに直接表示:
+
+```bash
+# X11アクセスを許可（必要な場合）
+xhost +local:docker
+
+# 実行
+docker compose run --rm test-x11
+
+# または直接
+docker run --rm --ipc=host \
+  -e DISPLAY=$DISPLAY \
+  -e HEADED=1 \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  note-mcp uv run pytest -v
+```
+
+### 開発用シェル
+
+コンテナ内でインタラクティブに作業:
+
+```bash
+# VNCなしで実行（ポートマッピングなし）
+docker compose run --rm dev bash
+
+# VNC経由でブラウザを確認する場合（ポートマッピングあり）
+docker compose run --rm --service-ports dev bash
+```
+
+> **Note**: `docker compose run`はデフォルトでポートマッピングを行いません。VNC（ポート5900）にアクセスする場合は`--service-ports`フラグが必要です。
+
+コンテナ内でブラウザを開くには:
+
+```bash
+# コンテナ内で実行
+uv run python scripts/open_browser.py https://note.com --wait 120
+```
+
+別のターミナルからVNCクライアントで`localhost:5900`に接続してブラウザを確認できます。
+
+### 環境変数
+
+| 変数 | 説明 | デフォルト |
+|------|------|------------|
+| `USE_XVFB` | Xvfbを起動 (`1` or `true`) | `0` |
+| `VNC_PORT` | VNCサーバーポート | (無効) |
+| `DISPLAY` | X11ディスプレイ | `:99` |
+| `XVFB_WHD` | Xvfb解像度 | `1920x1080x24` |
+
+### トラブルシューティング
+
+**Chromiumがクラッシュする場合**:
+- `--ipc=host` フラグを追加（docker-composeでは設定済み）
+- 共有メモリ不足が原因の可能性があります
+
+**X11接続エラー**:
+- `xhost +local:docker` を実行
+- WSL2の場合は`/mnt/wslg/`ディレクトリの存在を確認
+
+**VNCに接続できない場合**:
+- ポート5900が他のプロセスで使用されていないか確認
+- `docker compose logs test-vnc` でログを確認
+
+**「Server is already active for display 99」エラー**:
+- 前回のコンテナが残っています
+- `docker compose down` を実行してから再度起動してください
+
 ## Development
 
 ```bash
