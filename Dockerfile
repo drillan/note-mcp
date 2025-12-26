@@ -4,15 +4,27 @@
 # ビルド:
 #   docker build -t note-mcp .
 #
+#   # ホストのuid:gidでビルド（オプション）
+#   docker build --build-arg UID=$(id -u) --build-arg GID=$(id -g) -t note-mcp .
+#
 # 実行モード:
 #   1. Headless (デフォルト):
-#      docker run --rm --ipc=host note-mcp pytest
+#      docker run --rm --ipc=host note-mcp
 #
-#   2. Headed with Xvfb (テスト可視化):
-#      docker run --rm --ipc=host -e USE_XVFB=1 note-mcp pytest
+#   2. ホストユーザーで実行（ボリュームマウント時推奨）:
+#      docker run --rm --ipc=host --user $(id -u):$(id -g) \
+#        -v $(pwd):/app note-mcp uv run pytest -v
 #
-#   3. X11 forwarding (ホストディスプレイ):
-#      docker run --rm --ipc=host -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix note-mcp pytest
+#   3. 開発用（インタラクティブ）:
+#      docker run --rm -it --ipc=host --user $(id -u):$(id -g) \
+#        -v $(pwd):/app -w /app note-mcp bash
+#
+#   4. Headed with Xvfb (テスト可視化):
+#      docker run --rm --ipc=host -e USE_XVFB=1 note-mcp
+#
+#   5. X11 forwarding (ホストディスプレイ):
+#      docker run --rm --ipc=host -e DISPLAY=$DISPLAY \
+#        -v /tmp/.X11-unix:/tmp/.X11-unix note-mcp
 #
 # 参考:
 #   https://playwright.dev/python/docs/docker
@@ -22,6 +34,10 @@
 # Stage 1: Base image with Playwright browsers
 # =============================================================================
 FROM mcr.microsoft.com/playwright/python:v1.57.0-noble AS base
+
+# Build arguments for user creation
+ARG UID=1000
+ARG GID=1000
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -41,10 +57,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Ensure non-root user exists with specified UID/GID
+# Base image has ubuntu:1000 and pwuser:1001
+# We modify the existing ubuntu user or create appuser if UID differs
+RUN if id -u ${UID} >/dev/null 2>&1; then \
+        # User with this UID exists, ensure home dir is writable
+        HOME_DIR=$(getent passwd ${UID} | cut -d: -f6) && \
+        mkdir -p "$HOME_DIR" && \
+        chown -R ${UID}:${GID} "$HOME_DIR"; \
+    else \
+        # Create new user with specified UID/GID
+        groupadd -g ${GID} appuser 2>/dev/null || true && \
+        useradd -u ${UID} -g ${GID} -m -s /bin/bash appuser && \
+        mkdir -p /home/appuser && \
+        chown -R ${UID}:${GID} /home/appuser; \
+    fi
+
 # =============================================================================
 # Stage 2: Application setup
 # =============================================================================
 FROM base AS app
+
+# Re-declare ARGs (they don't persist across FROM)
+ARG UID=1000
+ARG GID=1000
 
 # Set working directory
 WORKDIR /app
@@ -64,6 +100,9 @@ RUN uv sync --no-cache --no-dev
 # Copy source code
 COPY src/ ./src/
 COPY tests/ ./tests/
+
+# Set ownership of /app to appuser
+RUN chown -R ${UID}:${GID} /app
 
 # =============================================================================
 # Stage 3: Development image with dev dependencies
@@ -95,11 +134,22 @@ ENV XVFB_WHD=1920x1080x24
 ENV USE_XVFB=0
 ENV VNC_PORT=
 
+# User environment
+# HOME is set dynamically in docker-entrypoint.sh based on the running user
+
 # =============================================================================
 # Entrypoint script
 # =============================================================================
 COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
+
+# Re-declare ARGs for USER directive
+ARG UID=1000
+ARG GID=1000
+
+# Switch to non-root user
+# Note: Can be overridden at runtime with --user $(id -u):$(id -g)
+USER ${UID}:${GID}
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 

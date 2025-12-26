@@ -7,6 +7,10 @@
 #   VNC_PORT=5900  : VNCサーバーを指定ポートで起動
 #   DISPLAY        : X11ディスプレイ（デフォルト: :99）
 #   XVFB_WHD       : Xvfb解像度（デフォルト: 1920x1080x24）
+#
+# ユーザー設定:
+#   コンテナはデフォルトでappuser（uid=1000）として実行されます。
+#   --user $(id -u):$(id -g) を指定することでホストユーザーとして実行できます。
 
 set -e
 
@@ -106,6 +110,22 @@ start_vnc() {
 # Main
 # =============================================================================
 
+# Set HOME based on the running user
+# This handles both default user (ubuntu:1000) and arbitrary --user overrides
+CURRENT_UID=$(id -u)
+if [ "$CURRENT_UID" = "0" ]; then
+    export HOME=/root
+elif [ -z "$HOME" ] || [ ! -d "$HOME" ] || [ ! -w "$HOME" ]; then
+    # Try to find home from passwd, fallback to /tmp
+    PASSWD_HOME=$(getent passwd "$CURRENT_UID" 2>/dev/null | cut -d: -f6)
+    if [ -n "$PASSWD_HOME" ] && [ -d "$PASSWD_HOME" ] && [ -w "$PASSWD_HOME" ]; then
+        export HOME="$PASSWD_HOME"
+    else
+        export HOME=/tmp
+        log_warn "HOME not available, using /tmp as HOME"
+    fi
+fi
+
 # Check if we should start Xvfb
 if [ "${USE_XVFB}" = "1" ] || [ "${USE_XVFB}" = "true" ]; then
     start_xvfb
@@ -130,6 +150,8 @@ fi
 
 # Print environment info
 log_info "Environment:"
+log_info "  User: $(id -u):$(id -g)"
+log_info "  HOME=$HOME"
 log_info "  DISPLAY=$DISPLAY"
 log_info "  PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-not set}"
 log_info "  Python: $(python --version 2>&1)"
