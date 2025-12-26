@@ -48,8 +48,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     x11-utils \
     x11-xserver-utils \
     xauth \
-    # VNC support (optional, for remote viewing)
-    x11vnc \
+    # VNC support (TigerVNC + noVNC for web access)
+    tigervnc-standalone-server \
+    novnc \
+    websockify \
+    gnome-keyring \
     # Fonts for proper rendering
     fonts-noto-cjk \
     fonts-noto-color-emoji \

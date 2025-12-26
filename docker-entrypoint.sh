@@ -84,25 +84,49 @@ start_xvfb() {
 }
 
 # =============================================================================
-# VNC Server Setup
+# VNC Server Setup (TigerVNC + noVNC)
 # =============================================================================
 start_vnc() {
     local port="${VNC_PORT:-5900}"
+    local novnc_port="${NOVNC_PORT:-6080}"
     local display="${DISPLAY:-:99}"
+    local rfb_port=$((port))
+    local display_num="${display#:}"
 
-    log_info "Starting VNC server on port $port"
+    log_info "Starting TigerVNC server on port $port"
 
-    # Start x11vnc
-    x11vnc -display $display -forever -shared -rfbport $port -nopw -bg -o /tmp/x11vnc.log
+    # Create VNC password file (empty password for no authentication)
+    mkdir -p ~/.vnc
+    echo "" | vncpasswd -f > ~/.vnc/passwd 2>/dev/null || true
+    chmod 600 ~/.vnc/passwd 2>/dev/null || true
+
+    # Start TigerVNC server
+    Xvnc :${display_num} \
+        -geometry 1920x1080 \
+        -depth 24 \
+        -rfbport ${rfb_port} \
+        -SecurityTypes None \
+        -localhost no \
+        -alwaysshared \
+        -AcceptSetDesktopSize \
+        &
     VNC_PID=$!
 
     sleep 1
 
-    if pgrep -x x11vnc > /dev/null; then
-        log_info "VNC server started on port $port"
+    # Update DISPLAY to use VNC display
+    export DISPLAY=:${display_num}
+
+    # Start noVNC (web-based VNC client)
+    websockify --web=/usr/share/novnc/ ${novnc_port} localhost:${rfb_port} &
+    NOVNC_PID=$!
+
+    if pgrep -x Xvnc > /dev/null; then
+        log_info "TigerVNC server started on port $port"
         log_info "Connect with: vncviewer localhost:$port"
+        log_info "Or use noVNC: http://localhost:${novnc_port}/vnc.html"
     else
-        log_warn "VNC server may not have started correctly. Check /tmp/x11vnc.log"
+        log_warn "TigerVNC server may not have started correctly"
     fi
 }
 
@@ -145,14 +169,12 @@ if [ -d "$CHROME_DATA_DIR" ] && [ ! -w "$CHROME_DATA_DIR" ]; then
     fi
 fi
 
-# Check if we should start Xvfb
-if [ "${USE_XVFB}" = "1" ] || [ "${USE_XVFB}" = "true" ]; then
+# Check if we should start display server
+if [ -n "${VNC_PORT}" ]; then
+    # TigerVNC server provides its own X server, no need for Xvfb
+    start_vnc
+elif [ "${USE_XVFB}" = "1" ] || [ "${USE_XVFB}" = "true" ]; then
     start_xvfb
-
-    # Start VNC if port is specified
-    if [ -n "${VNC_PORT}" ]; then
-        start_vnc
-    fi
 elif [ -n "${DISPLAY}" ] && [ "${DISPLAY}" != ":99" ]; then
     # Using external display (X11 forwarding)
     log_info "Using external display: $DISPLAY"

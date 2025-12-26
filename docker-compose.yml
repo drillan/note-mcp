@@ -104,14 +104,15 @@ services:
   dev:
     <<: *base
     environment:
-      - USE_XVFB=1
       - DISPLAY=:99
       - VNC_PORT=5900
+      - NOVNC_PORT=6080
       - HEADED=1
       # Chrome起動時に--no-sandboxを自動適用
       - CHROME_FLAGS=--no-sandbox
     ports:
       - "5900:5900"
+      - "6080:6080"
     volumes:
       # プロジェクトルートをマウント
       - .:/app:rw
