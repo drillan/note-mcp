@@ -57,6 +57,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Google Chrome (for Claude in Chrome extension support)
+# https://www.google.com/chrome/
+RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+        | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] \
+        http://dl.google.com/linux/chrome/deb/ stable main" \
+        > /etc/apt/sources.list.d/google-chrome.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends google-chrome-stable \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 # Ensure non-root user exists with specified UID/GID
 # Base image has ubuntu:1000 and pwuser:1001
 # We modify the existing ubuntu user or create appuser if UID differs
@@ -119,6 +131,17 @@ RUN uv sync --no-cache --group dev
 # Set ownership of /app to specified user (including .venv created by uv sync)
 RUN chown -R ${UID}:${GID} /app
 
+# Install Claude Code (native install)
+# https://docs.anthropic.com/en/docs/claude-code
+# Note: Install as user to place in ~/.local/bin/
+USER ${UID}:${GID}
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
+# Create Chrome data directory with correct ownership
+# This ensures the volume mount inherits proper permissions
+RUN mkdir -p /home/ubuntu/.config/google-chrome
+USER root
+
 # =============================================================================
 # Environment configuration
 # =============================================================================
@@ -130,6 +153,10 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 # Python configuration
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+
+# Claude Code path (installed in user home by install.sh)
+# The native installer places binary at ~/.local/bin/claude
+ENV PATH="/home/ubuntu/.local/bin:${PATH}"
 
 # Default display settings for Xvfb
 ENV DISPLAY=:99

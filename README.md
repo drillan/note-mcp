@@ -277,6 +277,46 @@ uv run python scripts/open_browser.py https://note.com --wait 120
 
 別のターミナルからVNCクライアントで`localhost:5900`に接続してブラウザを確認できます。
 
+### Claude Code + Chrome拡張機能
+
+Docker開発環境にはClaude Codeがプリインストールされています。VNC経由でClaude in Chrome拡張機能を使用できます。
+
+#### 初回セットアップ
+
+```bash
+# 開発コンテナを起動
+docker compose run --rm --service-ports dev bash
+
+# コンテナ内でChromeを起動（--no-sandboxは必須）
+google-chrome-stable --no-sandbox &
+```
+
+VNCクライアント（`vncviewer localhost:5900`）で接続し、以下の手順で拡張機能をインストール:
+
+1. Chrome Web Storeにアクセス: https://chromewebstore.google.com/detail/claude/danfoghgkjjpomlapfijehgjhbhnphnf
+2. 「Chromeに追加」をクリック
+3. 拡張機能を有効化
+
+#### Chrome拡張機能の永続化
+
+Chrome拡張機能と設定はDockerボリューム（`chrome-data`）に永続化されます。コンテナを再作成しても拡張機能は保持されます。
+
+```bash
+# ボリュームの確認
+docker volume ls | grep chrome-data
+
+# ボリュームの削除（設定をリセットする場合）
+docker volume rm note-mcp_chrome-data
+```
+
+#### Claude Codeの使用
+
+```bash
+# コンテナ内で
+claude --version  # バージョン確認
+claude            # Claude Code起動
+```
+
 ### 環境変数
 
 | 変数 | 説明 | デフォルト |
@@ -285,12 +325,21 @@ uv run python scripts/open_browser.py https://note.com --wait 120
 | `VNC_PORT` | VNCサーバーポート | (無効) |
 | `DISPLAY` | X11ディスプレイ | `:99` |
 | `XVFB_WHD` | Xvfb解像度 | `1920x1080x24` |
+| `CHROME_FLAGS` | Chrome起動オプション | `--no-sandbox` (dev) |
 
 ### トラブルシューティング
 
 **Chromiumがクラッシュする場合**:
 - `--ipc=host` フラグを追加（docker-composeでは設定済み）
 - 共有メモリ不足が原因の可能性があります
+
+**Chromeが「Operation not permitted」で起動しない場合**:
+- `google-chrome-stable --no-sandbox &` で起動してください
+- Docker内ではChromeのサンドボックス機能が制限されます
+
+**`claude`コマンドが見つからない場合**:
+- PATHが正しく設定されているか確認: `echo $PATH`
+- `/home/ubuntu/.local/bin` がPATHに含まれているべきです
 
 **X11接続エラー**:
 - `xhost +local:docker` を実行

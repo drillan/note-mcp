@@ -108,6 +108,8 @@ services:
       - DISPLAY=:99
       - VNC_PORT=5900
       - HEADED=1
+      # Chrome起動時に--no-sandboxを自動適用
+      - CHROME_FLAGS=--no-sandbox
     ports:
       - "5900:5900"
     volumes:
@@ -115,6 +117,8 @@ services:
       - .:/app:rw
       # ホストの.venvを除外（コンテナ内の.venvを使用）
       - /app/.venv
+      # Chrome拡張機能・設定の永続化
+      - chrome-data:/home/ubuntu/.config/google-chrome
     command: ["bash"]
     stdin_open: true
     tty: true
@@ -137,3 +141,5 @@ services:
 
 volumes:
   note-mcp-data:
+  # Chrome拡張機能・設定の永続化用
+  chrome-data:

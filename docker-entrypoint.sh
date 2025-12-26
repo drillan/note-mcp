@@ -113,6 +113,8 @@ start_vnc() {
 # Set HOME based on the running user
 # This handles both default user (ubuntu:1000) and arbitrary --user overrides
 CURRENT_UID=$(id -u)
+CURRENT_GID=$(id -g)
+
 if [ "$CURRENT_UID" = "0" ]; then
     export HOME=/root
 elif [ -z "$HOME" ] || [ ! -d "$HOME" ] || [ ! -w "$HOME" ]; then
@@ -123,6 +125,23 @@ elif [ -z "$HOME" ] || [ ! -d "$HOME" ] || [ ! -w "$HOME" ]; then
     else
         export HOME=/tmp
         log_warn "HOME not available, using /tmp as HOME"
+    fi
+fi
+
+# =============================================================================
+# Fix volume mount permissions (Chrome data directory)
+# =============================================================================
+CHROME_DATA_DIR="$HOME/.config/google-chrome"
+if [ -d "$CHROME_DATA_DIR" ] && [ ! -w "$CHROME_DATA_DIR" ]; then
+    log_warn "Chrome data directory not writable, attempting to fix..."
+    # Try to fix ownership if we have sudo access or are root
+    if [ "$CURRENT_UID" = "0" ]; then
+        chown -R "$CURRENT_UID:$CURRENT_GID" "$CHROME_DATA_DIR" 2>/dev/null && \
+            log_info "Fixed Chrome data directory ownership" || \
+            log_warn "Failed to fix Chrome data directory ownership"
+    else
+        log_warn "Chrome data directory is not writable. Run as root or delete volume:"
+        log_warn "  docker volume rm note-mcp_chrome-data"
     fi
 fi
 
