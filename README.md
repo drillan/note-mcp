@@ -219,13 +219,16 @@ docker run --rm --ipc=host -e USE_XVFB=1 -e HEADED=1 note-mcp uv run pytest -v
 
 #### 3. VNC経由での視覚確認
 
-VNCクライアントでブラウザ操作をリアルタイム確認:
+VNCクライアントまたはWebブラウザでブラウザ操作をリアルタイム確認:
 
 ```bash
 # バックグラウンドで起動
 docker compose up -d test-vnc
 
-# VNCで接続
+# 方法1: noVNC（Webブラウザ経由、クリップボード共有対応）
+# ブラウザで http://localhost:6080/vnc.html にアクセス
+
+# 方法2: VNCクライアント
 vncviewer localhost:5900
 
 # ログ確認（必要な場合）
@@ -234,6 +237,8 @@ docker compose logs -f test-vnc
 # 終了時
 docker compose down
 ```
+
+> **Tip**: noVNCを使用すると、左側のクリップボードパネルからホストとコンテナ間でテキストをコピー＆ペーストできます。
 
 #### 4. X11 forwarding（Linux/WSL2）
 
@@ -266,7 +271,7 @@ docker compose run --rm dev bash
 docker compose run --rm --service-ports dev bash
 ```
 
-> **Note**: `docker compose run`はデフォルトでポートマッピングを行いません。VNC（ポート5900）にアクセスする場合は`--service-ports`フラグが必要です。
+> **Note**: `docker compose run`はデフォルトでポートマッピングを行いません。VNC（ポート5900）やnoVNC（ポート6080）にアクセスする場合は`--service-ports`フラグが必要です。
 
 コンテナ内でブラウザを開くには:
 
@@ -275,11 +280,13 @@ docker compose run --rm --service-ports dev bash
 uv run python scripts/open_browser.py https://note.com --wait 120
 ```
 
-別のターミナルからVNCクライアントで`localhost:5900`に接続してブラウザを確認できます。
+ブラウザを確認するには:
+- **noVNC（推奨）**: http://localhost:6080/vnc.html にアクセス（クリップボード共有対応）
+- **VNCクライアント**: `vncviewer localhost:5900` で接続
 
 ### Claude Code + Chrome拡張機能
 
-Docker開発環境にはClaude Codeがプリインストールされています。VNC経由でClaude in Chrome拡張機能を使用できます。
+Docker開発環境にはClaude Codeがプリインストールされています。noVNC経由でClaude in Chrome拡張機能を使用できます。
 
 #### 初回セットアップ
 
@@ -291,7 +298,7 @@ docker compose run --rm --service-ports dev bash
 google-chrome-stable --no-sandbox &
 ```
 
-VNCクライアント（`vncviewer localhost:5900`）で接続し、以下の手順で拡張機能をインストール:
+noVNC（http://localhost:6080/vnc.html）またはVNCクライアント（`vncviewer localhost:5900`）で接続し、以下の手順で拡張機能をインストール:
 
 1. Chrome Web Storeにアクセス: https://chromewebstore.google.com/detail/claude/danfoghgkjjpomlapfijehgjhbhnphnf
 2. 「Chromeに追加」をクリック
@@ -322,10 +329,13 @@ claude            # Claude Code起動
 | 変数 | 説明 | デフォルト |
 |------|------|------------|
 | `USE_XVFB` | Xvfbを起動 (`1` or `true`) | `0` |
-| `VNC_PORT` | VNCサーバーポート | (無効) |
+| `VNC_PORT` | VNCサーバーポート（TigerVNC） | (無効) |
+| `NOVNC_PORT` | noVNC Webアクセスポート | `6080` |
 | `DISPLAY` | X11ディスプレイ | `:99` |
 | `XVFB_WHD` | Xvfb解像度 | `1920x1080x24` |
 | `CHROME_FLAGS` | Chrome起動オプション | `--no-sandbox` (dev) |
+
+> **Note**: `VNC_PORT`を設定するとTigerVNCが起動し、noVNCも自動的に有効になります。クリップボード共有はnoVNC経由で利用できます。
 
 ### トラブルシューティング
 
@@ -346,8 +356,14 @@ claude            # Claude Code起動
 - WSL2の場合は`/mnt/wslg/`ディレクトリの存在を確認
 
 **VNCに接続できない場合**:
-- ポート5900が他のプロセスで使用されていないか確認
+- ポート5900（VNC）または6080（noVNC）が他のプロセスで使用されていないか確認
 - `docker compose logs test-vnc` でログを確認
+- noVNCの場合、ブラウザで http://localhost:6080/vnc.html にアクセス
+
+**クリップボード共有が動作しない場合**:
+- noVNC（http://localhost:6080/vnc.html）を使用してください
+- VNCクライアント経由ではクリップボード共有は利用できません
+- noVNCの左側パネルでクリップボードアイコンをクリック
 
 **「Server is already active for display 99」エラー**:
 - 前回のコンテナが残っています
