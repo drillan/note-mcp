@@ -17,7 +17,11 @@
 #   docker compose run --rm test-x11
 #
 #   # 開発シェル
-#   docker compose run --rm dev bash
+#   docker compose run --rm --service-ports dev bash
+#
+#   # ホストユーザーで実行（デフォルト: uid=1000）
+#   # 環境変数でuid:gidを指定可能:
+#   UID=$(id -u) GID=$(id -g) docker compose run --rm dev bash
 
 services:
   # ===========================================================================
@@ -27,6 +31,8 @@ services:
     build:
       context: .
       target: dev
+    # ホストユーザーで実行（ボリュームマウント時の権限問題を回避）
+    user: "${UID:-1000}:${GID:-1000}"
     working_dir: /app
     volumes:
       # ソースコードのマウント（ホットリロード用）

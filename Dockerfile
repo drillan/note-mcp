@@ -109,8 +109,15 @@ RUN chown -R ${UID}:${GID} /app
 # =============================================================================
 FROM app AS dev
 
+# Re-declare ARGs for dev stage
+ARG UID=1000
+ARG GID=1000
+
 # Install dev dependencies
 RUN uv sync --no-cache --group dev
+
+# Set ownership of /app to specified user (including .venv created by uv sync)
+RUN chown -R ${UID}:${GID} /app
 
 # =============================================================================
 # Environment configuration
