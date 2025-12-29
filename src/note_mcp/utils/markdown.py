@@ -9,8 +9,9 @@ import uuid
 from markdown_it import MarkdownIt
 
 # Pre-compiled regex patterns for performance
+# Note: <li> is excluded because note.com doesn't add name/id to <li> tags
 _TAG_PATTERN = re.compile(
-    r"<(p|h[1-6]|ul|ol|li|blockquote|code|hr|div|span)(\s[^>]*)?>",
+    r"<(p|h[1-6]|ul|ol|blockquote|code|hr|div|span)(\s[^>]*)?>",
     re.IGNORECASE,
 )
 _PRE_PATTERN = re.compile(r"<pre([^>]*)>(.*?)</pre>", re.DOTALL | re.IGNORECASE)
@@ -63,16 +64,17 @@ def _wrap_li_content_in_p(html: str) -> str:
 
 
 def _add_uuid_to_elements(html: str) -> str:
-    """Add name and id attributes (UUID) to all HTML elements.
+    """Add name attribute (UUID) to HTML elements.
 
-    note.com requires all elements to have unique name and id attributes.
+    note.com requires elements to have unique name attributes.
     Note: <pre> tags are handled separately by _convert_code_blocks_to_note_format.
+    Note: <li> tags are excluded because note.com doesn't add name to <li> tags.
 
     Args:
         html: HTML string
 
     Returns:
-        HTML with UUID attributes added to all elements
+        HTML with name attributes added to elements
     """
 
     def add_uuid(match: re.Match[str]) -> str:
@@ -84,7 +86,8 @@ def _add_uuid_to_elements(html: str) -> str:
             return match.group(0)
 
         element_id = _generate_uuid()
-        return f'<{tag_name} name="{element_id}" id="{element_id}"{attrs}>'
+        # note.com uses only 'name' attribute, not 'id'
+        return f'<{tag_name} name="{element_id}"{attrs}>'
 
     return _TAG_PATTERN.sub(add_uuid, html)
 
@@ -111,8 +114,9 @@ def _convert_images_to_note_format(html: str) -> str:
         alt = match.group(2)
         caption = match.group(3) or ""  # titleがなければ空文字
         element_id = _generate_uuid()
+        # note.com uses only 'name' attribute, not 'id'
         return (
-            f'<figure name="{element_id}" id="{element_id}">'
+            f'<figure name="{element_id}">'
             f'<img src="{src}" alt="{alt}" width="620" height="457" '
             f'contenteditable="false" draggable="false">'
             f"<figcaption>{caption}</figcaption></figure>"
@@ -152,8 +156,9 @@ def _convert_code_blocks_to_note_format(html: str) -> str:
         # markdown-it-py adds class="language-xxx" which note.com doesn't use
         content = _LANGUAGE_CLASS_PATTERN.sub("<code>", content)
 
-        # Build note.com format: <pre name="..." id="..." class="codeBlock">
-        pre_block = f'<pre name="{element_id}" id="{element_id}" class="codeBlock">{content}</pre>'
+        # Build note.com format: <pre name="..." class="codeBlock">
+        # note.com uses only 'name' attribute, not 'id'
+        pre_block = f'<pre name="{element_id}" class="codeBlock">{content}</pre>'
         pre_blocks.append(pre_block)
 
         return f"__PRE_BLOCK_{len(pre_blocks) - 1}__"

@@ -29,7 +29,7 @@ async def create_draft(
 ) -> Article:
     """Create a new draft article.
 
-    Uses the note.com API to create a draft article.
+    Uses the note.com API to create the draft directly.
     Converts Markdown body to HTML as required by the API.
 
     Args:
@@ -48,12 +48,12 @@ async def create_draft(
     # Calculate body length (character count, not byte count)
     body_length = len(article_input.body)
 
-    # Build payload matching note.com editor format
     payload: dict[str, Any] = {
         "name": article_input.title,
         "body": html_body,
         "body_length": body_length,
-        "status": "draft",
+        "index": False,
+        "is_lead_form": False,
     }
 
     # Add tags if present
@@ -62,7 +62,8 @@ async def create_draft(
         payload["hashtags"] = [{"hashtag": {"name": tag}} for tag in normalized_tags]
 
     async with NoteAPIClient(session) as client:
-        response = await client.post("/v3/notes", json=payload)
+        # Use v1/text_notes endpoint for creating draft articles
+        response = await client.post("/v1/text_notes", json=payload)
 
     # Parse response
     article_data = response.get("data", {})

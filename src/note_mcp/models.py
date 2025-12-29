@@ -233,7 +233,7 @@ def from_api_response(data: dict[str, object]) -> Article:
 
     # Map API field names to our model
     status_str = data.get("status", "draft")
-    if not isinstance(status_str, str):
+    if not isinstance(status_str, str) or not status_str:
         status_str = "draft"
 
     return Article(
