@@ -32,9 +32,7 @@ class TestCreateDraft:
 
     @pytest.mark.asyncio
     async def test_create_draft_success(self) -> None:
-        """Test successful draft creation via browser."""
-        from note_mcp.models import Article
-
+        """Test successful draft creation via API."""
         session = create_mock_session()
         article_input = ArticleInput(
             title="Test Article",
@@ -42,17 +40,23 @@ class TestCreateDraft:
             tags=["test", "python"],
         )
 
-        mock_article = Article(
-            id="123456",
-            key="n1234567890ab",
-            title="Test Article",
-            body="<h1>Hello</h1>\n<p>This is a test article.</p>\n",
-            status=ArticleStatus.DRAFT,
-            tags=["test", "python"],
-        )
+        mock_response = {
+            "data": {
+                "id": "123456",
+                "key": "n1234567890ab",
+                "name": "Test Article",
+                "body": "<h1>Hello</h1>\n<p>This is a test article.</p>\n",
+                "status": "draft",
+                "hashtags": [{"hashtag": {"name": "test"}}, {"hashtag": {"name": "python"}}],
+            }
+        }
 
-        with patch("note_mcp.browser.create_draft.create_draft_via_browser") as mock_create:
-            mock_create.return_value = mock_article
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
 
             article = await create_draft(session, article_input)
 
@@ -61,35 +65,46 @@ class TestCreateDraft:
             assert article.status == ArticleStatus.DRAFT
             assert "test" in article.tags
             assert "python" in article.tags
-            mock_create.assert_called_once_with(session, article_input)
+            # create_draft calls POST twice: /v1/text_notes and /v1/text_notes/draft_save
+            assert mock_client.post.call_count == 2
 
     @pytest.mark.asyncio
     async def test_create_draft_converts_markdown_to_html(self) -> None:
-        """Test that create_draft delegates to browser function."""
-        from note_mcp.models import Article
-
+        """Test that create_draft converts Markdown body to HTML."""
         session = create_mock_session()
         article_input = ArticleInput(
             title="Test",
             body="**Bold** and *italic*",
         )
 
-        mock_article = Article(
-            id="123",
-            key="n123",
-            title="Test",
-            body="<p><strong>Bold</strong> and <em>italic</em></p>\n",
-            status=ArticleStatus.DRAFT,
-            tags=[],
-        )
+        mock_response = {
+            "data": {
+                "id": "123",
+                "key": "n123",
+                "name": "Test",
+                "body": "<p><strong>Bold</strong> and <em>italic</em></p>\n",
+                "status": "draft",
+                "hashtags": [],
+            }
+        }
 
-        with patch("note_mcp.browser.create_draft.create_draft_via_browser") as mock_create:
-            mock_create.return_value = mock_article
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
 
             await create_draft(session, article_input)
 
-            # Verify that the browser function was called with correct arguments
-            mock_create.assert_called_once_with(session, article_input)
+            # Verify that the API was called with HTML body
+            call_args = mock_client.post.call_args
+            assert call_args is not None
+            _, kwargs = call_args
+            payload = kwargs.get("json", {})
+            # Body should be HTML, not Markdown
+            assert "<strong>Bold</strong>" in payload.get("body", "")
+            assert "<em>italic</em>" in payload.get("body", "")
 
 
 class TestUpdateArticle:

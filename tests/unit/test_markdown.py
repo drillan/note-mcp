@@ -64,6 +64,34 @@ class TestMarkdownToHtml:
         assert "<li " in result or "<li>" in result
         assert "First" in result
 
+    def test_nested_list_conversion(self) -> None:
+        """Test converting nested lists."""
+        markdown = """- Item A
+  - Sub-item A1
+  - Sub-item A2
+- Item B"""
+        result = markdown_to_html(markdown)
+        # Outer ul and nested ul (should appear twice)
+        assert result.count("<ul ") == 2
+        # li elements without UUID (note.com format)
+        assert "<li>" in result
+        # Content preserved
+        assert "Item A" in result
+        assert "Sub-item A1" in result
+        assert "Item B" in result
+
+    def test_list_items_wrapped_in_paragraphs(self) -> None:
+        """Test that list item content is wrapped in p tags for ProseMirror."""
+        markdown = """- Item A
+- Item B"""
+        result = markdown_to_html(markdown)
+        # li elements without UUID, p elements with UUID (note.com format)
+        assert "<li>" in result
+        assert "<p " in result
+        # Verify structure: <li><p ...>text</p></li>
+        assert "<li><p " in result  # p directly inside li
+        assert "</p></li>" in result  # p closed before li
+
     def test_code_inline_conversion(self) -> None:
         """Test converting inline code."""
         result = markdown_to_html("Use `code` here.")
@@ -97,10 +125,9 @@ def hello():
     def test_image_note_figure_format(self) -> None:
         """Test images are converted to note.com figure format."""
         result = markdown_to_html("![Test](https://example.com/test.png)")
-        # Must have figure wrapper with name and id attributes
+        # Must have figure wrapper with name attribute (note.com uses only name, not id)
         assert "<figure" in result
         assert 'name="' in result
-        assert 'id="' in result
         # Must have figcaption
         assert "<figcaption>" in result
         assert "</figcaption></figure>" in result
@@ -186,9 +213,11 @@ def hello():
         """Test images with caption (title attribute)."""
         result = markdown_to_html('![Alt](https://example.com/img.png "This is caption")')
         assert "<figcaption>This is caption</figcaption>" in result
-        # Verify figure structure is intact
+        # Verify figure structure is intact (note.com uses only name, not id)
         assert "<figure" in result
         assert 'name="' in result
+        # Verify no id attribute (note.com doesn't use it)
+        assert 'id="' not in result.split("<figure")[1].split(">")[0]
 
     def test_image_without_caption_backward_compatible(self) -> None:
         """Test images without caption still work (backward compatibility)."""
