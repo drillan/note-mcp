@@ -11,6 +11,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from note_mcp.browser.manager import BrowserManager
+from note_mcp.browser.typing_helpers import type_markdown_content
 from note_mcp.models import Article, ArticleStatus
 
 if TYPE_CHECKING:
@@ -19,59 +20,6 @@ if TYPE_CHECKING:
 
 # note.com URLs
 NOTE_NEW_ARTICLE_URL = "https://note.com/notes/new"
-
-# Regex patterns for Markdown list detection
-_UNORDERED_LIST_PATTERN = re.compile(r"^[-*+]\s+(.*)$")
-_ORDERED_LIST_PATTERN = re.compile(r"^(\d+)\.\s+(.*)$")
-
-
-async def _type_markdown_content(page: Any, content: str) -> None:
-    """Type Markdown content with proper handling for lists.
-
-    ProseMirror converts "- " at the start of a line to a list item.
-    Once in list mode, pressing Enter creates a new list item automatically.
-    So for subsequent items, we should NOT type the "- " prefix.
-
-    Args:
-        page: Playwright page object
-        content: Markdown content to type
-    """
-    lines = content.split("\n")
-    in_unordered_list = False
-    in_ordered_list = False
-
-    for i, line in enumerate(lines):
-        # Check for unordered list item
-        ul_match = _UNORDERED_LIST_PATTERN.match(line)
-        if ul_match:
-            if in_unordered_list:
-                # Already in list, just type content without prefix
-                await page.keyboard.type(ul_match.group(1))
-            else:
-                # Start new list, type with prefix
-                await page.keyboard.type(line)
-                in_unordered_list = True
-            in_ordered_list = False
-        # Check for ordered list item
-        elif ol_match := _ORDERED_LIST_PATTERN.match(line):
-            if in_ordered_list:
-                # Already in list, just type content without prefix
-                await page.keyboard.type(ol_match.group(2))
-            else:
-                # Start new list, type with prefix
-                await page.keyboard.type(line)
-                in_ordered_list = True
-            in_unordered_list = False
-        else:
-            # Not a list item
-            if line:
-                await page.keyboard.type(line)
-            in_unordered_list = False
-            in_ordered_list = False
-
-        # Press Enter between lines
-        if i < len(lines) - 1:
-            await page.keyboard.press("Enter")
 
 
 async def create_draft_via_browser(
@@ -181,7 +129,7 @@ async def create_draft_via_browser(
                 await page.keyboard.press("Delete")
                 # Type content line by line with Enter key
                 # This allows ProseMirror to properly interpret list items
-                await _type_markdown_content(page, article_input.body)
+                await type_markdown_content(page, article_input.body)
                 body_filled = True
                 break
         except Exception:
@@ -191,7 +139,7 @@ async def create_draft_via_browser(
         # Fallback: Tab to body and type
         try:
             await page.keyboard.press("Tab")
-            await _type_markdown_content(page, article_input.body)
+            await type_markdown_content(page, article_input.body)
         except Exception:
             pass
 
