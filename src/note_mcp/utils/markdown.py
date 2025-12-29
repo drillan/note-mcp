@@ -19,11 +19,47 @@ _IMG_IN_P_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _LANGUAGE_CLASS_PATTERN = re.compile(r'<code[^>]*class="language-[^"]*"[^>]*>')
+# Pattern to match li elements with direct text content (not already wrapped in p)
+# This matches <li ...>content</li> where content doesn't start with <p
+_LI_CONTENT_PATTERN = re.compile(
+    r"(<li[^>]*>)(?!<p)([^<]+|(?:(?!</li>).)*?)(</li>)",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def _generate_uuid() -> str:
     """Generate a UUID for note.com element IDs."""
     return str(uuid.uuid4())
+
+
+def _wrap_li_content_in_p(html: str) -> str:
+    """Wrap list item content in paragraph tags.
+
+    ProseMirror (used by note.com) expects list items to contain
+    block content like paragraphs, not just inline text.
+
+    Converts: <li>Item text</li>
+    To: <li><p>Item text</p></li>
+
+    Args:
+        html: HTML string with list items
+
+    Returns:
+        HTML with list item content wrapped in <p> tags
+    """
+
+    def wrap_content(match: re.Match[str]) -> str:
+        li_open = match.group(1)  # <li ...>
+        content = match.group(2)  # text content
+        li_close = match.group(3)  # </li>
+
+        # Skip if content is empty or whitespace only
+        if not content or not content.strip():
+            return match.group(0)
+
+        return f"{li_open}<p>{content.strip()}</p>{li_close}"
+
+    return _LI_CONTENT_PATTERN.sub(wrap_content, html)
 
 
 def _add_uuid_to_elements(html: str) -> str:
@@ -159,6 +195,9 @@ def markdown_to_html(content: str) -> str:
 
     # Convert images to note.com format
     result = _convert_images_to_note_format(result)
+
+    # Wrap list item content in p tags (ProseMirror requirement)
+    result = _wrap_li_content_in_p(result)
 
     # Add UUID to all elements (note.com requirement)
     result = _add_uuid_to_elements(result)

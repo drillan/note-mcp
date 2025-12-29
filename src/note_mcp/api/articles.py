@@ -29,7 +29,8 @@ async def create_draft(
 ) -> Article:
     """Create a new draft article.
 
-    Uses browser automation to create the draft via note.com's web interface.
+    Uses the note.com API to create a draft article.
+    Converts Markdown body to HTML as required by the API.
 
     Args:
         session: Authenticated session
@@ -39,11 +40,33 @@ async def create_draft(
         Created Article object
 
     Raises:
-        RuntimeError: If draft creation fails
+        NoteAPIError: If API request fails
     """
-    from note_mcp.browser.create_draft import create_draft_via_browser
+    # Convert Markdown to HTML for API
+    html_body = markdown_to_html(article_input.body)
 
-    return await create_draft_via_browser(session, article_input)
+    # Calculate body length (character count, not byte count)
+    body_length = len(article_input.body)
+
+    # Build payload matching note.com editor format
+    payload: dict[str, Any] = {
+        "name": article_input.title,
+        "body": html_body,
+        "body_length": body_length,
+        "status": "draft",
+    }
+
+    # Add tags if present
+    if article_input.tags:
+        normalized_tags = [tag.lstrip("#") for tag in article_input.tags]
+        payload["hashtags"] = [{"hashtag": {"name": tag}} for tag in normalized_tags]
+
+    async with NoteAPIClient(session) as client:
+        response = await client.post("/v3/notes", json=payload)
+
+    # Parse response
+    article_data = response.get("data", {})
+    return from_api_response(article_data)
 
 
 async def update_article(

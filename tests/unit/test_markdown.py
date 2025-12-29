@@ -64,6 +64,34 @@ class TestMarkdownToHtml:
         assert "<li " in result or "<li>" in result
         assert "First" in result
 
+    def test_nested_list_conversion(self) -> None:
+        """Test converting nested lists."""
+        markdown = """- Item A
+  - Sub-item A1
+  - Sub-item A2
+- Item B"""
+        result = markdown_to_html(markdown)
+        # Outer ul and nested ul (should appear twice)
+        assert result.count("<ul ") == 2
+        # All li elements have UUID attributes
+        assert "<li " in result
+        # Content preserved
+        assert "Item A" in result
+        assert "Sub-item A1" in result
+        assert "Item B" in result
+
+    def test_list_items_wrapped_in_paragraphs(self) -> None:
+        """Test that list item content is wrapped in p tags for ProseMirror."""
+        markdown = """- Item A
+- Item B"""
+        result = markdown_to_html(markdown)
+        # Each li should contain a p element with UUID
+        assert "<li " in result
+        assert "<p " in result
+        # Verify structure: <li ...><p ...>text</p></li>
+        assert "><p " in result  # p directly inside li
+        assert "</p></li>" in result  # p closed before li
+
     def test_code_inline_conversion(self) -> None:
         """Test converting inline code."""
         result = markdown_to_html("Use `code` here.")
