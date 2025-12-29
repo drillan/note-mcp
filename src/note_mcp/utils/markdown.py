@@ -69,29 +69,22 @@ def _wrap_li_content_in_p(html: str) -> str:
 
 
 def _convert_blockquote_newlines_to_br(html: str) -> str:
-    """Convert newlines inside blockquote paragraphs to <br/> tags.
+    """Convert newlines inside blockquote paragraphs to <br> tags.
 
     note.com's browser editor uses <br> tags for line breaks inside blockquotes.
-    This function converts newlines to <br/> tags to match that format.
-
-    KNOWN LIMITATION: note.com's API strips <br> tags during content processing.
-    This means multiline blockquotes created via MCP will have their line breaks
-    removed. Manual browser entry preserves line breaks because it bypasses the API.
-
-    Workaround: Use separate blockquotes (empty line between > lines in Markdown)
-    for content that needs visual line separation.
+    This function converts newlines to <br> tags to match that format.
 
     Converts:
         <blockquote><p>Line 1
         Line 2</p></blockquote>
     To:
-        <blockquote><p>Line 1<br/>Line 2</p></blockquote>
+        <blockquote><p>Line 1<br>Line 2</p></blockquote>
 
     Args:
         html: HTML string with blockquotes
 
     Returns:
-        HTML with blockquote paragraph newlines converted to <br/> tags
+        HTML with blockquote paragraph newlines converted to <br> tags
     """
     # Pattern to match <p> content inside blockquotes
     p_in_blockquote_pattern = re.compile(
@@ -106,12 +99,47 @@ def _convert_blockquote_newlines_to_br(html: str) -> str:
         p_close = match.group(4)  # </p>
         after_p = match.group(5)  # anything after </p> including </blockquote>
 
-        # Convert newlines to <br/> tags
-        p_content = p_content.replace("\n", "<br/>")
+        # Convert newlines to <br> tags (note.com uses <br> without slash)
+        p_content = p_content.replace("\n", "<br>")
 
         return f"{before_p}{p_open}{p_content}{p_close}{after_p}"
 
     return p_in_blockquote_pattern.sub(convert_p_newlines, html)
+
+
+def _convert_blockquotes_to_note_format(html: str) -> str:
+    """Convert blockquotes to note.com figure format.
+
+    note.com expects blockquotes to be wrapped in <figure> elements:
+    <figure name="UUID" id="UUID">
+      <blockquote><p name="UUID" id="UUID">content</p></blockquote>
+      <figcaption></figcaption>
+    </figure>
+
+    This format is required for the API to preserve <br> tags inside blockquotes.
+
+    Args:
+        html: HTML string with blockquotes
+
+    Returns:
+        HTML with blockquotes wrapped in figure elements
+    """
+    # Pattern to match blockquote elements
+    blockquote_pattern = re.compile(
+        r"<blockquote[^>]*>(.*?)</blockquote>",
+        re.DOTALL | re.IGNORECASE,
+    )
+
+    def wrap_in_figure(match: re.Match[str]) -> str:
+        blockquote_content = match.group(1)
+        element_id = _generate_uuid()
+        return (
+            f'<figure name="{element_id}" id="{element_id}">'
+            f"<blockquote>{blockquote_content}</blockquote>"
+            f"<figcaption></figcaption></figure>"
+        )
+
+    return blockquote_pattern.sub(wrap_in_figure, html)
 
 
 def _add_uuid_to_elements(html: str) -> str:
@@ -255,13 +283,15 @@ def markdown_to_html(content: str) -> str:
     # Wrap list item content in p tags (ProseMirror requirement)
     result = _wrap_li_content_in_p(result)
 
-    # Convert blockquote newlines to <br/> tags (note.com browser editor format)
-    # KNOWN LIMITATION: note.com's API strips <br> tags, so multiline blockquotes
-    # will display as single lines. This is an API limitation, not a code issue.
+    # Convert blockquote newlines to <br> tags (note.com browser editor format)
     result = _convert_blockquote_newlines_to_br(result)
 
     # Add UUID to all elements (note.com requirement)
     result = _add_uuid_to_elements(result)
+
+    # Convert blockquotes to note.com figure format
+    # This is required for the API to preserve <br> tags inside blockquotes
+    result = _convert_blockquotes_to_note_format(result)
 
     # Convert code blocks to note.com format and handle newlines
     result = _convert_code_blocks_to_note_format(result)

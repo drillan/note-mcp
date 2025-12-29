@@ -140,34 +140,52 @@ def hello():
     def test_blockquote_conversion(self) -> None:
         """Test converting blockquotes."""
         result = markdown_to_html("> This is a quote")
-        assert "<blockquote " in result or "<blockquote>" in result
+        # note.com requires blockquotes wrapped in <figure>
+        assert "<figure" in result
+        assert "<blockquote" in result
         assert "This is a quote" in result
 
+    def test_blockquote_figure_format(self) -> None:
+        """Test that blockquotes are wrapped in figure elements for note.com API."""
+        result = markdown_to_html("> Quote text")
+        # Must have figure wrapper with name and id attributes
+        assert "<figure" in result
+        assert 'name="' in result
+        assert 'id="' in result
+        # Must have figcaption
+        assert "<figcaption></figcaption></figure>" in result
+        # Blockquote must be inside figure
+        figure_start = result.find("<figure")
+        blockquote_start = result.find("<blockquote")
+        figure_end = result.find("</figure>")
+        assert figure_start < blockquote_start < figure_end
+
     def test_blockquote_multiline_uses_br_tags(self) -> None:
-        """Test that multiline blockquotes use <br/> tags for line breaks.
+        """Test that multiline blockquotes use <br> tags for line breaks.
 
         note.com's browser editor uses <br> tags for line breaks inside blockquotes.
-        KNOWN LIMITATION: note.com's API strips <br> tags during content processing,
-        so multiline blockquotes will display as single lines when created via MCP.
+        Blockquotes are wrapped in <figure> elements to preserve <br> tags via API.
         """
         markdown = """> Line 1
 > Line 2
 > Line 3"""
         result = markdown_to_html(markdown)
+        # Must have figure wrapper
+        assert "<figure" in result
         # Must have blockquote
         assert "<blockquote" in result
-        # Must have <br/> tags between lines
-        assert "<br/>" in result
+        # Must have <br> tags between lines (note.com uses <br> without slash)
+        assert "<br>" in result
         # Content must be preserved
         assert "Line 1" in result
         assert "Line 2" in result
         assert "Line 3" in result
-        # Lines should be separated by <br/> tags
-        assert "Line 1<br/>" in result
-        assert "Line 2<br/>" in result
+        # Lines should be separated by <br> tags
+        assert "Line 1<br>" in result
+        assert "Line 2<br>" in result
 
     def test_blockquote_multiline_content_order(self) -> None:
-        """Test that multiline blockquote preserves line order with <br/> tags."""
+        """Test that multiline blockquote preserves line order with <br> tags."""
         markdown = """> First
 > Second
 > Third"""
@@ -177,24 +195,26 @@ def hello():
         second_pos = result.find("Second")
         third_pos = result.find("Third")
         assert first_pos < second_pos < third_pos
-        # Verify lines are separated by <br/> tags
-        assert "First<br/>" in result
-        assert "Second<br/>" in result
+        # Verify lines are separated by <br> tags
+        assert "First<br>" in result
+        assert "Second<br>" in result
 
     def test_blockquote_multiline_with_formatting(self) -> None:
         """Test multiline blockquote with bold/italic formatting."""
         markdown = """> **Bold** line
 > *Italic* line"""
         result = markdown_to_html(markdown)
+        assert "<figure" in result
         assert "<blockquote" in result
         assert "<strong>" in result
         assert "<em>" in result
-        # Should have <br/> tag between lines
-        assert "<br/>" in result
+        # Should have <br> tag between lines
+        assert "<br>" in result
 
     def test_blockquote_single_line_single_p(self) -> None:
         """Test that single line blockquote has only one <p> element."""
         result = markdown_to_html("> Single line quote")
+        assert "<figure" in result
         assert "<blockquote" in result
         assert "Single line quote" in result
         # Extract blockquote content
