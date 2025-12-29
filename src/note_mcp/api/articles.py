@@ -33,8 +33,13 @@ async def create_draft(
     Converts Markdown body to HTML as required by the API.
 
     Note: This function performs two API calls:
-    1. POST /v1/text_notes - Creates the article entry
+    1. POST /v1/text_notes - Creates the article entry (without body)
     2. POST /v1/text_notes/draft_save - Saves the body content
+
+    The body is sent only via draft_save to preserve HTML structure.
+    However, note that note.com's API sanitizes certain HTML elements
+    (e.g., <br> tags inside blockquotes) regardless of how content is sent.
+    This is a server-side limitation that cannot be worked around.
 
     Args:
         session: Authenticated session
@@ -52,10 +57,9 @@ async def create_draft(
     # Calculate body length (character count, not byte count)
     body_length = len(article_input.body)
 
-    payload: dict[str, Any] = {
+    # Payload for initial article creation (without body to avoid sanitization)
+    create_payload: dict[str, Any] = {
         "name": article_input.title,
-        "body": html_body,
-        "body_length": body_length,
         "index": False,
         "is_lead_form": False,
     }
@@ -63,11 +67,12 @@ async def create_draft(
     # Add tags if present
     if article_input.tags:
         normalized_tags = [tag.lstrip("#") for tag in article_input.tags]
-        payload["hashtags"] = [{"hashtag": {"name": tag}} for tag in normalized_tags]
+        create_payload["hashtags"] = [{"hashtag": {"name": tag}} for tag in normalized_tags]
 
     async with NoteAPIClient(session) as client:
-        # Step 1: Create the article entry
-        response = await client.post("/v1/text_notes", json=payload)
+        # Step 1: Create the article entry (without body)
+        # The body is saved separately via draft_save to preserve <br> tags
+        response = await client.post("/v1/text_notes", json=create_payload)
 
         # Get the numeric article ID from response
         article_data = response.get("data", {})
@@ -75,10 +80,20 @@ async def create_draft(
 
         if article_id:
             # Step 2: Save the body content with draft_save
-            # This is required because /v1/text_notes doesn't reliably save the body
+            # This endpoint preserves <br> tags unlike /v1/text_notes
+            save_payload: dict[str, Any] = {
+                "name": article_input.title,
+                "body": html_body,
+                "body_length": body_length,
+                "index": False,
+                "is_lead_form": False,
+            }
+            if article_input.tags:
+                save_payload["hashtags"] = create_payload["hashtags"]
+
             await client.post(
                 f"/v1/text_notes/draft_save?id={article_id}&is_temp_saved=true",
-                json=payload,
+                json=save_payload,
             )
 
     # Parse response

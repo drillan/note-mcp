@@ -10,6 +10,7 @@ import contextlib
 from typing import TYPE_CHECKING, Any
 
 from note_mcp.browser.manager import BrowserManager
+from note_mcp.browser.typing_helpers import type_markdown_content
 from note_mcp.models import Article, ArticleStatus
 
 if TYPE_CHECKING:
@@ -121,7 +122,9 @@ async def update_article_via_browser(
             if await body_element.count() > 0:
                 await body_element.click()
                 await page.keyboard.press("Control+a")
-                await page.keyboard.type(article_input.body)
+                await page.keyboard.press("Delete")
+                # Use type_markdown_content for proper blockquote/list handling
+                await type_markdown_content(page, article_input.body)
                 body_filled = True
                 break
         except Exception:
@@ -131,7 +134,8 @@ async def update_article_via_browser(
         try:
             await page.keyboard.press("Tab")
             await page.keyboard.press("Control+a")
-            await page.keyboard.type(article_input.body)
+            await page.keyboard.press("Delete")
+            await type_markdown_content(page, article_input.body)
         except Exception:
             pass
 

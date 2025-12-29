@@ -9,9 +9,9 @@ import uuid
 from markdown_it import MarkdownIt
 
 # Pre-compiled regex patterns for performance
-# Note: <li> is excluded because note.com doesn't add name/id to <li> tags
+# Note: <li> and <blockquote> are excluded because note.com doesn't add name/id to these tags
 _TAG_PATTERN = re.compile(
-    r"<(p|h[1-6]|ul|ol|blockquote|code|hr|div|span)(\s[^>]*)?>",
+    r"<(p|h[1-6]|ul|ol|code|hr|div|span)(\s[^>]*)?>",
     re.IGNORECASE,
 )
 _PRE_PATTERN = re.compile(r"<pre([^>]*)>(.*?)</pre>", re.DOTALL | re.IGNORECASE)
@@ -25,6 +25,11 @@ _LANGUAGE_CLASS_PATTERN = re.compile(r'<code[^>]*class="language-[^"]*"[^>]*>')
 _LI_CONTENT_PATTERN = re.compile(
     r"(<li[^>]*>)(?!<p)([^<]+|(?:(?!</li>).)*?)(</li>)",
     re.IGNORECASE | re.DOTALL,
+)
+# Pattern to match blockquote elements and their content
+_BLOCKQUOTE_PATTERN = re.compile(
+    r"(<blockquote[^>]*>)(.*?)(</blockquote>)",
+    re.DOTALL | re.IGNORECASE,
 )
 
 
@@ -63,6 +68,90 @@ def _wrap_li_content_in_p(html: str) -> str:
     return _LI_CONTENT_PATTERN.sub(wrap_content, html)
 
 
+def _convert_blockquote_newlines_to_br(html: str) -> str:
+    """Convert newlines inside blockquote paragraphs to <br> tags.
+
+    note.com's browser editor uses <br> tags for line breaks inside blockquotes.
+    This function converts newlines to <br> tags to match that format.
+
+    Converts:
+        <blockquote><p>Line 1
+        Line 2</p></blockquote>
+    To:
+        <blockquote><p>Line 1<br>Line 2</p></blockquote>
+
+    Note: While this generates correct HTML with <br> tags, note.com's API
+    sanitizes <br> tags from blockquote content. This is a server-side
+    limitation. Content created via browser editor preserves <br> tags,
+    but API-submitted content has them stripped.
+
+    Workaround for users: Use separate blockquotes for each line:
+        > Line 1
+
+        > Line 2
+
+    Args:
+        html: HTML string with blockquotes
+
+    Returns:
+        HTML with blockquote paragraph newlines converted to <br> tags
+    """
+    # Pattern to match <p> content inside blockquotes
+    p_in_blockquote_pattern = re.compile(
+        r"(<blockquote[^>]*>.*?)(<p[^>]*>)(.*?)(</p>)(.*?</blockquote>)",
+        re.DOTALL | re.IGNORECASE,
+    )
+
+    def convert_p_newlines(match: re.Match[str]) -> str:
+        before_p = match.group(1)  # <blockquote...> and anything before <p>
+        p_open = match.group(2)  # <p ...>
+        p_content = match.group(3)  # content inside <p>
+        p_close = match.group(4)  # </p>
+        after_p = match.group(5)  # anything after </p> including </blockquote>
+
+        # Convert newlines to <br> tags (note.com uses <br> without slash)
+        p_content = p_content.replace("\n", "<br>")
+
+        return f"{before_p}{p_open}{p_content}{p_close}{after_p}"
+
+    return p_in_blockquote_pattern.sub(convert_p_newlines, html)
+
+
+def _convert_blockquotes_to_note_format(html: str) -> str:
+    """Convert blockquotes to note.com figure format.
+
+    note.com expects blockquotes to be wrapped in <figure> elements:
+    <figure name="UUID" id="UUID">
+      <blockquote><p name="UUID" id="UUID">content</p></blockquote>
+      <figcaption></figcaption>
+    </figure>
+
+    This format is required for the API to preserve <br> tags inside blockquotes.
+
+    Args:
+        html: HTML string with blockquotes
+
+    Returns:
+        HTML with blockquotes wrapped in figure elements
+    """
+    # Pattern to match blockquote elements
+    blockquote_pattern = re.compile(
+        r"<blockquote[^>]*>(.*?)</blockquote>",
+        re.DOTALL | re.IGNORECASE,
+    )
+
+    def wrap_in_figure(match: re.Match[str]) -> str:
+        blockquote_content = match.group(1)
+        element_id = _generate_uuid()
+        return (
+            f'<figure name="{element_id}" id="{element_id}">'
+            f"<blockquote>{blockquote_content}</blockquote>"
+            f"<figcaption></figcaption></figure>"
+        )
+
+    return blockquote_pattern.sub(wrap_in_figure, html)
+
+
 def _add_uuid_to_elements(html: str) -> str:
     """Add name attribute (UUID) to HTML elements.
 
@@ -86,8 +175,8 @@ def _add_uuid_to_elements(html: str) -> str:
             return match.group(0)
 
         element_id = _generate_uuid()
-        # note.com uses only 'name' attribute, not 'id'
-        return f'<{tag_name} name="{element_id}"{attrs}>'
+        # note.com requires both 'name' and 'id' attributes for proper content handling
+        return f'<{tag_name} name="{element_id}" id="{element_id}"{attrs}>'
 
     return _TAG_PATTERN.sub(add_uuid, html)
 
@@ -114,9 +203,9 @@ def _convert_images_to_note_format(html: str) -> str:
         alt = match.group(2)
         caption = match.group(3) or ""  # titleがなければ空文字
         element_id = _generate_uuid()
-        # note.com uses only 'name' attribute, not 'id'
+        # note.com requires both 'name' and 'id' attributes for proper content handling
         return (
-            f'<figure name="{element_id}">'
+            f'<figure name="{element_id}" id="{element_id}">'
             f'<img src="{src}" alt="{alt}" width="620" height="457" '
             f'contenteditable="false" draggable="false">'
             f"<figcaption>{caption}</figcaption></figure>"
@@ -156,9 +245,9 @@ def _convert_code_blocks_to_note_format(html: str) -> str:
         # markdown-it-py adds class="language-xxx" which note.com doesn't use
         content = _LANGUAGE_CLASS_PATTERN.sub("<code>", content)
 
-        # Build note.com format: <pre name="..." class="codeBlock">
-        # note.com uses only 'name' attribute, not 'id'
-        pre_block = f'<pre name="{element_id}" class="codeBlock">{content}</pre>'
+        # Build note.com format: <pre name="..." id="..." class="codeBlock">
+        # note.com requires both 'name' and 'id' attributes for proper content handling
+        pre_block = f'<pre name="{element_id}" id="{element_id}" class="codeBlock">{content}</pre>'
         pre_blocks.append(pre_block)
 
         return f"__PRE_BLOCK_{len(pre_blocks) - 1}__"
@@ -204,8 +293,15 @@ def markdown_to_html(content: str) -> str:
     # Wrap list item content in p tags (ProseMirror requirement)
     result = _wrap_li_content_in_p(result)
 
+    # Convert blockquote newlines to <br> tags (note.com browser editor format)
+    result = _convert_blockquote_newlines_to_br(result)
+
     # Add UUID to all elements (note.com requirement)
     result = _add_uuid_to_elements(result)
+
+    # Convert blockquotes to note.com figure format
+    # This is required for the API to preserve <br> tags inside blockquotes
+    result = _convert_blockquotes_to_note_format(result)
 
     # Convert code blocks to note.com format and handle newlines
     result = _convert_code_blocks_to_note_format(result)
