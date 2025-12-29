@@ -20,7 +20,7 @@ def main() -> None:
     args = parser.parse_args()
 
     print(f"Opening {args.url} in browser...")
-    print(f"Check VNC viewer (localhost:5900)")
+    print("Check VNC viewer (localhost:5900)")
     print(f"Browser will stay open for {args.wait} seconds")
     print("Press Ctrl+C to close early")
 
