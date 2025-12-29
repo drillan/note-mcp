@@ -150,3 +150,52 @@ This is a new paragraph."""
         result = markdown_to_html(markdown)
         # Should have paragraphs (with note.com UUID attributes)
         assert "<p " in result or "<p>" in result
+
+    def test_code_block_preserves_newlines(self) -> None:
+        """Test that code blocks preserve internal newlines.
+
+        note.com requires:
+        - <pre class="codeBlock"> format
+        - Actual newlines preserved inside code blocks
+        """
+        markdown = """```python
+def hello():
+    print("Hello")
+    return True
+```"""
+        result = markdown_to_html(markdown)
+        # Code block must be in note.com format (attribute order matters)
+        assert 'class="codeBlock"' in result
+        assert "<pre " in result
+        assert "<code>" in result  # No language class
+        # The newlines between code lines must be preserved as actual newlines
+        assert "\n" in result
+        # Verify the code content is intact
+        assert "def hello():" in result
+        assert 'print("Hello")' in result or "print(&quot;Hello&quot;)" in result
+        # Verify newlines are between code lines
+        assert "def hello():\n" in result
+
+    def test_image_with_caption(self) -> None:
+        """Test images with caption (title attribute)."""
+        result = markdown_to_html('![Alt](https://example.com/img.png "This is caption")')
+        assert "<figcaption>This is caption</figcaption>" in result
+        # Verify figure structure is intact
+        assert "<figure" in result
+        assert 'name="' in result
+
+    def test_image_without_caption_backward_compatible(self) -> None:
+        """Test images without caption still work (backward compatibility)."""
+        result = markdown_to_html("![Alt](https://example.com/img.png)")
+        assert "<figcaption></figcaption>" in result
+        assert "<figure" in result
+
+    def test_image_caption_with_special_characters(self) -> None:
+        """Test images with special characters in caption."""
+        result = markdown_to_html('![Alt](https://example.com/img.png "図1: 構成図")')
+        assert "<figcaption>図1: 構成図</figcaption>" in result
+
+    def test_image_caption_empty_string(self) -> None:
+        """Test images with empty caption (title="")."""
+        result = markdown_to_html('![Alt](https://example.com/img.png "")')
+        assert "<figcaption></figcaption>" in result

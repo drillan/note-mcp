@@ -1,0 +1,62 @@
+# .dockerignore
+# Dockerビルド時に除外するファイル
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv
+ENV
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Testing/Coverage
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.nox
+
+# Type checking
+.mypy_cache
+
+# Ruff
+.ruff_cache
+
+# Documentation
+docs/_build
+
+# Build artifacts
+dist
+build
+*.egg-info
+
+# Development files
+.claude
+.specify
+ai_working
+debug
+specs
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Misc
+*.md
+!README.md
+.env
+.env.*
+*.log

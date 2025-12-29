@@ -1,0 +1,146 @@
+# docker-compose.yml
+# note-mcp Docker Compose設定
+#
+# 使用方法:
+#   # テスト実行 (headless)
+#   docker compose run --rm test
+#
+#   # テスト実行 (headed with Xvfb)
+#   docker compose run --rm test-headed
+#
+#   # テスト実行 (VNC経由で視覚確認)
+#   docker compose up -d test-vnc
+#   vncviewer localhost:5900
+#   docker compose down
+#
+#   # X11 forwarding (Linux/WSL2)
+#   docker compose run --rm test-x11
+#
+#   # 開発シェル
+#   docker compose run --rm --service-ports dev bash
+#
+#   # ホストユーザーで実行（デフォルト: uid=1000）
+#   # 環境変数でuid:gidを指定可能:
+#   UID=$(id -u) GID=$(id -g) docker compose run --rm dev bash
+
+services:
+  # ===========================================================================
+  # Base service (共通設定)
+  # ===========================================================================
+  base: &base
+    build:
+      context: .
+      target: dev
+    # ホストユーザーで実行（ボリュームマウント時の権限問題を回避）
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /app
+    volumes:
+      # ソースコードのマウント（ホットリロード用）
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+    # Chromiumのメモリ問題を防ぐ
+    ipc: host
+    # ゾンビプロセス防止
+    init: true
+
+  # ===========================================================================
+  # テスト実行 (Headless mode - デフォルト)
+  # ===========================================================================
+  test:
+    <<: *base
+    command: ["uv", "run", "pytest", "-v"]
+
+  # ===========================================================================
+  # テスト実行 (Headed mode with Xvfb)
+  # ===========================================================================
+  test-headed:
+    <<: *base
+    environment:
+      - USE_XVFB=1
+      - DISPLAY=:99
+      - XVFB_WHD=1920x1080x24
+      # Playwrightをheadedモードで起動するための環境変数
+      - HEADED=1
+    command: ["uv", "run", "pytest", "-v"]
+
+  # ===========================================================================
+  # テスト実行 (VNC付き - リモートで視覚確認可能)
+  # ===========================================================================
+  test-vnc:
+    <<: *base
+    environment:
+      - USE_XVFB=1
+      - DISPLAY=:99
+      - XVFB_WHD=1920x1080x24
+      - VNC_PORT=5900
+      # Playwrightをheadedモードで起動するための環境変数
+      - HEADED=1
+    ports:
+      - "5900:5900"
+    command: ["uv", "run", "pytest", "-v"]
+
+  # ===========================================================================
+  # X11 forwarding (Linux/WSL2用)
+  # ===========================================================================
+  test-x11:
+    <<: *base
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      # Playwrightをheadedモードで起動するための環境変数
+      - HEADED=1
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+      # X11ソケットをマウント
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    # SYS_ADMINはX11接続に必要な場合がある
+    cap_add:
+      - SYS_ADMIN
+    command: ["uv", "run", "pytest", "-v"]
+
+  # ===========================================================================
+  # 開発用シェル
+  # ===========================================================================
+  dev:
+    <<: *base
+    environment:
+      - DISPLAY=:99
+      - VNC_PORT=5900
+      - NOVNC_PORT=6080
+      - HEADED=1
+      # Chrome起動時に--no-sandboxを自動適用
+      - CHROME_FLAGS=--no-sandbox
+    ports:
+      - "5900:5900"
+      - "6080:6080"
+    volumes:
+      # プロジェクトルートをマウント
+      - .:/app:rw
+      # ホストの.venvを除外（コンテナ内の.venvを使用）
+      - /app/.venv
+      # Chrome拡張機能・設定の永続化
+      - chrome-data:/home/ubuntu/.config/google-chrome
+    command: ["bash"]
+    stdin_open: true
+    tty: true
+
+  # ===========================================================================
+  # MCP Server (本番実行用)
+  # ===========================================================================
+  mcp-server:
+    <<: *base
+    build:
+      context: .
+      target: app  # 開発依存関係なしの軽量イメージ
+    environment:
+      - USE_XVFB=1
+      - DISPLAY=:99
+    # セッション情報の永続化
+    volumes:
+      - note-mcp-data:/app/data
+    command: ["uv", "run", "python", "-m", "note_mcp"]
+
+volumes:
+  note-mcp-data:
+  # Chrome拡張機能・設定の永続化用
+  chrome-data:

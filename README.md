@@ -98,6 +98,21 @@ AIアシスタントと一緒に記事を書いてみましょう。
 
 本文用画像をアップロードすると、Markdown形式の挿入コードが返されます。これを記事本文に追加することで画像を埋め込めます。
 
+**キャプション付き画像**:
+
+画像にキャプション（説明文）を追加するには、Markdownのtitle属性を使用します:
+
+```markdown
+![代替テキスト](画像URL "キャプションテキスト")
+```
+
+例:
+```markdown
+![スクリーンショット](https://example.com/image.png "図1: システム構成図")
+```
+
+キャプションはnote.comのエディタで画像の下に表示されます。
+
 > **Note**: 本文用画像はS3への直接アップロードを使用するため、アイキャッチ画像には影響しません。
 
 ### 4. 記事編集（推奨ワークフロー）
@@ -179,6 +194,195 @@ sudo apt install libsecret-1-0
 - Python 3.11+
 - デスクトップ環境（Playwrightが動作する環境）
 - note.comアカウント
+
+## Docker
+
+Dockerを使用してPlaywright環境を構築できます。複数の実行モードをサポートしています。
+
+### ビルド
+
+```bash
+docker build -t note-mcp .
+```
+
+### 実行モード
+
+#### 1. Headless（デフォルト）
+
+CI/CD環境やバックグラウンド実行向け:
+
+```bash
+# docker-compose使用
+docker compose run --rm test
+
+# 直接実行
+docker run --rm --ipc=host note-mcp uv run pytest -v
+```
+
+#### 2. Headed with Xvfb
+
+Xvfbを使用したheadedモード（仮想ディスプレイ上でブラウザを起動）:
+
+```bash
+docker compose run --rm test-headed
+
+# 直接実行
+docker run --rm --ipc=host -e USE_XVFB=1 -e HEADED=1 note-mcp uv run pytest -v
+```
+
+> **Note**: `HEADED=1`環境変数を使用するには、テストコード内で`os.environ.get("HEADED")`をチェックしてブラウザの`headless`オプションを制御する必要があります。
+
+#### 3. VNC経由での視覚確認
+
+VNCクライアントまたはWebブラウザでブラウザ操作をリアルタイム確認:
+
+```bash
+# バックグラウンドで起動
+docker compose up -d test-vnc
+
+# 方法1: noVNC（Webブラウザ経由、クリップボード共有対応）
+# ブラウザで http://localhost:6080/vnc.html にアクセス
+
+# 方法2: VNCクライアント
+vncviewer localhost:5900
+
+# ログ確認（必要な場合）
+docker compose logs -f test-vnc
+
+# 終了時
+docker compose down
+```
+
+> **Tip**: noVNCを使用すると、左側のクリップボードパネルからホストとコンテナ間でテキストをコピー＆ペーストできます。
+
+#### 4. X11 forwarding（Linux/WSL2）
+
+ホストのディスプレイに直接表示:
+
+```bash
+# X11アクセスを許可（必要な場合）
+xhost +local:docker
+
+# 実行
+docker compose run --rm test-x11
+
+# または直接
+docker run --rm --ipc=host \
+  -e DISPLAY=$DISPLAY \
+  -e HEADED=1 \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  note-mcp uv run pytest -v
+```
+
+### 開発用シェル
+
+コンテナ内でインタラクティブに作業:
+
+```bash
+# VNCなしで実行（ポートマッピングなし）
+docker compose run --rm dev bash
+
+# VNC経由でブラウザを確認する場合（ポートマッピングあり）
+docker compose run --rm --service-ports dev bash
+```
+
+> **Note**: `docker compose run`はデフォルトでポートマッピングを行いません。VNC（ポート5900）やnoVNC（ポート6080）にアクセスする場合は`--service-ports`フラグが必要です。
+
+コンテナ内でブラウザを開くには:
+
+```bash
+# コンテナ内で実行
+uv run python scripts/open_browser.py https://note.com --wait 120
+```
+
+ブラウザを確認するには:
+- **noVNC（推奨）**: http://localhost:6080/vnc.html にアクセス（クリップボード共有対応）
+- **VNCクライアント**: `vncviewer localhost:5900` で接続
+
+### Claude Code + Chrome拡張機能
+
+Docker開発環境にはClaude Codeがプリインストールされています。noVNC経由でClaude in Chrome拡張機能を使用できます。
+
+#### 初回セットアップ
+
+```bash
+# 開発コンテナを起動
+docker compose run --rm --service-ports dev bash
+
+# コンテナ内でChromeを起動（--no-sandboxは必須）
+google-chrome-stable --no-sandbox &
+```
+
+noVNC（http://localhost:6080/vnc.html）またはVNCクライアント（`vncviewer localhost:5900`）で接続し、以下の手順で拡張機能をインストール:
+
+1. Chrome Web Storeにアクセス: https://chromewebstore.google.com/detail/claude/danfoghgkjjpomlapfijehgjhbhnphnf
+2. 「Chromeに追加」をクリック
+3. 拡張機能を有効化
+
+#### Chrome拡張機能の永続化
+
+Chrome拡張機能と設定はDockerボリューム（`chrome-data`）に永続化されます。コンテナを再作成しても拡張機能は保持されます。
+
+```bash
+# ボリュームの確認
+docker volume ls | grep chrome-data
+
+# ボリュームの削除（設定をリセットする場合）
+docker volume rm note-mcp_chrome-data
+```
+
+#### Claude Codeの使用
+
+```bash
+# コンテナ内で
+claude --version  # バージョン確認
+claude            # Claude Code起動
+```
+
+### 環境変数
+
+| 変数 | 説明 | デフォルト |
+|------|------|------------|
+| `USE_XVFB` | Xvfbを起動 (`1` or `true`) | `0` |
+| `VNC_PORT` | VNCサーバーポート（TigerVNC） | (無効) |
+| `NOVNC_PORT` | noVNC Webアクセスポート | `6080` |
+| `DISPLAY` | X11ディスプレイ | `:99` |
+| `XVFB_WHD` | Xvfb解像度 | `1920x1080x24` |
+| `CHROME_FLAGS` | Chrome起動オプション | `--no-sandbox` (dev) |
+
+> **Note**: `VNC_PORT`を設定するとTigerVNCが起動し、noVNCも自動的に有効になります。クリップボード共有はnoVNC経由で利用できます。
+
+### トラブルシューティング
+
+**Chromiumがクラッシュする場合**:
+- `--ipc=host` フラグを追加（docker-composeでは設定済み）
+- 共有メモリ不足が原因の可能性があります
+
+**Chromeが「Operation not permitted」で起動しない場合**:
+- `google-chrome-stable --no-sandbox &` で起動してください
+- Docker内ではChromeのサンドボックス機能が制限されます
+
+**`claude`コマンドが見つからない場合**:
+- PATHが正しく設定されているか確認: `echo $PATH`
+- `/home/ubuntu/.local/bin` がPATHに含まれているべきです
+
+**X11接続エラー**:
+- `xhost +local:docker` を実行
+- WSL2の場合は`/mnt/wslg/`ディレクトリの存在を確認
+
+**VNCに接続できない場合**:
+- ポート5900（VNC）または6080（noVNC）が他のプロセスで使用されていないか確認
+- `docker compose logs test-vnc` でログを確認
+- noVNCの場合、ブラウザで http://localhost:6080/vnc.html にアクセス
+
+**クリップボード共有が動作しない場合**:
+- noVNC（http://localhost:6080/vnc.html）を使用してください
+- VNCクライアント経由ではクリップボード共有は利用できません
+- noVNCの左側パネルでクリップボードアイコンをクリック
+
+**「Server is already active for display 99」エラー**:
+- 前回のコンテナが残っています
+- `docker compose down` を実行してから再度起動してください
 
 ## Development
 
