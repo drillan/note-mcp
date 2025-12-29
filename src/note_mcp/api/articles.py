@@ -92,7 +92,7 @@ async def create_draft(
                 save_payload["hashtags"] = create_payload["hashtags"]
 
             await client.post(
-                f"/v1/text_notes/draft_save?id={article_id}&is_temp_saved=false",
+                f"/v1/text_notes/draft_save?id={article_id}&is_temp_saved=true",
                 json=save_payload,
             )
 

@@ -97,6 +97,10 @@ class NoteAPIClient:
                 headers["Origin"] = "https://editor.note.com"
                 headers["Referer"] = "https://editor.note.com/"
                 headers["X-Requested-With"] = "XMLHttpRequest"
+                # Sec-Fetch headers (browser security headers)
+                headers["Sec-Fetch-Site"] = "same-site"
+                headers["Sec-Fetch-Mode"] = "cors"
+                headers["Sec-Fetch-Dest"] = "empty"
 
         return headers
 
