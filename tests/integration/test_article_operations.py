@@ -65,7 +65,8 @@ class TestCreateDraft:
             assert article.status == ArticleStatus.DRAFT
             assert "test" in article.tags
             assert "python" in article.tags
-            mock_client.post.assert_called_once()
+            # create_draft calls POST twice: /v1/text_notes and /v1/text_notes/draft_save
+            assert mock_client.post.call_count == 2
 
     @pytest.mark.asyncio
     async def test_create_draft_converts_markdown_to_html(self) -> None:

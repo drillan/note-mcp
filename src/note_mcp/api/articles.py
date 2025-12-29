@@ -32,6 +32,10 @@ async def create_draft(
     Uses the note.com API to create the draft directly.
     Converts Markdown body to HTML as required by the API.
 
+    Note: This function performs two API calls:
+    1. POST /v1/text_notes - Creates the article entry
+    2. POST /v1/text_notes/draft_save - Saves the body content
+
     Args:
         session: Authenticated session
         article_input: Article content and metadata
@@ -62,11 +66,22 @@ async def create_draft(
         payload["hashtags"] = [{"hashtag": {"name": tag}} for tag in normalized_tags]
 
     async with NoteAPIClient(session) as client:
-        # Use v1/text_notes endpoint for creating draft articles
+        # Step 1: Create the article entry
         response = await client.post("/v1/text_notes", json=payload)
 
+        # Get the numeric article ID from response
+        article_data = response.get("data", {})
+        article_id = article_data.get("id")
+
+        if article_id:
+            # Step 2: Save the body content with draft_save
+            # This is required because /v1/text_notes doesn't reliably save the body
+            await client.post(
+                f"/v1/text_notes/draft_save?id={article_id}&is_temp_saved=true",
+                json=payload,
+            )
+
     # Parse response
-    article_data = response.get("data", {})
     return from_api_response(article_data)
 
 
