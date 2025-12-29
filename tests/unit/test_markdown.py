@@ -175,3 +175,27 @@ def hello():
         assert 'print("Hello")' in result or "print(&quot;Hello&quot;)" in result
         # Verify newlines are between code lines
         assert "def hello():\n" in result
+
+    def test_image_with_caption(self) -> None:
+        """Test images with caption (title attribute)."""
+        result = markdown_to_html('![Alt](https://example.com/img.png "This is caption")')
+        assert "<figcaption>This is caption</figcaption>" in result
+        # Verify figure structure is intact
+        assert "<figure" in result
+        assert 'name="' in result
+
+    def test_image_without_caption_backward_compatible(self) -> None:
+        """Test images without caption still work (backward compatibility)."""
+        result = markdown_to_html("![Alt](https://example.com/img.png)")
+        assert "<figcaption></figcaption>" in result
+        assert "<figure" in result
+
+    def test_image_caption_with_special_characters(self) -> None:
+        """Test images with special characters in caption."""
+        result = markdown_to_html('![Alt](https://example.com/img.png "図1: 構成図")')
+        assert "<figcaption>図1: 構成図</figcaption>" in result
+
+    def test_image_caption_empty_string(self) -> None:
+        """Test images with empty caption (title="")."""
+        result = markdown_to_html('![Alt](https://example.com/img.png "")')
+        assert "<figcaption></figcaption>" in result

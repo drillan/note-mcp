@@ -15,7 +15,7 @@ _TAG_PATTERN = re.compile(
 )
 _PRE_PATTERN = re.compile(r"<pre([^>]*)>(.*?)</pre>", re.DOTALL | re.IGNORECASE)
 _IMG_IN_P_PATTERN = re.compile(
-    r'<p>\s*<img\s+src="([^"]+)"\s+alt="([^"]*)"\s*/?\s*>\s*</p>',
+    r'<p>\s*<img\s+src="([^"]+)"\s+alt="([^"]*)"(?:\s+title="([^"]*)")?\s*/?\s*>\s*</p>',
     re.IGNORECASE,
 )
 _LANGUAGE_CLASS_PATTERN = re.compile(r'<code[^>]*class="language-[^"]*"[^>]*>')
@@ -73,12 +73,13 @@ def _convert_images_to_note_format(html: str) -> str:
     def replace_img(match: re.Match[str]) -> str:
         src = match.group(1)
         alt = match.group(2)
+        caption = match.group(3) or ""  # titleがなければ空文字
         element_id = _generate_uuid()
         return (
             f'<figure name="{element_id}" id="{element_id}">'
             f'<img src="{src}" alt="{alt}" width="620" height="457" '
             f'contenteditable="false" draggable="false">'
-            f"<figcaption></figcaption></figure>"
+            f"<figcaption>{caption}</figcaption></figure>"
         )
 
     return _IMG_IN_P_PATTERN.sub(replace_img, html)

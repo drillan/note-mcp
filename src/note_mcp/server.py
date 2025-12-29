@@ -292,7 +292,11 @@ async def note_upload_body_image(
         return "セッションが無効です。note_loginでログインしてください。"
 
     image = await upload_body_image(session, file_path, note_id=note_id)
-    return f"本文用画像をアップロードしました。URL: {image.url}\n\nMarkdownで挿入: ![説明]({image.url})"
+    return (
+        f"本文用画像をアップロードしました。URL: {image.url}\n\n"
+        f"Markdownで挿入: ![説明]({image.url})\n"
+        f'キャプション付き: ![説明]({image.url} "キャプションテキスト")'
+    )
 
 
 @mcp.tool()
