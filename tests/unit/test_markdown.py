@@ -19,6 +19,12 @@ class TestMarkdownToHtml:
         assert "<h2 " in result or "<h2>" in result
         assert "Heading 2" in result
 
+    def test_heading_level_3(self) -> None:
+        """Test converting level 3 headings (small heading)."""
+        result = markdown_to_html("### Heading 3")
+        assert "<h3 " in result or "<h3>" in result
+        assert "Heading 3" in result
+
     def test_paragraph_conversion(self) -> None:
         """Test converting paragraphs."""
         result = markdown_to_html("This is a paragraph.")
