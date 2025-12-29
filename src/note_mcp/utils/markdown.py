@@ -80,6 +80,16 @@ def _convert_blockquote_newlines_to_br(html: str) -> str:
     To:
         <blockquote><p>Line 1<br>Line 2</p></blockquote>
 
+    Note: While this generates correct HTML with <br> tags, note.com's API
+    sanitizes <br> tags from blockquote content. This is a server-side
+    limitation. Content created via browser editor preserves <br> tags,
+    but API-submitted content has them stripped.
+
+    Workaround for users: Use separate blockquotes for each line:
+        > Line 1
+
+        > Line 2
+
     Args:
         html: HTML string with blockquotes
 
