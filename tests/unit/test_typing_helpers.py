@@ -1,12 +1,18 @@
 """Unit tests for typing helpers module."""
 
+from unittest.mock import AsyncMock
+
+import pytest
+
 from note_mcp.browser.typing_helpers import (
     _BLOCKQUOTE_PATTERN,
     _CITATION_PATTERN,
     _CITATION_URL_PATTERN,
     _CODE_FENCE_PATTERN,
     _ORDERED_LIST_PATTERN,
+    _STRIKETHROUGH_PATTERN,
     _UNORDERED_LIST_PATTERN,
+    _type_with_strikethrough,
 )
 
 
@@ -236,3 +242,140 @@ class TestCodeFencePattern:
         """Test that code fence with leading space is not matched."""
         match = _CODE_FENCE_PATTERN.match(" ```")
         assert match is None
+
+
+class TestStrikethroughPattern:
+    """Tests for strikethrough pattern detection."""
+
+    def test_matches_strikethrough(self) -> None:
+        """Test that strikethrough is detected."""
+        match = _STRIKETHROUGH_PATTERN.search("~~deleted~~")
+        assert match is not None
+        assert match.group(1) == "deleted"
+
+    def test_matches_strikethrough_in_text(self) -> None:
+        """Test that strikethrough in text is detected."""
+        match = _STRIKETHROUGH_PATTERN.search("This is ~~deleted~~ text")
+        assert match is not None
+        assert match.group(1) == "deleted"
+
+    def test_matches_multiple_strikethroughs(self) -> None:
+        """Test that multiple strikethroughs are detected."""
+        matches = _STRIKETHROUGH_PATTERN.findall("~~first~~ and ~~second~~")
+        assert matches == ["first", "second"]
+
+    def test_matches_japanese_strikethrough(self) -> None:
+        """Test that Japanese text in strikethrough is detected."""
+        match = _STRIKETHROUGH_PATTERN.search("~~削除されたテキスト~~")
+        assert match is not None
+        assert match.group(1) == "削除されたテキスト"
+
+    def test_no_match_for_plain_text(self) -> None:
+        """Test that plain text is not matched."""
+        match = _STRIKETHROUGH_PATTERN.search("Regular text")
+        assert match is None
+
+    def test_no_match_for_single_tilde(self) -> None:
+        """Test that single tilde is not matched."""
+        match = _STRIKETHROUGH_PATTERN.search("~text~")
+        assert match is None
+
+    def test_no_match_for_empty_strikethrough(self) -> None:
+        """Test that empty strikethrough is not matched."""
+        match = _STRIKETHROUGH_PATTERN.search("~~~~")
+        assert match is None
+
+
+class TestTypeWithStrikethrough:
+    """Tests for _type_with_strikethrough function."""
+
+    @pytest.mark.asyncio
+    async def test_empty_text_does_nothing(self) -> None:
+        """Test that empty text results in no keyboard actions."""
+        mock_page = AsyncMock()
+        await _type_with_strikethrough(mock_page, "")
+        mock_page.keyboard.type.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_plain_text_types_directly(self) -> None:
+        """Test that plain text without strikethrough is typed directly."""
+        mock_page = AsyncMock()
+        await _type_with_strikethrough(mock_page, "plain text")
+        mock_page.keyboard.type.assert_called_once_with("plain text")
+
+    @pytest.mark.asyncio
+    async def test_strikethrough_with_trigger_space(self) -> None:
+        """Test that strikethrough patterns trigger space for ProseMirror conversion."""
+        mock_page = AsyncMock()
+        await _type_with_strikethrough(mock_page, "~~deleted~~")
+
+        # Verify: ~~deleted~~ typed, then space for trigger
+        calls = mock_page.keyboard.type.call_args_list
+        assert len(calls) == 2
+        assert calls[0][0][0] == "~~deleted~~"
+        assert calls[1][0][0] == " "
+
+    @pytest.mark.asyncio
+    async def test_strikethrough_with_text_before(self) -> None:
+        """Test strikethrough with text before it."""
+        mock_page = AsyncMock()
+        await _type_with_strikethrough(mock_page, "text ~~deleted~~")
+
+        calls = mock_page.keyboard.type.call_args_list
+        # Should type: "text ", then "~~deleted~~", then " "
+        assert len(calls) == 3
+        assert calls[0][0][0] == "text "
+        assert calls[1][0][0] == "~~deleted~~"
+        assert calls[2][0][0] == " "
+
+    @pytest.mark.asyncio
+    async def test_strikethrough_with_text_after_removes_space(self) -> None:
+        """Test strikethrough with text after removes extra space."""
+        mock_page = AsyncMock()
+        await _type_with_strikethrough(mock_page, "~~deleted~~more")
+
+        # Should type ~~deleted~~, space to trigger, then backspace, then "more"
+        calls = mock_page.keyboard.type.call_args_list
+        assert calls[0][0][0] == "~~deleted~~"
+        assert calls[1][0][0] == " "
+
+        # Verify backspace was pressed to remove extra space
+        mock_page.keyboard.press.assert_called_with("Backspace")
+
+    @pytest.mark.asyncio
+    async def test_strikethrough_with_text_after_starting_with_space(self) -> None:
+        """Test strikethrough followed by space doesn't add backspace."""
+        mock_page = AsyncMock()
+        await _type_with_strikethrough(mock_page, "~~deleted~~ more")
+
+        # The trigger space is already there in input, no backspace needed
+        calls = mock_page.keyboard.type.call_args_list
+        assert calls[0][0][0] == "~~deleted~~"
+        assert calls[1][0][0] == " "
+        assert calls[2][0][0] == " more"
+
+        # No backspace should be called
+        mock_page.keyboard.press.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_multiple_strikethroughs(self) -> None:
+        """Test multiple strikethrough patterns in same text."""
+        mock_page = AsyncMock()
+        await _type_with_strikethrough(mock_page, "~~first~~ and ~~second~~")
+
+        calls = mock_page.keyboard.type.call_args_list
+        # Should be: "~~first~~", " ", " and ", "~~second~~", " "
+        typed_texts = [call[0][0] for call in calls]
+        assert "~~first~~" in typed_texts
+        assert "~~second~~" in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_japanese_strikethrough(self) -> None:
+        """Test strikethrough with Japanese text."""
+        mock_page = AsyncMock()
+        await _type_with_strikethrough(mock_page, "これは~~削除~~です")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        assert "これは" in typed_texts
+        assert "~~削除~~" in typed_texts

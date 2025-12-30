@@ -53,7 +53,6 @@ _IMAGE_FIGURE_PATTERN_ALT = re.compile(
 )
 _UL_PATTERN = re.compile(r"<ul[^>]*>(.*?)</ul>", re.DOTALL | re.IGNORECASE)
 _OL_PATTERN = re.compile(r"<ol[^>]*>(.*?)</ol>", re.DOTALL | re.IGNORECASE)
-_LI_PATTERN = re.compile(r"<li[^>]*>(.*?)</li>", re.DOTALL | re.IGNORECASE)
 
 # Patterns for inline elements
 _LINK_PATTERN = re.compile(
