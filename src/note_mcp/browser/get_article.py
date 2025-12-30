@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from note_mcp.browser.manager import BrowserManager
 from note_mcp.models import Article, ArticleStatus
+from note_mcp.utils.html_to_markdown import html_to_markdown
 
 if TYPE_CHECKING:
     from note_mcp.models import Session
@@ -93,7 +94,7 @@ async def get_article_via_browser(
         except Exception:
             continue
 
-    # Extract body (plain text via innerText to preserve newlines)
+    # Extract body (HTML to Markdown to preserve structure including code blocks)
     body = ""
     body_selectors = [
         ".ProseMirror",
@@ -104,7 +105,8 @@ async def get_article_via_browser(
         try:
             body_element = page.locator(selector).first
             if await body_element.count() > 0:
-                body = await body_element.inner_text()
+                body_html = await body_element.inner_html()
+                body = html_to_markdown(body_html)
                 if body:
                     break
         except Exception:

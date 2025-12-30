@@ -4,6 +4,7 @@ from note_mcp.browser.typing_helpers import (
     _BLOCKQUOTE_PATTERN,
     _CITATION_PATTERN,
     _CITATION_URL_PATTERN,
+    _CODE_FENCE_PATTERN,
     _ORDERED_LIST_PATTERN,
     _UNORDERED_LIST_PATTERN,
 )
@@ -193,3 +194,45 @@ class TestCitationExtractionWorkflow:
         assert url_match is None
         # When no URL, use citation text as-is
         assert citation == "フランシス・ベーコン"
+
+
+class TestCodeFencePattern:
+    """Tests for code fence pattern detection."""
+
+    def test_matches_plain_code_fence(self) -> None:
+        """Test that plain code fence is detected."""
+        match = _CODE_FENCE_PATTERN.match("```")
+        assert match is not None
+        assert match.group(1) == ""
+
+    def test_matches_code_fence_with_language(self) -> None:
+        """Test that code fence with language is detected."""
+        match = _CODE_FENCE_PATTERN.match("```python")
+        assert match is not None
+        assert match.group(1) == "python"
+
+    def test_matches_code_fence_with_javascript(self) -> None:
+        """Test that code fence with javascript is detected."""
+        match = _CODE_FENCE_PATTERN.match("```javascript")
+        assert match is not None
+        assert match.group(1) == "javascript"
+
+    def test_no_match_with_text_after_language(self) -> None:
+        """Test that code fence with text after language is not matched."""
+        match = _CODE_FENCE_PATTERN.match("```python code here")
+        assert match is None
+
+    def test_no_match_for_inline_code(self) -> None:
+        """Test that inline code is not matched."""
+        match = _CODE_FENCE_PATTERN.match("`code`")
+        assert match is None
+
+    def test_no_match_for_plain_text(self) -> None:
+        """Test that plain text is not matched."""
+        match = _CODE_FENCE_PATTERN.match("Regular text")
+        assert match is None
+
+    def test_no_match_with_leading_space(self) -> None:
+        """Test that code fence with leading space is not matched."""
+        match = _CODE_FENCE_PATTERN.match(" ```")
+        assert match is None
