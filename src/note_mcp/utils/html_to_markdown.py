@@ -6,6 +6,7 @@ This is the reverse operation of markdown_to_html.
 
 import html
 import re
+from collections.abc import Callable
 
 # Pre-compiled regex patterns for basic elements
 # Match <pre><code>...</code></pre> with or without class="codeBlock"
@@ -23,7 +24,7 @@ _PARAGRAPH_PATTERN = re.compile(
 )
 _HR_PATTERN = re.compile(r"<hr[^>]*/?>", re.IGNORECASE)
 
-# Patterns for complex elements (Chunk 3)
+# Patterns for complex elements
 _BLOCKQUOTE_FIGURE_PATTERN = re.compile(
     r"<figure[^>]*>\s*<blockquote[^>]*>(.*?)</blockquote>\s*"
     r"<figcaption>(.*?)</figcaption>\s*</figure>",
@@ -49,7 +50,7 @@ _UL_PATTERN = re.compile(r"<ul[^>]*>(.*?)</ul>", re.DOTALL | re.IGNORECASE)
 _OL_PATTERN = re.compile(r"<ol[^>]*>(.*?)</ol>", re.DOTALL | re.IGNORECASE)
 _LI_PATTERN = re.compile(r"<li[^>]*>(.*?)</li>", re.DOTALL | re.IGNORECASE)
 
-# Patterns for inline elements (Chunk 4)
+# Patterns for inline elements
 _LINK_PATTERN = re.compile(
     r'<a\s+href="([^"]+)"[^>]*>(.*?)</a>',
     re.DOTALL | re.IGNORECASE,
@@ -58,14 +59,11 @@ _STRONG_PATTERN = re.compile(r"<strong>(.*?)</strong>", re.DOTALL | re.IGNORECAS
 _EM_PATTERN = re.compile(r"<em>(.*?)</em>", re.DOTALL | re.IGNORECASE)
 _INLINE_CODE_PATTERN = re.compile(r"<code>(.*?)</code>", re.DOTALL | re.IGNORECASE)
 
-# Cleanup patterns (Chunk 5)
+# Cleanup patterns
 _UUID_ATTR_PATTERN = re.compile(
     r'\s(?:name|id)="[a-f0-9-]{36}"',
     re.IGNORECASE,
 )
-
-# Module-level storage for code blocks (cleared per conversion)
-_code_blocks: list[str] = []
 
 
 def _strip_fence_markers(code: str) -> str:
@@ -97,16 +95,28 @@ def _strip_fence_markers(code: str) -> str:
     return code.strip()
 
 
-def _extract_code_block(match: re.Match[str]) -> str:
-    """Extract code block and replace with placeholder."""
-    code = match.group(1)
-    code = html.unescape(code)
-    # Remove any remaining fence markers (``` at start/end)
-    code = _strip_fence_markers(code)
-    # Include trailing newlines for proper paragraph separation
-    block = f"```\n{code}\n```\n\n"
-    _code_blocks.append(block)
-    return f"__CODE_BLOCK_{len(_code_blocks) - 1}__"
+def _create_code_block_extractor(code_blocks: list[str]) -> Callable[[re.Match[str]], str]:
+    """Create a code block extractor closure with local storage.
+
+    Args:
+        code_blocks: List to store extracted code blocks (mutated in place)
+
+    Returns:
+        A function that extracts code blocks and returns placeholders
+    """
+
+    def extract_code_block(match: re.Match[str]) -> str:
+        """Extract code block and replace with placeholder."""
+        code = match.group(1)
+        code = html.unescape(code)
+        # Remove any remaining fence markers (``` at start/end)
+        code = _strip_fence_markers(code)
+        # Include trailing newlines for proper paragraph separation
+        block = f"```\n{code}\n```\n\n"
+        code_blocks.append(block)
+        return f"__CODE_BLOCK_{len(code_blocks) - 1}__"
+
+    return extract_code_block
 
 
 def _convert_heading(match: re.Match[str]) -> str:
@@ -375,16 +385,17 @@ def html_to_markdown(html_content: str) -> str:
     Returns:
         Markdown formatted text
     """
-    global _code_blocks
-    _code_blocks = []  # Reset for each conversion
-
     if not html_content or not html_content.strip():
         return ""
+
+    # Use local storage for code blocks (thread-safe)
+    code_blocks: list[str] = []
+    extract_code_block = _create_code_block_extractor(code_blocks)
 
     result = html_content
 
     # 1. コードブロック（プレースホルダーで保護）
-    result = _CODE_BLOCK_PATTERN.sub(_extract_code_block, result)
+    result = _CODE_BLOCK_PATTERN.sub(extract_code_block, result)
 
     # 2. figure要素（blockquoteとimageを先に処理）
     result = _BLOCKQUOTE_FIGURE_PATTERN.sub(_convert_blockquote_figure, result)
@@ -409,7 +420,7 @@ def html_to_markdown(html_content: str) -> str:
     # === 最終処理 ===
 
     # プレースホルダー復元（コードブロック）
-    for i, block in enumerate(_code_blocks):
+    for i, block in enumerate(code_blocks):
         result = result.replace(f"__CODE_BLOCK_{i}__", block)
 
     # UUID属性削除（残存する場合のクリーンアップ）

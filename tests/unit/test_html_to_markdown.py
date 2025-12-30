@@ -1,7 +1,6 @@
 """Unit tests for HTML to Markdown conversion utility.
 
 Tests for html_to_markdown function that converts note.com HTML format back to Markdown.
-Created as TDD Red Phase - tests will fail until implementation is complete.
 """
 
 from note_mcp.utils.html_to_markdown import html_to_markdown

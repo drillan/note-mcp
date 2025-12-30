@@ -6,12 +6,15 @@ Uses Playwright to retrieve article content via the note.com editor interface.
 from __future__ import annotations
 
 import asyncio
-import contextlib
+import logging
 from typing import TYPE_CHECKING, Any
 
 from note_mcp.browser.manager import BrowserManager
+from note_mcp.browser.url_helpers import validate_article_edit_url
 from note_mcp.models import Article, ArticleStatus
 from note_mcp.utils.html_to_markdown import html_to_markdown
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from note_mcp.models import Session
@@ -60,20 +63,23 @@ async def get_article_via_browser(
     await page.goto(edit_url, wait_until="domcontentloaded")
 
     # Wait for network to be idle (all initial requests completed)
-    with contextlib.suppress(Exception):
+    try:
         await page.wait_for_load_state("networkidle", timeout=10000)
+    except Exception as e:
+        logger.warning(f"Network idle wait interrupted for article {article_id}: {type(e).__name__}: {e}")
 
     await asyncio.sleep(2)  # Additional wait for JavaScript initialization
 
     # Check if we're on the right page (allow various redirect patterns)
     current_url = page.url
-    valid_patterns = [f"/notes/{article_id}", f"/n/{article_id}", "editor.note.com"]
-    if not any(pattern in current_url for pattern in valid_patterns):
+    if not validate_article_edit_url(current_url, article_id):
         raise RuntimeError(f"Failed to navigate to article edit page. Current URL: {current_url}")
 
     # Wait for the editor to be fully ready
-    with contextlib.suppress(Exception):
+    try:
         await page.wait_for_selector(".ProseMirror", state="visible", timeout=10000)
+    except Exception as e:
+        logger.warning(f"Editor selector wait interrupted for article {article_id}: {type(e).__name__}: {e}")
 
     await asyncio.sleep(1)  # Wait for editor initialization to complete
 
@@ -91,7 +97,8 @@ async def get_article_via_browser(
                 title = await title_element.input_value()
                 if title:
                     break
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Title selector '{selector}' failed: {type(e).__name__}: {e}")
             continue
 
     # Extract body (HTML to Markdown to preserve structure including code blocks)
@@ -109,8 +116,15 @@ async def get_article_via_browser(
                 body = html_to_markdown(body_html)
                 if body:
                     break
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Body selector '{selector}' failed: {type(e).__name__}: {e}")
             continue
+
+    # Warn if title or body extraction failed
+    if not title:
+        logger.warning(f"Failed to extract title for article {article_id}")
+    if not body:
+        logger.warning(f"Failed to extract body for article {article_id}")
 
     # Return Article with extracted content
     return Article(

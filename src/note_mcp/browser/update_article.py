@@ -6,12 +6,15 @@ Uses Playwright to update articles via the note.com web interface.
 from __future__ import annotations
 
 import asyncio
-import contextlib
+import logging
 from typing import TYPE_CHECKING, Any
 
 from note_mcp.browser.manager import BrowserManager
 from note_mcp.browser.typing_helpers import type_markdown_content
+from note_mcp.browser.url_helpers import validate_article_edit_url
 from note_mcp.models import Article, ArticleStatus
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from note_mcp.models import ArticleInput, Session
@@ -63,20 +66,23 @@ async def update_article_via_browser(
     await page.goto(edit_url, wait_until="domcontentloaded")
 
     # Wait for network to be idle (all initial requests completed)
-    with contextlib.suppress(Exception):
+    try:
         await page.wait_for_load_state("networkidle", timeout=10000)
+    except Exception as e:
+        logger.warning(f"Network idle wait interrupted for article {article_id}: {type(e).__name__}: {e}")
 
     await asyncio.sleep(2)  # Additional wait for JavaScript initialization
 
     # Check if we're on the right page (allow various redirect patterns)
     current_url = page.url
-    valid_patterns = [f"/notes/{article_id}", f"/n/{article_id}", "editor.note.com"]
-    if not any(pattern in current_url for pattern in valid_patterns):
+    if not validate_article_edit_url(current_url, article_id):
         raise RuntimeError(f"Failed to navigate to article edit page. Current URL: {current_url}")
 
     # Wait for the editor to be fully ready
-    with contextlib.suppress(Exception):
+    try:
         await page.wait_for_selector(".ProseMirror", state="visible", timeout=10000)
+    except Exception as e:
+        logger.warning(f"Editor selector wait interrupted for article {article_id}: {type(e).__name__}: {e}")
 
     await asyncio.sleep(2)  # Wait for editor initialization to complete
 
@@ -97,7 +103,8 @@ async def update_article_via_browser(
                 await title_element.fill(article_input.title)
                 title_filled = True
                 break
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Title selector '{selector}' failed: {type(e).__name__}: {e}")
             continue
 
     if not title_filled:
@@ -105,8 +112,9 @@ async def update_article_via_browser(
             await page.keyboard.press("Tab")
             await page.keyboard.press("Control+a")
             await page.keyboard.type(article_input.title)
-        except Exception:
-            pass
+            title_filled = True
+        except Exception as e:
+            logger.warning(f"Title fill fallback failed for article {article_id}: {type(e).__name__}: {e}")
 
     # Fill the body
     await asyncio.sleep(0.5)
@@ -128,7 +136,8 @@ async def update_article_via_browser(
                 await type_markdown_content(page, article_input.body)
                 body_filled = True
                 break
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Body selector '{selector}' failed: {type(e).__name__}: {e}")
             continue
 
     if not body_filled:
@@ -137,8 +146,9 @@ async def update_article_via_browser(
             await page.keyboard.press("Control+a")
             await page.keyboard.press("Delete")
             await type_markdown_content(page, article_input.body)
-        except Exception:
-            pass
+            body_filled = True
+        except Exception as e:
+            logger.warning(f"Body fill fallback failed for article {article_id}: {type(e).__name__}: {e}")
 
     # Click save draft button explicitly instead of relying on auto-save
     await asyncio.sleep(1)
@@ -149,15 +159,21 @@ async def update_article_via_browser(
         'button:has-text("保存")',
         ".save-button",
     ]
+    save_clicked = False
     for selector in save_button_selectors:
         try:
             save_button = page.locator(selector).first
             if await save_button.count() > 0:
                 await save_button.click()
                 await asyncio.sleep(2)  # Wait for save to complete
+                save_clicked = True
                 break
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Save button selector '{selector}' failed: {type(e).__name__}: {e}")
             continue
+
+    if not save_clicked:
+        logger.warning(f"Failed to click save button for article {article_id}. Changes may not be saved.")
 
     # Wait for save confirmation
     await asyncio.sleep(2)

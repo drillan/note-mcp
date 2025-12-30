@@ -7,11 +7,14 @@ with proper handling for lists, blockquotes, citations, and code blocks.
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
+
+logger = logging.getLogger(__name__)
 
 # Regex patterns for Markdown list, blockquote, and code block detection
 _UNORDERED_LIST_PATTERN = re.compile(r"^[-*+]\s+(.*)$")
@@ -87,6 +90,8 @@ async def _input_citation_to_figcaption(page: Any, citation: str) -> None:
         await page.keyboard.type(citation_text)
         # Wait for input to be processed
         await asyncio.sleep(0.1)
+    else:
+        logger.warning(f"Failed to find figcaption element for citation: {citation_text}")
 
 
 async def type_markdown_content(page: Any, content: str) -> None:
@@ -104,9 +109,9 @@ async def type_markdown_content(page: Any, content: str) -> None:
     - "— Source" becomes figcaption text
     - "— Source (URL)" becomes figcaption with link
 
-    For code blocks, typing "```" triggers code block mode.
+    For code blocks, typing "``` " (with space) triggers code block mode.
     The content is typed directly without fence markers, and the block
-    is exited by pressing Enter twice or using arrow keys.
+    is exited by pressing ArrowDown multiple times to move past the block.
 
     Args:
         page: Playwright page object
