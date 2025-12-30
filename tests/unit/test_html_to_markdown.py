@@ -307,3 +307,18 @@ y = 2
         # Count fence markers - should be exactly 2 (opening and closing)
         fence_count = result.count("```")
         assert fence_count == 2, f"Expected 2 fence markers, got {fence_count}"
+
+    # Strikethrough tests - Issue #25
+
+    def test_strikethrough_conversion(self) -> None:
+        """Test converting strikethrough HTML to markdown."""
+        html = '<p name="abc">This is <s>deleted</s> text.</p>'
+        result = html_to_markdown(html)
+        assert "~~deleted~~" in result
+
+    def test_roundtrip_strikethrough(self) -> None:
+        """Test strikethrough survives roundtrip conversion."""
+        original = "This is ~~deleted~~ text."
+        html = markdown_to_html(original)
+        result = html_to_markdown(html)
+        assert "~~deleted~~" in result

@@ -383,3 +383,24 @@ def hello():
         result = markdown_to_html(markdown)
         # Empty citation should result in empty figcaption
         assert "<figcaption></figcaption>" in result
+
+    # Strikethrough tests - Issue #25
+
+    def test_strikethrough_conversion(self) -> None:
+        """Test converting strikethrough text."""
+        result = markdown_to_html("This is ~~deleted~~ text.")
+        assert "<s>" in result
+        assert "deleted" in result
+        assert "</s>" in result
+
+    def test_strikethrough_with_bold(self) -> None:
+        """Test strikethrough combined with bold."""
+        result = markdown_to_html("**~~bold and deleted~~**")
+        assert "<strong>" in result
+        assert "<s>" in result
+
+    def test_strikethrough_multiple(self) -> None:
+        """Test multiple strikethrough in same line."""
+        result = markdown_to_html("~~first~~ and ~~second~~")
+        assert result.count("<s>") == 2
+        assert result.count("</s>") == 2
