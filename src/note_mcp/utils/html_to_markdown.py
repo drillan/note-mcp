@@ -14,6 +14,11 @@ _CODE_BLOCK_PATTERN = re.compile(
     r"<pre[^>]*><code>(.*?)</code></pre>",
     re.DOTALL | re.IGNORECASE,
 )
+# Match <pre>...</pre> without <code> tag (fallback for some note.com formats)
+_PRE_ONLY_PATTERN = re.compile(
+    r"<pre[^>]*>(?!<code>)(.*?)</pre>",
+    re.DOTALL | re.IGNORECASE,
+)
 _HEADING_PATTERN = re.compile(
     r"<(h[1-6])[^>]*>(.*?)</\1>",
     re.IGNORECASE | re.DOTALL,
@@ -177,50 +182,64 @@ def _convert_image_figure(match: re.Match[str], alt_first: bool = False) -> str:
     return f"![{alt}]({src})\n\n"
 
 
-def _find_matching_li_tags(html_content: str) -> list[str]:
-    """Find all top-level <li> elements, properly handling nested lists.
+def _find_matching_tags(
+    html_content: str,
+    tag_name: str,
+) -> list[tuple[str, int, int]]:
+    """Find all top-level matching tag pairs with proper nesting support.
 
-    This manually tracks open/close tag depth to avoid regex issues with nested lists.
+    Args:
+        html_content: HTML string to search
+        tag_name: Tag name to find (e.g., "li", "ul")
+
+    Returns:
+        List of (content, start_pos, end_pos) tuples for each match
     """
-    items: list[str] = []
+    results: list[tuple[str, int, int]] = []
+    open_tag = f"<{tag_name}"
+    close_tag = f"</{tag_name}>"
     pos = 0
-    while True:
-        # Find next <li> opening tag
-        li_start = html_content.find("<li", pos)
-        if li_start == -1:
+
+    while pos < len(html_content):
+        # Find opening tag
+        tag_start = html_content.find(open_tag, pos)
+        if tag_start == -1:
             break
 
         # Find the > that closes the opening tag
-        tag_end = html_content.find(">", li_start)
+        tag_end = html_content.find(">", tag_start)
         if tag_end == -1:
             break
 
-        # Now find the matching </li> - track nesting depth
+        # Track depth to find matching close tag
         depth = 1
         search_pos = tag_end + 1
+
         while depth > 0 and search_pos < len(html_content):
-            next_open = html_content.find("<li", search_pos)
-            next_close = html_content.find("</li>", search_pos)
+            next_open = html_content.find(open_tag, search_pos)
+            next_close = html_content.find(close_tag, search_pos)
 
             if next_close == -1:
-                break  # No closing tag found
+                break
 
             if next_open != -1 and next_open < next_close:
-                # Found nested <li> before </li>
                 depth += 1
-                search_pos = next_open + 3
+                search_pos = next_open + len(open_tag)
             else:
-                # Found </li>
                 depth -= 1
                 if depth == 0:
-                    # This is our matching </li>
-                    li_content = html_content[tag_end + 1 : next_close]
-                    items.append(li_content)
-                search_pos = next_close + 5
+                    content = html_content[tag_end + 1 : next_close]
+                    results.append((content, tag_start, next_close + len(close_tag)))
+                search_pos = next_close + len(close_tag)
 
         pos = search_pos
 
-    return items
+    return results
+
+
+def _find_matching_li_tags(html_content: str) -> list[str]:
+    """Find all top-level <li> elements, properly handling nested lists."""
+    return [content for content, _, _ in _find_matching_tags(html_content, "li")]
 
 
 def _convert_list(html_content: str, ordered: bool = False, indent_level: int = 0) -> str:
@@ -281,43 +300,8 @@ def _find_matching_tag_content(html_content: str, tag_name: str) -> tuple[str, i
 
     Returns (content, start_pos, end_pos) or None if not found.
     """
-    open_tag = f"<{tag_name}"
-    close_tag = f"</{tag_name}>"
-
-    # Find opening tag
-    tag_start = html_content.find(open_tag)
-    if tag_start == -1:
-        return None
-
-    # Find the > that closes the opening tag
-    tag_end = html_content.find(">", tag_start)
-    if tag_end == -1:
-        return None
-
-    # Now find the matching closing tag - track nesting depth
-    depth = 1
-    search_pos = tag_end + 1
-    while depth > 0 and search_pos < len(html_content):
-        next_open = html_content.find(open_tag, search_pos)
-        next_close = html_content.find(close_tag, search_pos)
-
-        if next_close == -1:
-            return None  # No closing tag found
-
-        if next_open != -1 and next_open < next_close:
-            # Found nested opening tag before closing tag
-            depth += 1
-            search_pos = next_open + len(open_tag)
-        else:
-            # Found closing tag
-            depth -= 1
-            if depth == 0:
-                # This is our matching closing tag
-                content = html_content[tag_end + 1 : next_close]
-                return (content, tag_start, next_close + len(close_tag))
-            search_pos = next_close + len(close_tag)
-
-    return None
+    results = _find_matching_tags(html_content, tag_name)
+    return results[0] if results else None
 
 
 def _convert_all_lists(html_content: str) -> str:
@@ -396,6 +380,8 @@ def html_to_markdown(html_content: str) -> str:
 
     # 1. コードブロック（プレースホルダーで保護）
     result = _CODE_BLOCK_PATTERN.sub(extract_code_block, result)
+    # Also handle <pre> without <code> tag (some note.com formats)
+    result = _PRE_ONLY_PATTERN.sub(extract_code_block, result)
 
     # 2. figure要素（blockquoteとimageを先に処理）
     result = _BLOCKQUOTE_FIGURE_PATTERN.sub(_convert_blockquote_figure, result)

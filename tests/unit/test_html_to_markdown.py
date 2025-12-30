@@ -293,3 +293,17 @@ y = 2
         # Count fence markers - should be exactly 2 (opening and closing)
         fence_count = result.count("```")
         assert fence_count == 2, f"Expected 2 fence markers, got {fence_count}"
+
+    def test_code_block_pre_without_code_tag(self) -> None:
+        """Test <pre> without <code> tag (some note.com ProseMirror formats)."""
+        html = """<pre>def hello():
+    print("Hello")
+</pre>"""
+        result = html_to_markdown(html)
+        # Should have fence markers
+        assert "```" in result
+        assert "def hello():" in result
+        assert 'print("Hello")' in result
+        # Count fence markers - should be exactly 2 (opening and closing)
+        fence_count = result.count("```")
+        assert fence_count == 2, f"Expected 2 fence markers, got {fence_count}"

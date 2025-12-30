@@ -23,6 +23,55 @@ if TYPE_CHECKING:
     pass
 
 
+def _normalize_tags(tags: list[str] | None) -> list[dict[str, Any]] | None:
+    """Normalize tags to API format.
+
+    Removes leading '#' and converts to hashtag dict format.
+
+    Args:
+        tags: List of tags (may include '#' prefix)
+
+    Returns:
+        List of hashtag dicts for API, or None if no tags
+    """
+    if not tags:
+        return None
+    normalized = [tag.lstrip("#") for tag in tags]
+    return [{"hashtag": {"name": tag}} for tag in normalized]
+
+
+def _build_article_payload(
+    article_input: ArticleInput,
+    html_body: str | None = None,
+    include_body: bool = True,
+) -> dict[str, Any]:
+    """Build common article payload for API requests.
+
+    Args:
+        article_input: Article content and metadata
+        html_body: Pre-converted HTML body (optional)
+        include_body: Whether to include body in payload
+
+    Returns:
+        Payload dict for note.com API
+    """
+    payload: dict[str, Any] = {
+        "name": article_input.title,
+        "index": False,
+        "is_lead_form": False,
+    }
+
+    if include_body and html_body is not None:
+        payload["body"] = html_body
+        payload["body_length"] = len(article_input.body)
+
+    hashtags = _normalize_tags(article_input.tags)
+    if hashtags:
+        payload["hashtags"] = hashtags
+
+    return payload
+
+
 async def create_draft(
     session: Session,
     article_input: ArticleInput,
@@ -54,20 +103,8 @@ async def create_draft(
     # Convert Markdown to HTML for API
     html_body = markdown_to_html(article_input.body)
 
-    # Calculate body length (character count, not byte count)
-    body_length = len(article_input.body)
-
-    # Payload for initial article creation (without body to avoid sanitization)
-    create_payload: dict[str, Any] = {
-        "name": article_input.title,
-        "index": False,
-        "is_lead_form": False,
-    }
-
-    # Add tags if present
-    if article_input.tags:
-        normalized_tags = [tag.lstrip("#") for tag in article_input.tags]
-        create_payload["hashtags"] = [{"hashtag": {"name": tag}} for tag in normalized_tags]
+    # Step 1 payload: without body to avoid sanitization
+    create_payload = _build_article_payload(article_input, include_body=False)
 
     async with NoteAPIClient(session) as client:
         # Step 1: Create the article entry (without body)
@@ -81,15 +118,7 @@ async def create_draft(
         if article_id:
             # Step 2: Save the body content with draft_save
             # This endpoint preserves <br> tags unlike /v1/text_notes
-            save_payload: dict[str, Any] = {
-                "name": article_input.title,
-                "body": html_body,
-                "body_length": body_length,
-                "index": False,
-                "is_lead_form": False,
-            }
-            if article_input.tags:
-                save_payload["hashtags"] = create_payload["hashtags"]
+            save_payload = _build_article_payload(article_input, html_body)
 
             await client.post(
                 f"/v1/text_notes/draft_save?id={article_id}&is_temp_saved=true",
@@ -127,22 +156,8 @@ async def update_article(
     # Convert Markdown to HTML for API
     html_body = markdown_to_html(article_input.body)
 
-    # Build payload matching note.com editor format
-    # Calculate body length (character count, not byte count)
-    body_length = len(article_input.body)
-
-    payload: dict[str, Any] = {
-        "name": article_input.title,
-        "body": html_body,
-        "body_length": body_length,
-        "index": False,
-        "is_lead_form": False,
-    }
-
-    # Add tags if present
-    if article_input.tags:
-        normalized_tags = [tag.lstrip("#") for tag in article_input.tags]
-        payload["hashtags"] = [{"hashtag": {"name": tag}} for tag in normalized_tags]
+    # Build payload using helper
+    payload = _build_article_payload(article_input, html_body)
 
     async with NoteAPIClient(session) as client:
         # Use draft_save endpoint with POST (not PUT)
@@ -289,9 +304,9 @@ async def publish_article(
             }
 
             # Add tags if present
-            if article_input.tags:
-                normalized_tags = [tag.lstrip("#") for tag in article_input.tags]
-                payload["hashtags"] = [{"hashtag": {"name": tag}} for tag in normalized_tags]
+            hashtags = _normalize_tags(article_input.tags)
+            if hashtags:
+                payload["hashtags"] = hashtags
 
             response = await client.post("/v3/notes", json=payload)
 

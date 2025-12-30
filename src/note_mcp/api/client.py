@@ -123,6 +123,65 @@ class NoteAPIClient:
         """Track a request for rate limiting."""
         self._request_times.append(time.time())
 
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
+        files: dict[str, Any] | None = None,
+        include_xsrf: bool = False,
+    ) -> dict[str, Any]:
+        """Make an HTTP request to the API.
+
+        Centralizes: init check, rate limit, tracking, headers, error handling.
+
+        Args:
+            method: HTTP method (GET, POST, PUT, DELETE)
+            path: API endpoint path
+            params: Query parameters
+            json: JSON body
+            data: Form data
+            files: Files to upload
+            include_xsrf: Whether to include X-XSRF-TOKEN header
+
+        Returns:
+            JSON response as dictionary
+
+        Raises:
+            RuntimeError: If client not initialized
+            NoteAPIError: If request fails
+        """
+        if self._client is None:
+            raise RuntimeError("Client not initialized. Use 'async with' context manager.")
+
+        await self._check_rate_limit()
+        self._track_request()
+
+        headers = self._build_headers(include_xsrf=include_xsrf)
+
+        # Set Content-Type for JSON requests (not multipart)
+        if json is not None and files is None:
+            headers["Content-Type"] = "application/json"
+
+        request_method = getattr(self._client, method.lower())
+        response = await request_method(
+            path,
+            headers=headers,
+            params=params,
+            json=json,
+            data=data,
+            files=files,
+        )
+
+        if not response.is_success:
+            self._handle_error_response(response)
+
+        result: dict[str, Any] = response.json()
+        return result
+
     def _handle_error_response(self, response: httpx.Response) -> None:
         """Handle error responses from the API.
 
@@ -189,20 +248,7 @@ class NoteAPIClient:
         Raises:
             NoteAPIError: If request fails
         """
-        if self._client is None:
-            raise RuntimeError("Client not initialized. Use 'async with' context manager.")
-
-        await self._check_rate_limit()
-        self._track_request()
-
-        headers = self._build_headers()
-        response = await self._client.get(path, headers=headers, params=params)
-
-        if not response.is_success:
-            self._handle_error_response(response)
-
-        result: dict[str, Any] = response.json()
-        return result
+        return await self._request("GET", path, params=params)
 
     async def post(
         self,
@@ -225,31 +271,7 @@ class NoteAPIClient:
         Raises:
             NoteAPIError: If request fails
         """
-        if self._client is None:
-            raise RuntimeError("Client not initialized. Use 'async with' context manager.")
-
-        await self._check_rate_limit()
-        self._track_request()
-
-        headers = self._build_headers(include_xsrf=True)
-
-        # Don't set Content-Type for multipart (httpx handles it)
-        if json is not None:
-            headers["Content-Type"] = "application/json"
-
-        response = await self._client.post(
-            path,
-            headers=headers,
-            json=json,
-            data=data,
-            files=files,
-        )
-
-        if not response.is_success:
-            self._handle_error_response(response)
-
-        result: dict[str, Any] = response.json()
-        return result
+        return await self._request("POST", path, json=json, data=data, files=files, include_xsrf=True)
 
     async def put(
         self,
@@ -268,23 +290,7 @@ class NoteAPIClient:
         Raises:
             NoteAPIError: If request fails
         """
-        if self._client is None:
-            raise RuntimeError("Client not initialized. Use 'async with' context manager.")
-
-        await self._check_rate_limit()
-        self._track_request()
-
-        headers = self._build_headers(include_xsrf=True)
-        if json is not None:
-            headers["Content-Type"] = "application/json"
-
-        response = await self._client.put(path, headers=headers, json=json)
-
-        if not response.is_success:
-            self._handle_error_response(response)
-
-        result: dict[str, Any] = response.json()
-        return result
+        return await self._request("PUT", path, json=json, include_xsrf=True)
 
     async def delete(self, path: str) -> dict[str, Any]:
         """Make a DELETE request to the API.
@@ -298,17 +304,4 @@ class NoteAPIClient:
         Raises:
             NoteAPIError: If request fails
         """
-        if self._client is None:
-            raise RuntimeError("Client not initialized. Use 'async with' context manager.")
-
-        await self._check_rate_limit()
-        self._track_request()
-
-        headers = self._build_headers(include_xsrf=True)
-        response = await self._client.delete(path, headers=headers)
-
-        if not response.is_success:
-            self._handle_error_response(response)
-
-        result: dict[str, Any] = response.json()
-        return result
+        return await self._request("DELETE", path, include_xsrf=True)
