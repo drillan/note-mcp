@@ -316,3 +316,70 @@ def hello():
         """Test images with empty caption (title="")."""
         result = markdown_to_html('![Alt](https://example.com/img.png "")')
         assert "<figcaption></figcaption>" in result
+
+    # Citation (出典) tests - Issue #14
+
+    def test_blockquote_without_citation(self) -> None:
+        """Test that blockquotes without citation have empty figcaption."""
+        result = markdown_to_html("> Just a quote")
+        assert "<figcaption></figcaption>" in result
+
+    def test_blockquote_with_citation_text_only(self) -> None:
+        """Test blockquote with citation text only (no URL).
+
+        Markdown:
+            > 知識は力なり
+            > — フランシス・ベーコン
+
+        Expected: figcaption contains citation text.
+        """
+        markdown = """> 知識は力なり
+> — フランシス・ベーコン"""
+        result = markdown_to_html(markdown)
+        assert "<figcaption>フランシス・ベーコン</figcaption>" in result
+        assert "知識は力なり" in result
+        # Citation line should NOT appear in blockquote content
+        blockquote_content = result.split("<blockquote>")[1].split("</blockquote>")[0]
+        assert "— フランシス・ベーコン" not in blockquote_content
+
+    def test_blockquote_with_citation_and_url(self) -> None:
+        """Test blockquote with citation text and URL.
+
+        Markdown:
+            > 知識は力なり
+            > — フランシス・ベーコン (https://example.com)
+
+        Expected: figcaption contains link with citation text.
+        """
+        markdown = """> 知識は力なり
+> — フランシス・ベーコン (https://example.com)"""
+        result = markdown_to_html(markdown)
+        assert '<figcaption><a href="https://example.com">フランシス・ベーコン</a></figcaption>' in result
+
+    def test_blockquote_multiline_with_citation(self) -> None:
+        """Test multiline blockquote with citation on last line."""
+        markdown = """> Line 1
+> Line 2
+> — Source"""
+        result = markdown_to_html(markdown)
+        assert "Line 1" in result
+        assert "Line 2" in result
+        assert "<figcaption>Source</figcaption>" in result
+        # Citation line should NOT be in blockquote
+        blockquote_content = result.split("<blockquote>")[1].split("</blockquote>")[0]
+        assert "— Source" not in blockquote_content
+
+    def test_blockquote_em_dash_not_at_start(self) -> None:
+        """Test that em-dash not at line start is not treated as citation."""
+        result = markdown_to_html("> Text with — em-dash in middle")
+        # Should NOT extract as citation
+        assert "<figcaption></figcaption>" in result
+        assert "em-dash" in result
+
+    def test_blockquote_citation_empty_text(self) -> None:
+        """Test blockquote with only em-dash (no citation text)."""
+        markdown = """> Quote
+> — """
+        result = markdown_to_html(markdown)
+        # Empty citation should result in empty figcaption
+        assert "<figcaption></figcaption>" in result
