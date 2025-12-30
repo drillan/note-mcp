@@ -17,8 +17,8 @@ if TYPE_CHECKING:
     from note_mcp.models import ArticleInput, Session
 
 
-# note.com editor URL
-NOTE_EDITOR_URL = "https://editor.note.com"
+# note.com edit URL (accessed via note.com for proper auth flow)
+NOTE_EDIT_URL = "https://note.com/notes"
 
 
 async def update_article_via_browser(
@@ -59,7 +59,7 @@ async def update_article_via_browser(
     await page.context.add_cookies(playwright_cookies)  # type: ignore[arg-type]
 
     # Navigate to article edit page
-    edit_url = f"{NOTE_EDITOR_URL}/notes/{article_id}/edit/"
+    edit_url = f"{NOTE_EDIT_URL}/{article_id}/edit"
     await page.goto(edit_url, wait_until="domcontentloaded")
 
     # Wait for network to be idle (all initial requests completed)
@@ -68,9 +68,10 @@ async def update_article_via_browser(
 
     await asyncio.sleep(2)  # Additional wait for JavaScript initialization
 
-    # Check if we're on the right page
+    # Check if we're on the right page (allow various redirect patterns)
     current_url = page.url
-    if article_id not in current_url:
+    valid_patterns = [f"/notes/{article_id}", f"/n/{article_id}", "editor.note.com"]
+    if not any(pattern in current_url for pattern in valid_patterns):
         raise RuntimeError(f"Failed to navigate to article edit page. Current URL: {current_url}")
 
     # Wait for the editor to be fully ready
