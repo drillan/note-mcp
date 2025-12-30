@@ -219,3 +219,6 @@ __marimo__/
 /debug
 # MCP configuration (user-specific)
 .mcp.json
+
+# mitmproxy capture files
+*.flow
