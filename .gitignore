@@ -222,3 +222,6 @@ __marimo__/
 
 # mitmproxy capture files
 *.flow
+
+# working directories
+/ai_working

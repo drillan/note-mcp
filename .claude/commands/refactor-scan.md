@@ -8,17 +8,17 @@ description: similarity-pyを使った重複コード検出とチーム共有可
 $ARGUMENTS
 ```
 
-出力ファイルパスやスキャンオプションを指定できます。未指定の場合は`plans/duplication-analysis-[日付].md`に保存されます。
+出力ファイルパスやスキャンオプションを指定できます。未指定の場合は`ai_working/duplication-analysis-[日付].md`に保存されます。
 
 ## Goal
 
-similarity-pyを使用してコードベースの重複を検出し、優先度付けされたリファクタリング提案を含むMarkdownレポートを生成します。憲法Article 10（DRY原則）、Article 11（リファクタリングポリシー）に基づいて分析し、チームで共有可能な形式で保存します。
+similarity-pyを使用してコードベースの重複を検出し、優先度付けされたリファクタリング提案を含むMarkdownレポートを生成します。憲法Article 7（DRY原則）、Article 8（リファクタリングポリシー）に基づいて分析し、チームで共有可能な形式で保存します。
 
 ## Operating Constraints
 
 **READ-ONLY SCAN + REPORT WRITE**: similarity-pyでスキャンしてレポートを生成しますが、ソースコード自体は変更しません。
 
-**Constitution Authority**: 憲法Article 3（Test-First）、Article 8（Code Quality）、Article 9（Data Accuracy）、Article 10（DRY）、Article 11（Refactoring Policy）を厳守します。
+**Constitution Authority**: 憲法Article 1（Test-First）、Article 5（Code Quality）、Article 6（Data Accuracy）、Article 7（DRY）、Article 8（Refactoring Policy）を厳守します。
 
 **Prerequisites**: similarity-pyがインストール済みであることを前提とします（`cargo install similarity-py`）。
 
@@ -30,7 +30,7 @@ similarity-pyを使用してコードベースの重複を検出し、優先度�
 
 **出力ファイルパス**:
 - 第1引数が`.md`で終わる場合、それを出力パスとして使用
-- 未指定または非`.md`の場合: `plans/duplication-analysis-YYYY-MM-DD.md`（現在日付を使用）
+- 未指定または非`.md`の場合: `ai_working/duplication-analysis-YYYY-MM-DD.md`（現在日付を使用）
 
 **スキャンオプション**:
 - `--path <path>`: スキャン対象パス（デフォルト: `src/note_mcp`）
@@ -40,7 +40,7 @@ similarity-pyを使用してコードベースの重複を検出し、優先度�
 **引数例のパース結果**:
 ```bash
 # 例1: /refactor-scan
-# → 出力: plans/duplication-analysis-2025-01-15.md, デフォルトスキャン
+# → 出力: ai_working/duplication-analysis-2025-01-15.md, デフォルトスキャン
 
 # 例2: /refactor-scan docs/my-report.md
 # → 出力: docs/my-report.md, デフォルトスキャン
@@ -49,7 +49,7 @@ similarity-pyを使用してコードベースの重複を検出し、優先度�
 # → 出力: custom.md, スキャン: src/note_mcp/agents, 閾値: 0.90
 
 # 例4: /refactor-scan --path src/note_mcp/orchestrator
-# → 出力: plans/duplication-analysis-2025-01-15.md, スキャン: src/note_mcp/orchestrator
+# → 出力: ai_working/duplication-analysis-2025-01-15.md, スキャン: src/note_mcp/orchestrator
 ```
 
 ### 2. 出力ディレクトリの確保
@@ -96,7 +96,7 @@ similarity-py [指定パス] --threshold [閾値] --min-lines [最小行数] --c
 
 検出された重複に対して以下の基準で優先度を判定：
 
-| 優先度 | 類似度 | 重複行数 | 影響範囲 | Article 10違反度 |
+| 優先度 | 類似度 | 重複行数 | 影響範囲 | Article 7違反度 |
 |-------|--------|----------|---------|-----------------|
 | **P0** | >90% | >100行 | クロスモジュール | CRITICAL |
 | **P1** | >85% | >50行 | 同一モジュール内 | HIGH |
@@ -117,11 +117,11 @@ similarity-py [指定パス] --threshold [閾値] --min-lines [最小行数] --c
 
 各重複について以下をチェック：
 
-- **Article 10（DRY原則）**: 重複の存在自体が違反
-- **Article 11（Refactoring Policy）**: V2クラス作成の必要性（禁止事項）vs 既存コード直接修正可能性
-- **Article 3（Test-First）**: `tests/`以下に対応するテストファイルが存在するか
-- **Article 9（Data Accuracy）**: 重複コード内にハードコーディングや暗黙的デフォルトが含まれているか
-- **Article 8（Code Quality）**: リファクタリング後のruff/mypy準拠性への影響
+- **Article 7（DRY原則）**: 重複の存在自体が違反
+- **Article 8（Refactoring Policy）**: V2クラス作成の必要性（禁止事項）vs 既存コード直接修正可能性
+- **Article 1（Test-First）**: `tests/`以下に対応するテストファイルが存在するか
+- **Article 6（Data Accuracy）**: 重複コード内にハードコーディングや暗黙的デフォルトが含まれているか
+- **Article 5（Code Quality）**: リファクタリング後のruff/mypy準拠性への影響
 
 ### 7. Markdownレポート生成
 
@@ -185,11 +185,11 @@ similarity-py [指定パス] --threshold [閾値] --min-lines [最小行数] --c
 ```
 
 **Constitution Compliance**:
-- **Article 10 (DRY)**: ❌ VIOLATION - [理由]
-- **Article 11 (Refactoring)**: [✅ 既存コード修正可能 / ⚠️ 要検討]
-- **Article 3 (Test-First)**: [✅ テスト存在 / ⚠️ テスト不足]
-- **Article 9 (Data Accuracy)**: [✅ 問題なし / ⚠️ ハードコーディング検出]
-- **Article 8 (Code Quality)**: [リファクタリング後の品質影響評価]
+- **Article 7 (DRY)**: ❌ VIOLATION - [理由]
+- **Article 8 (Refactoring)**: [✅ 既存コード修正可能 / ⚠️ 要検討]
+- **Article 1 (Test-First)**: [✅ テスト存在 / ⚠️ テスト不足]
+- **Article 6 (Data Accuracy)**: [✅ 問題なし / ⚠️ ハードコーディング検出]
+- **Article 5 (Code Quality)**: [リファクタリング後の品質影響評価]
 
 **Estimated Impact**:
 - Lines reduced: ~[削減行数] lines
@@ -221,11 +221,11 @@ similarity-py [指定パス] --threshold [閾値] --min-lines [最小行数] --c
 
 | Article | Status | Issues Found | Recommendation |
 |---------|--------|--------------|----------------|
-| Article 10 (DRY) | [✅ / ⚠️ / ❌] | [件数] duplications ([行数] lines) | [推奨アクション] |
-| Article 11 (Refactoring) | [✅ / ⚠️] | [評価] | [推奨アクション] |
-| Article 3 (Test-First) | [✅ / ⚠️] | [評価] | [推奨アクション] |
-| Article 9 (Data Accuracy) | [✅ / ⚠️] | [件数] hardcoded values | [推奨アクション] |
-| Article 8 (Code Quality) | [✅ / ⚠️] | [評価] | [推奨アクション] |
+| Article 7 (DRY) | [✅ / ⚠️ / ❌] | [件数] duplications ([行数] lines) | [推奨アクション] |
+| Article 8 (Refactoring) | [✅ / ⚠️] | [評価] | [推奨アクション] |
+| Article 1 (Test-First) | [✅ / ⚠️] | [評価] | [推奨アクション] |
+| Article 6 (Data Accuracy) | [✅ / ⚠️] | [件数] hardcoded values | [推奨アクション] |
+| Article 5 (Code Quality) | [✅ / ⚠️] | [評価] | [推奨アクション] |
 
 ---
 
@@ -271,7 +271,7 @@ similarity-py [指定パス] --threshold [閾値] --min-lines [最小行数] --c
 最優先度の重複に対して、以下の手順で実装：
 
 1. 既存テストの確認（`pytest tests/[対象モジュール]/ -v`）
-2. リファクタリング設計の承認取得（Article 3準拠）
+2. リファクタリング設計の承認取得（Article 1準拠）
 3. Template Method/Strategy等のパターン適用
 4. 段階的な実装（1ファイルずつ移行）
 5. 各ステップでテスト実行
@@ -378,7 +378,7 @@ gh issue create \
 
 ### 8. レポートファイルの保存
 
-Writeツールを使用して、指定されたパス（または`plans/duplication-analysis-YYYY-MM-DD.md`）に上記のMarkdownレポートを保存します。
+Writeツールを使用して、指定されたパス（または`ai_working/duplication-analysis-YYYY-MM-DD.md`）に上記のMarkdownレポートを保存します。
 
 保存後、ユーザーに以下を報告：
 
@@ -414,9 +414,9 @@ Writeツールを使用して、指定されたパス（または`plans/duplicat
 
 ### Quality Standards
 
-- **Article 8 Compliance**: 生成されたレポートもMarkdownとして高品質
-- **Article 9 Compliance**: ハードコーディングされた閾値は引数でオーバーライド可能
-- **Article 16 Compliance**: レポート内のコード例は型注釈を含む
+- **Article 5 Compliance**: 生成されたレポートもMarkdownとして高品質
+- **Article 6 Compliance**: ハードコーディングされた閾値は引数でオーバーライド可能
+- **Article 9 Compliance**: レポート内のコード例は型注釈を含む
 
 ### Error Handling
 
