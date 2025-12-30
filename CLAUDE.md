@@ -94,6 +94,32 @@ uv run ruff check --fix . && uv run ruff format . && uv run mypy .
 - 作業ウィンドウの再利用を優先すること
 - セッション情報はOSのセキュアストレージに保存すること
 
+### ProseMirror Markdown Trigger Pattern
+
+note.comのエディタ（ProseMirror）でMarkdownパターンをHTMLに変換するには、**パターンの後にスペースが必要**です。
+
+**検証済みの動作（2025-12-30）:**
+
+| 入力パターン | 結果 |
+|-------------|------|
+| `~~text~~ ` (スペースあり) | ✅ `<s>text</s>` に変換 |
+| `~~text~~` + Enter | ❌ 変換されない |
+| `~~text~~.` (句読点) | ❌ 変換されない |
+| `~~text~~` (トリガーなし) | ❌ 変換されない |
+
+**実装パターン（`typing_helpers.py`）:**
+```python
+# ~~text~~ をタイプ後、スペースで変換をトリガー
+await page.keyboard.type(f"~~{content}~~")
+await page.keyboard.type(" ")  # 変換トリガー
+await asyncio.sleep(0.1)       # 変換待機
+# 不要なスペースはバックスペースで削除
+if has_more_content:
+    await page.keyboard.press("Backspace")
+```
+
+**注意**: タイピング速度やdelay引数は変換に影響しません。スペースがトリガーです。
+
 ### Session Management
 
 - 認証状態はセッション管理で適切に維持すること

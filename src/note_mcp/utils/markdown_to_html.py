@@ -350,7 +350,7 @@ def markdown_to_html(content: str) -> str:
     if not content or not content.strip():
         return ""
 
-    md = MarkdownIt()
+    md = MarkdownIt().enable("strikethrough")
     result: str = md.render(content)
 
     # Convert images to note.com format

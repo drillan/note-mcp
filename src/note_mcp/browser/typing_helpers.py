@@ -1,7 +1,7 @@
 """Typing helpers for browser automation.
 
 Provides functions to type Markdown content into ProseMirror editors
-with proper handling for lists, blockquotes, citations, and code blocks.
+with proper handling for lists, blockquotes, citations, code blocks, and strikethrough.
 """
 
 from __future__ import annotations
@@ -27,6 +27,53 @@ _CODE_FENCE_PATTERN = re.compile(r"^```(\w*)$")
 _CITATION_PATTERN = re.compile(r"^—\s+(.+)$")
 # Citation URL pattern: "Text (URL)"
 _CITATION_URL_PATTERN = re.compile(r"^(.+?)\s+\((\S+)\)\s*$")
+# Strikethrough pattern: ~~text~~
+_STRIKETHROUGH_PATTERN = re.compile(r"~~(.+?)~~")
+
+
+async def _type_with_strikethrough(page: Any, text: str) -> None:
+    """Type text with proper strikethrough handling for ProseMirror.
+
+    ProseMirror requires a SPACE after ~~text~~ to trigger the markdown-to-HTML
+    conversion. Without a trailing space, the pattern remains as literal text.
+    This function types strikethrough patterns and adds a temporary space to
+    trigger conversion, then removes it with backspace if needed.
+
+    Args:
+        page: Playwright page object
+        text: Text that may contain ~~strikethrough~~ patterns
+    """
+    if not text:
+        return
+
+    # Check if text contains strikethrough patterns
+    if "~~" not in text:
+        # No strikethrough, type normally
+        await page.keyboard.type(text)
+        return
+
+    # Split text by strikethrough pattern, keeping the matched groups
+    parts = _STRIKETHROUGH_PATTERN.split(text)
+
+    for i, part in enumerate(parts):
+        if not part:
+            continue
+
+        if i % 2 == 0:
+            # Even indices are normal text (outside ~~ markers)
+            await page.keyboard.type(part)
+        else:
+            # Odd indices are strikethrough content (inside ~~ markers)
+            # Type the strikethrough pattern
+            await page.keyboard.type(f"~~{part}~~")
+            # Space triggers ProseMirror to convert ~~text~~ to <s>text</s>
+            await page.keyboard.type(" ")
+            await asyncio.sleep(0.1)  # Brief pause for conversion
+            # Check if there's more content after this strikethrough
+            has_more_content = i + 1 < len(parts) and parts[i + 1]
+            if has_more_content and not parts[i + 1].startswith(" "):
+                # Remove the space if next content doesn't start with space
+                await page.keyboard.press("Backspace")
 
 
 async def _input_citation_to_figcaption(page: Any, citation: str) -> None:
@@ -182,10 +229,11 @@ async def type_markdown_content(page: Any, content: str) -> None:
                 # Already in blockquote, use Shift+Enter for soft break (creates <br>)
                 await page.keyboard.press("Shift+Enter")
                 if bq_content:
-                    await page.keyboard.type(bq_content)
+                    await _type_with_strikethrough(page, bq_content)
             else:
                 # Start new blockquote, type with prefix to trigger blockquote mode
-                await page.keyboard.type("> " + bq_content)
+                await page.keyboard.type("> ")
+                await _type_with_strikethrough(page, bq_content)
                 in_blockquote = True
             in_unordered_list = False
             in_ordered_list = False
@@ -214,26 +262,31 @@ async def type_markdown_content(page: Any, content: str) -> None:
         if ul_match:
             if in_unordered_list:
                 # Already in list, just type content without prefix
-                await page.keyboard.type(ul_match.group(1))
+                await _type_with_strikethrough(page, ul_match.group(1))
             else:
-                # Start new list, type with prefix
-                await page.keyboard.type(line)
+                # Start new list, type prefix then content
+                prefix_match = re.match(r"^([-*+]\s+)", line)
+                prefix = prefix_match.group(1) if prefix_match else "- "
+                await page.keyboard.type(prefix)
+                await _type_with_strikethrough(page, ul_match.group(1))
                 in_unordered_list = True
             in_ordered_list = False
         # Check for ordered list item
         elif ol_match := _ORDERED_LIST_PATTERN.match(line):
             if in_ordered_list:
                 # Already in list, just type content without prefix
-                await page.keyboard.type(ol_match.group(2))
+                await _type_with_strikethrough(page, ol_match.group(2))
             else:
-                # Start new list, type with prefix
-                await page.keyboard.type(line)
+                # Start new list, type prefix then content
+                prefix = f"{ol_match.group(1)}. "
+                await page.keyboard.type(prefix)
+                await _type_with_strikethrough(page, ol_match.group(2))
                 in_ordered_list = True
             in_unordered_list = False
         else:
             # Not a list item
             if line:
-                await page.keyboard.type(line)
+                await _type_with_strikethrough(page, line)
             in_unordered_list = False
             in_ordered_list = False
 

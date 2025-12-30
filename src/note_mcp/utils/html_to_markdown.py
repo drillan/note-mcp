@@ -53,7 +53,6 @@ _IMAGE_FIGURE_PATTERN_ALT = re.compile(
 )
 _UL_PATTERN = re.compile(r"<ul[^>]*>(.*?)</ul>", re.DOTALL | re.IGNORECASE)
 _OL_PATTERN = re.compile(r"<ol[^>]*>(.*?)</ol>", re.DOTALL | re.IGNORECASE)
-_LI_PATTERN = re.compile(r"<li[^>]*>(.*?)</li>", re.DOTALL | re.IGNORECASE)
 
 # Patterns for inline elements
 _LINK_PATTERN = re.compile(
@@ -63,6 +62,7 @@ _LINK_PATTERN = re.compile(
 _STRONG_PATTERN = re.compile(r"<strong>(.*?)</strong>", re.DOTALL | re.IGNORECASE)
 _EM_PATTERN = re.compile(r"<em>(.*?)</em>", re.DOTALL | re.IGNORECASE)
 _INLINE_CODE_PATTERN = re.compile(r"<code>(.*?)</code>", re.DOTALL | re.IGNORECASE)
+_STRIKETHROUGH_PATTERN = re.compile(r"<s>(.*?)</s>", re.DOTALL | re.IGNORECASE)
 
 # Cleanup patterns
 _UUID_ATTR_PATTERN = re.compile(
@@ -353,6 +353,9 @@ def _convert_inline_elements(text: str) -> str:
 
     # Italic
     result = _EM_PATTERN.sub(r"*\1*", result)
+
+    # Strikethrough
+    result = _STRIKETHROUGH_PATTERN.sub(r"~~\1~~", result)
 
     # Inline code (must be after code block extraction to avoid false matches)
     result = _INLINE_CODE_PATTERN.sub(r"`\1`", result)
