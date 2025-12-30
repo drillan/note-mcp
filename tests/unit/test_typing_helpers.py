@@ -1,9 +1,5 @@
 """Unit tests for typing helpers module."""
 
-import re
-
-import pytest
-
 from note_mcp.browser.typing_helpers import (
     _BLOCKQUOTE_PATTERN,
     _CITATION_PATTERN,
