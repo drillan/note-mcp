@@ -1,22 +1,27 @@
 """Typing helpers for browser automation.
 
 Provides functions to type Markdown content into ProseMirror editors
-with proper handling for lists, blockquotes, and citations.
+with proper handling for lists, blockquotes, citations, and code blocks.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
 
-# Regex patterns for Markdown list and blockquote detection
+logger = logging.getLogger(__name__)
+
+# Regex patterns for Markdown list, blockquote, and code block detection
 _UNORDERED_LIST_PATTERN = re.compile(r"^[-*+]\s+(.*)$")
 _ORDERED_LIST_PATTERN = re.compile(r"^(\d+)\.\s+(.*)$")
 _BLOCKQUOTE_PATTERN = re.compile(r"^>\s*(.*)$")
+# Code block fence pattern: ``` optionally followed by language identifier
+_CODE_FENCE_PATTERN = re.compile(r"^```(\w*)$")
 # Citation pattern: em-dash followed by space and text
 # Matches: "— Source" or "— Source (https://example.com)"
 _CITATION_PATTERN = re.compile(r"^—\s+(.+)$")
@@ -85,10 +90,12 @@ async def _input_citation_to_figcaption(page: Any, citation: str) -> None:
         await page.keyboard.type(citation_text)
         # Wait for input to be processed
         await asyncio.sleep(0.1)
+    else:
+        logger.warning(f"Failed to find figcaption element for citation: {citation_text}")
 
 
 async def type_markdown_content(page: Any, content: str) -> None:
-    """Type Markdown content with proper handling for lists, blockquotes, and citations.
+    """Type Markdown content with proper handling for lists, blockquotes, citations, and code blocks.
 
     ProseMirror converts "- " at the start of a line to a list item.
     Once in list mode, pressing Enter creates a new list item automatically.
@@ -102,6 +109,10 @@ async def type_markdown_content(page: Any, content: str) -> None:
     - "— Source" becomes figcaption text
     - "— Source (URL)" becomes figcaption with link
 
+    For code blocks, typing "``` " (with space) triggers code block mode.
+    The content is typed directly without fence markers, and the block
+    is exited by pressing ArrowDown multiple times to move past the block.
+
     Args:
         page: Playwright page object
         content: Markdown content to type
@@ -110,9 +121,50 @@ async def type_markdown_content(page: Any, content: str) -> None:
     in_unordered_list = False
     in_ordered_list = False
     in_blockquote = False
+    in_code_block = False
     pending_citation: str | None = None  # Citation to add after exiting blockquote
 
     for i, line in enumerate(lines):
+        # Strip line for pattern matching (handles \r from Windows line endings)
+        stripped_line = line.strip()
+
+        # Check for code fence (``` or ```language)
+        code_fence_match = _CODE_FENCE_PATTERN.match(stripped_line)
+        if code_fence_match:
+            if in_code_block:
+                # Closing fence - exit code block
+                # In ProseMirror, press ArrowDown multiple times to exit code block
+                # and position cursor below it
+                for _ in range(3):
+                    await page.keyboard.press("ArrowDown")
+                    await asyncio.sleep(0.05)
+                in_code_block = False
+                # Press Enter to start new paragraph for next content
+                if i < len(lines) - 1:
+                    await page.keyboard.press("Enter")
+                    await asyncio.sleep(0.1)
+            else:
+                # Opening fence - enter code block mode
+                # Type ``` followed by space to trigger ProseMirror code block
+                # Note: note.com's ProseMirror uses space (not Enter) to trigger code block
+                await page.keyboard.type("``` ")
+                await asyncio.sleep(0.2)
+                in_code_block = True
+            in_unordered_list = False
+            in_ordered_list = False
+            in_blockquote = False
+            continue
+
+        # If in code block, type content directly
+        if in_code_block:
+            if line:
+                await page.keyboard.type(line)
+            # Use Enter for line breaks within code block
+            next_line = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            if i < len(lines) - 1 and not _CODE_FENCE_PATTERN.match(next_line):
+                await page.keyboard.press("Enter")
+            continue
+
         # Check for blockquote line
         bq_match = _BLOCKQUOTE_PATTERN.match(line)
         if bq_match:

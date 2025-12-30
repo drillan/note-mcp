@@ -1,6 +1,6 @@
 """Unit tests for Markdown conversion utility."""
 
-from note_mcp.utils.markdown import markdown_to_html
+from note_mcp.utils.markdown_to_html import markdown_to_html
 
 
 class TestMarkdownToHtml:
