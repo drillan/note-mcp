@@ -1,0 +1,7 @@
+# DDD Phase 2: Non-Code Files Index
+# Feature: 引用（blockquote）の出典入力機能 (#14)
+
+[x] README.md - 出典付き引用の使用方法を追加
+
+# Note: docs/usage.md は新規作成せず、README.mdに集約（DRY原則）
+# docs/index.md はSphinxスケルトンのため変更不要

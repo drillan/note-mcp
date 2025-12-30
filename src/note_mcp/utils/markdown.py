@@ -31,11 +31,69 @@ _BLOCKQUOTE_PATTERN = re.compile(
     r"(<blockquote[^>]*>)(.*?)(</blockquote>)",
     re.DOTALL | re.IGNORECASE,
 )
+# Pattern to detect citation line: em-dash followed by space at start of line or after <br>
+# Matches: "— Text" or "<br>— Text" at the end of content
+_CITATION_PATTERN = re.compile(
+    r"(?:^|<br>)(—\s+.+?)(?:</p>|$)",
+    re.IGNORECASE,
+)
+# Pattern to extract URL from citation: "Text (URL)"
+_CITATION_URL_PATTERN = re.compile(r"^(.+?)\s+\((\S+)\)\s*$")
 
 
 def _generate_uuid() -> str:
     """Generate a UUID for note.com element IDs."""
     return str(uuid.uuid4())
+
+
+def _extract_citation(blockquote_content: str) -> tuple[str, str]:
+    """Extract citation from blockquote content.
+
+    Detects citation lines starting with em-dash (—) followed by space.
+    Supports optional URL in parentheses: "— Source (https://example.com)"
+
+    Args:
+        blockquote_content: HTML content inside <blockquote> tags
+
+    Returns:
+        Tuple of (modified_content, figcaption_html):
+        - modified_content: blockquote content with citation line removed
+        - figcaption_html: HTML for figcaption element content (may be empty)
+
+    Examples:
+        >>> _extract_citation("<p>Quote<br>— Source</p>")
+        ('<p>Quote</p>', 'Source')
+        >>> _extract_citation("<p>Quote<br>— Source (https://example.com)</p>")
+        ('<p>Quote</p>', '<a href="https://example.com">Source</a>')
+    """
+    # Look for citation pattern: "<br>— text" or "— text" at end of content
+    # The pattern searches within <p> tags
+    match = _CITATION_PATTERN.search(blockquote_content)
+    if not match:
+        return blockquote_content, ""
+
+    citation_with_dash = match.group(1)  # "— Text" or "— Text (URL)"
+    citation_text = citation_with_dash[2:].strip()  # Remove "— " prefix
+
+    # Empty citation text
+    if not citation_text:
+        return blockquote_content, ""
+
+    # Remove the citation line from blockquote content
+    # Handle both "<br>— text" and standalone "— text"
+    full_match = match.group(0)
+    modified_content = blockquote_content.replace(full_match, "</p>")
+
+    # Check for URL pattern: "Text (URL)"
+    url_match = _CITATION_URL_PATTERN.match(citation_text)
+    if url_match:
+        text = url_match.group(1).strip()
+        url = url_match.group(2)
+        figcaption_html = f'<a href="{url}">{text}</a>'
+    else:
+        figcaption_html = citation_text
+
+    return modified_content, figcaption_html
 
 
 def _wrap_li_content_in_p(html: str) -> str:
@@ -123,8 +181,12 @@ def _convert_blockquotes_to_note_format(html: str) -> str:
     note.com expects blockquotes to be wrapped in <figure> elements:
     <figure name="UUID" id="UUID">
       <blockquote><p name="UUID" id="UUID">content</p></blockquote>
-      <figcaption></figcaption>
+      <figcaption>citation</figcaption>
     </figure>
+
+    Citation is extracted from lines starting with em-dash (—):
+    - "— Source" becomes <figcaption>Source</figcaption>
+    - "— Source (URL)" becomes <figcaption><a href="URL">Source</a></figcaption>
 
     This format is required for the API to preserve <br> tags inside blockquotes.
 
@@ -143,10 +205,14 @@ def _convert_blockquotes_to_note_format(html: str) -> str:
     def wrap_in_figure(match: re.Match[str]) -> str:
         blockquote_content = match.group(1)
         element_id = _generate_uuid()
+
+        # Extract citation if present
+        modified_content, figcaption_html = _extract_citation(blockquote_content)
+
         return (
             f'<figure name="{element_id}" id="{element_id}">'
-            f"<blockquote>{blockquote_content}</blockquote>"
-            f"<figcaption></figcaption></figure>"
+            f"<blockquote>{modified_content}</blockquote>"
+            f"<figcaption>{figcaption_html}</figcaption></figure>"
         )
 
     return blockquote_pattern.sub(wrap_in_figure, html)

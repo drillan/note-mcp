@@ -132,7 +132,8 @@ async def note_create_draft(
 ) -> str:
     """note.comに下書き記事を作成します。
 
-    Markdown形式の本文をHTMLに変換してnote.comに送信します。
+    ブラウザ自動化を使用してnote.comエディタにMarkdownを入力します。
+    blockquote内の引用（— 出典名）はfigcaptionに自動入力されます。
     作成後、ブラウザでプレビューを表示します。
 
     Args:
