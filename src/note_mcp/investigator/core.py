@@ -87,18 +87,26 @@ class ProxyManager:
         # mitmproxy needs to write output freely without buffer pressure
         # Log to file for debugging, stdout to DEVNULL
         log_file = Path("/tmp/mitmproxy_debug.log")
-        self._log_handle = open(log_file, "w")  # noqa: SIM115
-        self.process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=self._log_handle,
-        )
+        try:
+            self._log_handle = open(log_file, "w")  # noqa: SIM115
+            self.process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=self._log_handle,
+            )
 
-        # Wait for proxy to start - mitmproxy needs time to initialize
-        time.sleep(3.0)
+            # Wait for proxy to start - mitmproxy needs time to initialize
+            time.sleep(3.0)
 
-        if self.process.poll() is not None:
-            raise RuntimeError(f"Failed to start mitmproxy on port {self.port}. Check if the port is already in use.")
+            if self.process.poll() is not None:
+                msg = f"Failed to start mitmproxy on port {self.port}. Check if the port is already in use."
+                raise RuntimeError(msg)
+        except Exception:
+            # Clean up log handle on failure
+            if self._log_handle:
+                self._log_handle.close()
+                self._log_handle = None
+            raise
 
     def stop(self) -> None:
         """Stop mitmproxy process."""
@@ -257,8 +265,11 @@ class CaptureSession:
             logger.info("No valid saved session found - manual login required")
             return False
 
+        except ImportError as e:
+            logger.error(f"Session module import failed: {e}")
+            return False
         except Exception as e:
-            logger.warning(f"Failed to restore session: {e}")
+            logger.warning(f"Failed to restore session (will require manual login): {e}")
             return False
 
     async def wait_for_close(self) -> None:
@@ -449,9 +460,13 @@ class CaptureSession:
                     current_entry = None
 
         except subprocess.TimeoutExpired:
-            logger.warning("Traffic read timed out")
+            logger.warning("Traffic read timed out after 30 seconds")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"mitmdump failed with exit code {e.returncode}: {e.stderr}")
+        except FileNotFoundError:
+            logger.error("mitmdump not found - ensure mitmproxy is installed")
         except Exception as e:
-            logger.error(f"Failed to read traffic: {e}")
+            logger.error(f"Failed to read traffic: {type(e).__name__}: {e}")
 
         return traffic
 
@@ -551,6 +566,16 @@ class CaptureSessionManager:
                     domain_filter=domain,
                     restore_session=True,
                 )
+            return cls._instance
+
+    @classmethod
+    async def get_active_session(cls) -> CaptureSession | None:
+        """Get active session if exists (thread-safe).
+
+        Returns:
+            Active CaptureSession instance or None if no session is active
+        """
+        async with cls._lock:
             return cls._instance
 
     @classmethod

@@ -8,12 +8,15 @@ through direct browser interaction and traffic capture.
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING, Annotated
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
 from note_mcp.investigator.core import CaptureSessionManager
+
+logger = logging.getLogger(__name__)
 
 
 def register_investigator_tools(mcp: FastMCP) -> None:
@@ -33,8 +36,14 @@ def register_investigator_tools(mcp: FastMCP) -> None:
         ブラウザとプロキシを起動し、指定ドメインのHTTPトラフィックを
         キャプチャ可能な状態にします。
         """
-        await CaptureSessionManager.get_or_create(domain, port)
-        return f"Capture session started for domain: {domain}, port: {port}"
+        try:
+            await CaptureSessionManager.get_or_create(domain, port)
+            return f"Capture session started for domain: {domain}, port: {port}"
+        except RuntimeError as e:
+            return f"Error: Failed to start capture session: {e}"
+        except Exception as e:
+            logger.error(f"Unexpected error starting capture: {e}")
+            return f"Error: {type(e).__name__}: {e}"
 
     @mcp.tool()
     async def investigator_stop_capture() -> str:
@@ -42,8 +51,12 @@ def register_investigator_tools(mcp: FastMCP) -> None:
 
         ブラウザとプロキシを終了し、キャプチャデータを保存します。
         """
-        await CaptureSessionManager.close()
-        return "Capture session stopped"
+        try:
+            await CaptureSessionManager.close()
+            return "Capture session stopped"
+        except Exception as e:
+            logger.error(f"Error stopping capture: {e}")
+            return f"Error: Failed to stop capture session: {e}"
 
     @mcp.tool()
     async def investigator_get_status() -> str:
@@ -63,10 +76,18 @@ def register_investigator_tools(mcp: FastMCP) -> None:
         ブラウザを指定URLに移動させ、ページタイトルを返します。
         トラフィックは自動的にキャプチャされます。
         """
-        session = CaptureSessionManager._instance
+        session = await CaptureSessionManager.get_active_session()
         if not session:
             return "Error: No active capture session. Start one first."
-        return await session.navigate(url)
+        try:
+            return await session.navigate(url)
+        except TimeoutError:
+            return f"Error: Navigation to {url} timed out."
+        except RuntimeError as e:
+            return f"Error: {e}"
+        except Exception as e:
+            logger.error(f"Navigation failed: {e}")
+            return f"Error: {type(e).__name__}: {e}"
 
     @mcp.tool()
     async def investigator_click(
@@ -77,10 +98,18 @@ def register_investigator_tools(mcp: FastMCP) -> None:
         CSSセレクタを使用してページ上の要素を特定し、クリックします。
         クリックにより発生するHTTPリクエストはキャプチャされます。
         """
-        session = CaptureSessionManager._instance
+        session = await CaptureSessionManager.get_active_session()
         if not session:
             return "Error: No active capture session. Start one first."
-        return await session.click(selector)
+        try:
+            return await session.click(selector)
+        except TimeoutError:
+            return f"Error: Click on '{selector}' timed out."
+        except RuntimeError as e:
+            return f"Error: {e}"
+        except Exception as e:
+            logger.error(f"Click failed: {e}")
+            return f"Error: {type(e).__name__}: {e}"
 
     @mcp.tool()
     async def investigator_type(
@@ -91,10 +120,18 @@ def register_investigator_tools(mcp: FastMCP) -> None:
 
         CSSセレクタで特定した入力要素にテキストを入力します。
         """
-        session = CaptureSessionManager._instance
+        session = await CaptureSessionManager.get_active_session()
         if not session:
             return "Error: No active capture session. Start one first."
-        return await session.type_text(selector, text)
+        try:
+            return await session.type_text(selector, text)
+        except TimeoutError:
+            return f"Error: Typing into '{selector}' timed out."
+        except RuntimeError as e:
+            return f"Error: {e}"
+        except Exception as e:
+            logger.error(f"Type failed: {e}")
+            return f"Error: {type(e).__name__}: {e}"
 
     @mcp.tool()
     async def investigator_screenshot() -> str:
@@ -102,10 +139,16 @@ def register_investigator_tools(mcp: FastMCP) -> None:
 
         ページ全体のスクリーンショットをbase64エンコードされたPNG形式で返します。
         """
-        session = CaptureSessionManager._instance
+        session = await CaptureSessionManager.get_active_session()
         if not session:
             return "Error: No active capture session. Start one first."
-        return await session.screenshot()
+        try:
+            return await session.screenshot()
+        except RuntimeError as e:
+            return f"Error: {e}"
+        except Exception as e:
+            logger.error(f"Screenshot failed: {e}")
+            return f"Error: {type(e).__name__}: {e}"
 
     @mcp.tool()
     async def investigator_get_page_content() -> str:
@@ -113,10 +156,16 @@ def register_investigator_tools(mcp: FastMCP) -> None:
 
         ページの完全なHTMLソースを返します。
         """
-        session = CaptureSessionManager._instance
+        session = await CaptureSessionManager.get_active_session()
         if not session:
             return "Error: No active capture session. Start one first."
-        return await session.get_page_content()
+        try:
+            return await session.get_page_content()
+        except RuntimeError as e:
+            return f"Error: {e}"
+        except Exception as e:
+            logger.error(f"Get page content failed: {e}")
+            return f"Error: {type(e).__name__}: {e}"
 
     @mcp.tool()
     async def investigator_get_traffic(
@@ -127,11 +176,15 @@ def register_investigator_tools(mcp: FastMCP) -> None:
         これまでにキャプチャしたHTTPリクエストの一覧をJSON形式で返します。
         パターンを指定すると、URLが一致するリクエストのみ返します。
         """
-        session = CaptureSessionManager._instance
+        session = await CaptureSessionManager.get_active_session()
         if not session:
             return "Error: No active capture session. Start one first."
-        traffic = session.get_traffic(pattern)
-        return json.dumps(traffic, ensure_ascii=False, indent=2)
+        try:
+            traffic = session.get_traffic(pattern)
+            return json.dumps(traffic, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Get traffic failed: {e}")
+            return f"Error: {type(e).__name__}: {e}"
 
     @mcp.tool()
     async def investigator_analyze(
@@ -143,10 +196,14 @@ def register_investigator_tools(mcp: FastMCP) -> None:
         指定したURLパターンに一致するリクエストを集計・分析し、
         レポート形式で返します。
         """
-        session = CaptureSessionManager._instance
+        session = await CaptureSessionManager.get_active_session()
         if not session:
             return "Error: No active capture session. Start one first."
-        return session.analyze_traffic(pattern, method)
+        try:
+            return session.analyze_traffic(pattern, method)
+        except Exception as e:
+            logger.error(f"Analyze traffic failed: {e}")
+            return f"Error: {type(e).__name__}: {e}"
 
     @mcp.tool()
     async def investigator_export(
@@ -156,7 +213,13 @@ def register_investigator_tools(mcp: FastMCP) -> None:
 
         これまでにキャプチャした全トラフィックをJSONファイルに保存します。
         """
-        session = CaptureSessionManager._instance
+        session = await CaptureSessionManager.get_active_session()
         if not session:
             return "Error: No active capture session. Start one first."
-        return session.export_traffic(output_path)
+        try:
+            return session.export_traffic(output_path)
+        except OSError as e:
+            return f"Error: Failed to write file: {e}"
+        except Exception as e:
+            logger.error(f"Export failed: {e}")
+            return f"Error: {type(e).__name__}: {e}"

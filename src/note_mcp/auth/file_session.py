@@ -26,9 +26,17 @@ def _get_default_data_dir() -> Path:
     """Get the default data directory for session storage.
 
     Returns:
-        Path to data directory. Uses /app/data in Docker or ~/.note-mcp locally.
+        Path to data directory. Priority:
+        1. NOTE_MCP_DATA_DIR environment variable
+        2. /app/data (Docker)
+        3. ~/.note-mcp (local)
     """
-    # Check for Docker environment first
+    # Check for environment variable first (Important #4)
+    env_dir = os.environ.get("NOTE_MCP_DATA_DIR")
+    if env_dir:
+        return Path(env_dir)
+
+    # Check for Docker environment
     if Path("/app/data").exists() and os.access("/app/data", os.W_OK):
         return Path("/app/data")
 
@@ -84,6 +92,7 @@ class FileBasedSessionManager:
             Session object if found and valid, None otherwise
         """
         if not self.session_file.exists():
+            logger.debug("No session file found")
             return None
 
         try:
@@ -94,24 +103,38 @@ class FileBasedSessionManager:
             from note_mcp.models import Session
 
             return Session(**session_data)
-        except (json.JSONDecodeError, TypeError, ValueError) as e:
-            logger.warning(f"Failed to load session from file: {e}")
+        except json.JSONDecodeError as e:
+            # File is corrupted - distinct from "no session"
+            logger.error(f"Session file corrupted (invalid JSON): {e}")
+            logger.info(f"Consider deleting corrupted file: {self.session_file}")
+            return None
+        except (TypeError, ValueError) as e:
+            # Invalid data structure
+            logger.error(f"Session file has invalid data structure: {e}")
+            logger.info(f"Consider deleting invalid file: {self.session_file}")
             return None
         except OSError as e:
             logger.warning(f"Failed to read session file: {e}")
             return None
 
-    def clear(self) -> None:
+    def clear(self) -> bool:
         """Clear session by deleting the session file.
 
-        Does not raise an error if file does not exist.
+        Returns:
+            True if session was cleared successfully, False if deletion failed.
+            Returns True if no session file exists (nothing to clear).
         """
+        if not self.session_file.exists():
+            logger.debug("No session file to clear")
+            return True
+
         try:
-            if self.session_file.exists():
-                self.session_file.unlink()
-                logger.debug(f"Session file deleted: {self.session_file}")
+            self.session_file.unlink()
+            logger.debug(f"Session file deleted: {self.session_file}")
+            return True
         except OSError as e:
-            logger.warning(f"Failed to delete session file: {e}")
+            logger.error(f"Failed to delete session file (security concern): {e}")
+            return False
 
     def has_session(self) -> bool:
         """Check if a session file exists.
