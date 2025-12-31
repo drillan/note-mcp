@@ -463,3 +463,119 @@ def hello():
         assert "これは" in result
         assert "<ruby>" in result
         assert "のテストです" in result
+
+    # Math notation (数式記法) tests - Issue #36
+    # note.com stores KaTeX notation as-is (no HTML conversion)
+    # and renders it client-side using KaTeX library
+    #
+    # note.com math formats:
+    # - Inline: $${formula}$$ (double dollar + braces)
+    # - Display: $$formula$$ (double dollar, block level)
+
+    def test_math_inline_basic(self) -> None:
+        """Test basic inline math preservation: $${formula}$$
+
+        note.com uses KaTeX format stored as-is.
+        Example: $${y = x^2}$$ should be preserved in output.
+        """
+        result = markdown_to_html("$${y = x^2}$$")
+        assert "$${y = x^2}$$" in result
+
+    def test_math_inline_complex(self) -> None:
+        """Test complex inline math formula preservation."""
+        formula = r"$${x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}}$$"
+        result = markdown_to_html(formula)
+        # The formula should be preserved (backslashes may be escaped)
+        assert "\\frac" in result or "frac" in result
+        assert "\\sqrt" in result or "sqrt" in result
+
+    def test_math_inline_in_sentence(self) -> None:
+        """Test inline math embedded in sentence."""
+        markdown = "アインシュタインの公式は$${E = mc^2}$$です。"
+        result = markdown_to_html(markdown)
+        assert "アインシュタインの公式は" in result
+        assert "$${E = mc^2}$$" in result
+        assert "です。" in result
+
+    def test_math_display_basic(self) -> None:
+        """Test basic display math preservation.
+
+        Display math format: $$formula$$
+
+        Note: Newlines are removed from non-code-block HTML,
+        but the $$ delimiters and formula content should be preserved.
+        """
+        markdown = """$$
+x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}
+$$"""
+        result = markdown_to_html(markdown)
+        # Display math delimiters should be preserved
+        assert "$$" in result
+        # Formula content should be preserved (newlines may be removed)
+        assert "\\frac" in result or "frac" in result
+
+    def test_math_display_multiline(self) -> None:
+        """Test multiline display math preservation."""
+        markdown = """$$
+\\begin{align}
+a^2 + b^2 &= c^2 \\\\
+e^{i\\pi} + 1 &= 0
+\\end{align}
+$$"""
+        result = markdown_to_html(markdown)
+        # Content should be preserved
+        assert "align" in result
+        assert "a^2" in result
+
+    def test_math_in_code_block_not_affected(self) -> None:
+        """Test math notation inside code block is preserved literally.
+
+        Code blocks should not trigger any math conversion.
+        """
+        markdown = """```python
+# Math example
+formula = "$${y = x^2}$$"
+print(formula)
+```"""
+        result = markdown_to_html(markdown)
+        # Code block should preserve content exactly
+        assert "codeBlock" in result
+        assert "$${y = x^2}$$" in result
+
+    def test_math_inline_with_bold(self) -> None:
+        """Test inline math combined with bold formatting."""
+        markdown = "**公式**: $${a + b = c}$$"
+        result = markdown_to_html(markdown)
+        assert "<strong>" in result
+        assert "$${a + b = c}$$" in result
+
+    def test_math_inline_with_italic(self) -> None:
+        """Test inline math combined with italic formatting."""
+        markdown = "*注*: $${x + 1}$$"
+        result = markdown_to_html(markdown)
+        assert "<em>" in result
+        assert "$${x + 1}$$" in result
+
+    def test_math_multiple_inline(self) -> None:
+        """Test multiple inline math in same paragraph."""
+        markdown = "$${a}$$ + $${b}$$ = $${c}$$"
+        result = markdown_to_html(markdown)
+        assert "$${a}$$" in result
+        assert "$${b}$$" in result
+        assert "$${c}$$" in result
+
+    def test_math_greek_letters(self) -> None:
+        """Test math with Greek letters."""
+        markdown = "$${\\alpha + \\beta = \\gamma}$$"
+        result = markdown_to_html(markdown)
+        assert "\\alpha" in result or "alpha" in result
+        assert "\\beta" in result or "beta" in result
+        assert "\\gamma" in result or "gamma" in result
+
+    def test_math_subscript_superscript(self) -> None:
+        """Test math with subscript and superscript."""
+        markdown = "$${x_1^2 + x_2^2}$$"
+        result = markdown_to_html(markdown)
+        assert "x_1" in result
+        assert "x_2" in result
+        assert "^2" in result

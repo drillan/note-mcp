@@ -1,15 +1,18 @@
-% note-mcp documentation master file, created by
-% sphinx-quickstart on Sat Dec 20 08:14:31 2025.
-% You can adapt this file completely to your liking, but it should at least
-% contain the root `toctree` directive.
-
 # note-mcp documentation
 
-Add your content using `reStructuredText` syntax. See the
-[reStructuredText](https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html)
-documentation for details.
+note.com記事管理用MCPサーバーのドキュメントです。
+
+## 概要
+
+note-mcpを使用すると、AIアシスタント（Claude Code, Claude Desktop等）から直接note.comの記事を作成・編集・公開できます。
 
 ```{toctree}
-:caption: 'Contents:'
+:caption: 'Features'
 :maxdepth: 2
+
+features/math
 ```
+
+## クイックスタート
+
+インストールと基本的な使い方は[README](https://github.com/drillan/note-mcp)を参照してください。
