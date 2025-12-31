@@ -5,13 +5,17 @@ Provides proxy management and capture session handling for API investigation.
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import contextlib
+import json
 import logging
+import re
 import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser, BrowserContext, Page, Playwright
@@ -271,6 +275,281 @@ class CaptureSession:
 
         self._context = None
         self._page = None
+
+    # =========================================================================
+    # Browser operation methods for MCP tools
+    # =========================================================================
+
+    async def navigate(self, url: str) -> str:
+        """Navigate to specified URL.
+
+        Args:
+            url: Target URL to navigate to
+
+        Returns:
+            Navigation result with page title
+
+        Raises:
+            RuntimeError: If session not started
+        """
+        if not self._page:
+            raise RuntimeError("Session not started")
+        await self._page.goto(url, wait_until="domcontentloaded")
+        title = await self._page.title()
+        return f"Navigated to {url}, title: {title}"
+
+    async def click(self, selector: str) -> str:
+        """Click element by CSS selector.
+
+        Args:
+            selector: CSS selector for target element
+
+        Returns:
+            Click result message
+
+        Raises:
+            RuntimeError: If session not started
+        """
+        if not self._page:
+            raise RuntimeError("Session not started")
+        await self._page.click(selector)
+        return f"Clicked {selector}"
+
+    async def type_text(self, selector: str, text: str) -> str:
+        """Type text into specified element.
+
+        Args:
+            selector: CSS selector for input element
+            text: Text to type
+
+        Returns:
+            Type result message
+
+        Raises:
+            RuntimeError: If session not started
+        """
+        if not self._page:
+            raise RuntimeError("Session not started")
+        await self._page.fill(selector, text)
+        return f"Typed text into {selector}"
+
+    async def screenshot(self) -> str:
+        """Take screenshot of current page.
+
+        Returns:
+            Base64-encoded PNG screenshot
+
+        Raises:
+            RuntimeError: If session not started
+        """
+        if not self._page:
+            raise RuntimeError("Session not started")
+        screenshot_bytes = await self._page.screenshot()
+        return base64.b64encode(screenshot_bytes).decode()
+
+    async def get_page_content(self) -> str:
+        """Get current page HTML content.
+
+        Returns:
+            Full HTML content of current page
+
+        Raises:
+            RuntimeError: If session not started
+        """
+        if not self._page:
+            raise RuntimeError("Session not started")
+        return await self._page.content()
+
+    # =========================================================================
+    # Traffic analysis methods
+    # =========================================================================
+
+    def get_traffic(self, pattern: str | None = None) -> list[dict[str, Any]]:
+        """Get captured traffic as list of request/response pairs.
+
+        Args:
+            pattern: Optional regex pattern to filter URLs
+
+        Returns:
+            List of traffic entries with method, url, status, etc.
+        """
+        if not self.proxy.output_file or not self.proxy.output_file.exists():
+            return []
+
+        traffic: list[dict[str, Any]] = []
+        try:
+            # Read mitmproxy flow file using mitmdump
+            result = subprocess.run(
+                [
+                    "uv",
+                    "run",
+                    "mitmdump",
+                    "-r",
+                    str(self.proxy.output_file),
+                    "-n",  # No upstream connection
+                    "--set",
+                    "flow_detail=0",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            # Parse output lines
+            for line in result.stdout.strip().split("\n"):
+                if not line:
+                    continue
+                # Basic parsing of mitmdump output
+                # Format: "GET https://example.com/path [200 OK]"
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    method = parts[0]
+                    url = parts[1]
+                    status = 0
+                    if len(parts) >= 3 and parts[2].startswith("["):
+                        with contextlib.suppress(ValueError):
+                            status = int(parts[2].strip("[]"))
+
+                    # Apply pattern filter
+                    if pattern and not re.search(pattern, url):
+                        continue
+
+                    traffic.append(
+                        {
+                            "method": method,
+                            "url": url,
+                            "status": status,
+                        }
+                    )
+
+        except subprocess.TimeoutExpired:
+            logger.warning("Traffic read timed out")
+        except Exception as e:
+            logger.error(f"Failed to read traffic: {e}")
+
+        return traffic
+
+    def analyze_traffic(self, pattern: str, method: str | None = None) -> str:
+        """Analyze traffic matching pattern.
+
+        Args:
+            pattern: Regex pattern to match URLs
+            method: Optional HTTP method filter
+
+        Returns:
+            Analysis result as formatted string
+        """
+        traffic = self.get_traffic(pattern)
+
+        if method:
+            traffic = [t for t in traffic if t["method"].upper() == method.upper()]
+
+        if not traffic:
+            return f"No traffic matching pattern: {pattern}"
+
+        # Build analysis report
+        lines = [f"Traffic Analysis for pattern: {pattern}"]
+        if method:
+            lines.append(f"  Method filter: {method}")
+        lines.append(f"  Total requests: {len(traffic)}")
+        lines.append("")
+
+        # Group by URL
+        url_counts: dict[str, int] = {}
+        for t in traffic:
+            url = t["url"]
+            url_counts[url] = url_counts.get(url, 0) + 1
+
+        lines.append("Requests by URL:")
+        for url, count in sorted(url_counts.items(), key=lambda x: -x[1]):
+            lines.append(f"  [{count}x] {url}")
+
+        return "\n".join(lines)
+
+    def export_traffic(self, output_path: str) -> str:
+        """Export captured traffic to JSON file.
+
+        Args:
+            output_path: Path to output JSON file
+
+        Returns:
+            Export result message
+        """
+        traffic = self.get_traffic()
+        output = Path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output, "w", encoding="utf-8") as f:
+            json.dump(traffic, f, ensure_ascii=False, indent=2)
+
+        return f"Exported {len(traffic)} requests to {output_path}"
+
+
+class CaptureSessionManager:
+    """Singleton manager for sharing CaptureSession across MCP tools.
+
+    Ensures only one capture session is active at a time
+    and provides thread-safe access.
+    """
+
+    _instance: ClassVar[CaptureSession | None] = None
+    _lock: ClassVar[asyncio.Lock] = asyncio.Lock()
+    _domain: ClassVar[str | None] = None
+    _output_file: ClassVar[Path | None] = None
+
+    @classmethod
+    async def get_or_create(
+        cls,
+        domain: str,
+        port: int = 8080,
+    ) -> CaptureSession:
+        """Get existing session or create new one.
+
+        Args:
+            domain: Domain filter for traffic capture
+            port: Proxy port number
+
+        Returns:
+            Active CaptureSession instance
+        """
+        async with cls._lock:
+            if cls._instance is None:
+                cls._instance = CaptureSession(port)
+                cls._domain = domain
+                cls._output_file = Path(f"/app/data/capture_{int(time.time())}.flow")
+                await cls._instance.start(
+                    output=cls._output_file,
+                    domain_filter=domain,
+                    restore_session=True,
+                )
+            return cls._instance
+
+    @classmethod
+    async def close(cls) -> None:
+        """Close active session if exists."""
+        async with cls._lock:
+            if cls._instance:
+                await cls._instance.close()
+                cls._instance = None
+                cls._domain = None
+                cls._output_file = None
+
+    @classmethod
+    def get_status(cls) -> dict[str, Any]:
+        """Get current session status.
+
+        Returns:
+            Status dict with active flag, domain, and output file
+        """
+        if cls._instance is None:
+            return {"active": False}
+
+        return {
+            "active": True,
+            "domain": cls._domain,
+            "output_file": str(cls._output_file) if cls._output_file else None,
+            "proxy_running": cls._instance.proxy.is_running(),
+        }
 
 
 async def run_capture_session(
