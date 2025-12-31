@@ -21,10 +21,13 @@ from note_mcp.api.articles import (
 from note_mcp.api.images import upload_body_image, upload_eyecatch_image
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
+from note_mcp.browser.create_draft import create_draft_via_browser
 from note_mcp.browser.insert_image import insert_image_via_browser
 from note_mcp.browser.preview import show_preview
+from note_mcp.browser.update_article import update_article_via_browser
 from note_mcp.investigator import register_investigator_tools
 from note_mcp.models import ArticleInput, ArticleStatus, NoteAPIError
+from note_mcp.utils.markdown_to_html import _has_toc_placeholder
 
 # Create MCP server instance
 mcp = FastMCP("note-mcp")
@@ -140,9 +143,12 @@ async def note_create_draft(
 ) -> str:
     """note.comに下書き記事を作成します。
 
-    ブラウザ自動化を使用してnote.comエディタにMarkdownを入力します。
+    Markdown形式の本文をHTMLに変換してnote.comに送信します。
     blockquote内の引用（— 出典名）はfigcaptionに自動入力されます。
     作成後、ブラウザでプレビューを表示します。
+
+    [TOC]マーカーを含む記事は目次を自動挿入するため、
+    ブラウザ自動化を使用して作成されます。
 
     Args:
         title: 記事のタイトル
@@ -162,13 +168,26 @@ async def note_create_draft(
         tags=tags or [],
     )
 
-    article = await create_draft(session, article_input)
-
-    # Show preview in browser
-    await show_preview(session, article.key)
+    # Use browser-based creation for articles with [TOC] marker
+    # TOC insertion requires browser automation (clicking UI elements)
+    toc_info = ""
+    if _has_toc_placeholder(body):
+        result = await create_draft_via_browser(session, article_input)
+        article = result.article
+        # Add TOC status to response
+        if result.toc_inserted:
+            toc_info = "、目次: 挿入済み"
+        elif result.toc_error:
+            toc_info = f"、目次: 挿入失敗（{result.toc_error}）"
+        elif result.toc_inserted is None:
+            pass  # TOC not attempted (no placeholder found after typing)
+    else:
+        article = await create_draft(session, article_input)
+        # Show preview in browser (browser-based creation already shows editor)
+        await show_preview(session, article.key)
 
     tag_info = f"、タグ: {', '.join(article.tags)}" if article.tags else ""
-    return f"下書きを作成しました。ID: {article.id}、キー: {article.key}{tag_info}"
+    return f"下書きを作成しました。ID: {article.id}、キー: {article.key}{tag_info}{toc_info}"
 
 
 @mcp.tool()
@@ -223,6 +242,9 @@ async def note_update_article(
     編集前にnote_get_articleで既存内容を取得することを推奨します。
     Markdown形式の本文をHTMLに変換してnote.comに送信します。
 
+    [TOC]マーカーを含む記事は目次を自動挿入するため、
+    ブラウザ自動化を使用して更新されます。
+
     Args:
         article_id: 更新する記事のID
         title: 新しいタイトル
@@ -242,10 +264,21 @@ async def note_update_article(
         tags=tags or [],
     )
 
-    article = await update_article(session, article_id, article_input)
+    # Use browser-based update for articles with [TOC] marker
+    toc_info = ""
+    if _has_toc_placeholder(body):
+        result = await update_article_via_browser(session, article_id, article_input)
+        article = result.article
+        # Add TOC status to response
+        if result.toc_inserted:
+            toc_info = "、目次: 挿入済み"
+        elif result.toc_error:
+            toc_info = f"、目次: 挿入失敗（{result.toc_error}）"
+    else:
+        article = await update_article(session, article_id, article_input)
 
     tag_info = f"、タグ: {', '.join(article.tags)}" if article.tags else ""
-    return f"記事を更新しました。ID: {article.id}{tag_info}"
+    return f"記事を更新しました。ID: {article.id}{tag_info}{toc_info}"
 
 
 @mcp.tool()

@@ -170,6 +170,22 @@ class ArticleListResult(BaseModel):
     has_more: bool
 
 
+class BrowserArticleResult(BaseModel):
+    """Result of browser-based article creation/update.
+
+    Includes the article and optional TOC insertion result for user notification.
+
+    Attributes:
+        article: The created/updated article
+        toc_inserted: True if TOC was successfully inserted, False if failed, None if not attempted
+        toc_error: Error message if TOC insertion failed
+    """
+
+    article: Article
+    toc_inserted: bool | None = None
+    toc_error: str | None = None
+
+
 class ErrorCode(str, Enum):
     """Error codes for note-mcp API errors."""
 

@@ -9,6 +9,12 @@ import uuid
 from markdown_it import MarkdownIt
 
 # Pre-compiled regex patterns for performance
+# TOC pattern: [TOC] must be alone on a line
+_TOC_PATTERN = re.compile(r"^\[TOC\]$", re.MULTILINE)
+# TOC placeholder (text marker, not HTML comment)
+# Must match TOC_PLACEHOLDER in toc_helpers.py and _TOC_PLACEHOLDER in typing_helpers.py
+_TOC_PLACEHOLDER = "§§TOC§§"
+
 # Note: <li> and <blockquote> are excluded because note.com doesn't add name/id to these tags
 _TAG_PATTERN = re.compile(
     r"<(p|h[1-6]|ul|ol|code|hr|div|span)(\s[^>]*)?>",
@@ -355,6 +361,61 @@ def _convert_code_blocks_to_note_format(html: str) -> str:
     return result
 
 
+def _has_toc_placeholder(content: str) -> bool:
+    """Check if content contains [TOC] placeholder.
+
+    Args:
+        content: Markdown content to check.
+
+    Returns:
+        True if [TOC] placeholder exists on its own line.
+    """
+    return bool(_TOC_PATTERN.search(content))
+
+
+def _convert_toc_to_placeholder(content: str) -> str:
+    """Convert first [TOC] to HTML placeholder.
+
+    Only the first [TOC] is converted. Subsequent ones are removed.
+    [TOC] inside code blocks is not processed.
+
+    Args:
+        content: Markdown content with potential [TOC] markers.
+
+    Returns:
+        Content with [TOC] converted to placeholder.
+    """
+    # Protect code blocks from TOC processing
+    code_blocks: list[tuple[str, str]] = []
+
+    def protect_code_block(match: re.Match[str]) -> str:
+        placeholder = f"__CODE_BLOCK_{len(code_blocks)}__"
+        code_blocks.append((placeholder, match.group(0)))
+        return placeholder
+
+    # Temporarily replace code blocks
+    protected = re.sub(r"```[\s\S]*?```", protect_code_block, content)
+    protected = re.sub(r"`[^`]+`", protect_code_block, protected)
+
+    # Convert only the first [TOC] to placeholder
+    first_replaced = False
+
+    def replace_toc(match: re.Match[str]) -> str:
+        nonlocal first_replaced
+        if not first_replaced:
+            first_replaced = True
+            return _TOC_PLACEHOLDER
+        return ""  # Remove subsequent [TOC]s
+
+    result = _TOC_PATTERN.sub(replace_toc, protected)
+
+    # Restore code blocks
+    for placeholder, original in code_blocks:
+        result = result.replace(placeholder, original)
+
+    return result
+
+
 def markdown_to_html(content: str) -> str:
     """Convert Markdown content to HTML.
 
@@ -374,10 +435,13 @@ def markdown_to_html(content: str) -> str:
     if not content or not content.strip():
         return ""
 
-    # 1. Convert ruby notation BEFORE markdown conversion
+    # 1. Convert [TOC] to placeholder FIRST (before any processing)
+    content = _convert_toc_to_placeholder(content)
+
+    # 2. Convert ruby notation BEFORE markdown conversion
     content = _convert_ruby_to_html(content)
 
-    # 2. Markdown conversion
+    # 3. Markdown conversion
     md = MarkdownIt().enable("strikethrough")
     result: str = md.render(content)
 

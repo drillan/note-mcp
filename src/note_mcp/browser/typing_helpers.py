@@ -32,6 +32,14 @@ _STRIKETHROUGH_PATTERN = re.compile(r"~~(.+?)~~")
 # Ruby notation pattern: ｜漢字《かんじ》 or |漢字《かんじ》 or 漢字《かんじ》
 # Vertical bar can be full-width (｜) or half-width (|) or omitted for kanji/kana
 _RUBY_PATTERN = re.compile(r"[｜|]?([一-龯ぁ-んァ-ヶー]+)《([^》]+)》")
+# TOC pattern: [TOC] alone on a line
+_TOC_PATTERN = re.compile(r"^\[TOC\]$")
+# TOC placeholder for browser insertion (text marker, not HTML comment)
+# Must match TOC_PLACEHOLDER in toc_helpers.py
+_TOC_PLACEHOLDER = "§§TOC§§"
+# Heading patterns: ## for h2, ### for h3, etc.
+# ProseMirror requires typing the pattern followed by space to trigger conversion
+_HEADING_PATTERN = re.compile(r"^(#{2,6})\s+(.*)$")
 
 
 async def _type_with_strikethrough(page: Any, text: str) -> None:
@@ -215,6 +223,18 @@ async def type_markdown_content(page: Any, content: str) -> None:
                 await page.keyboard.press("Enter")
             continue
 
+        # Check for [TOC] marker
+        if _TOC_PATTERN.match(stripped_line):
+            # Type placeholder for TOC insertion
+            # insert_toc_at_placeholder() will replace this with actual TOC
+            await page.keyboard.type(_TOC_PLACEHOLDER)
+            if i < len(lines) - 1:
+                await page.keyboard.press("Enter")
+            in_unordered_list = False
+            in_ordered_list = False
+            in_blockquote = False
+            continue
+
         # Check for blockquote line
         bq_match = _BLOCKQUOTE_PATTERN.match(line)
         if bq_match:
@@ -259,6 +279,31 @@ async def type_markdown_content(page: Any, content: str) -> None:
                 # Click on the editor to refocus
                 await page.locator(".ProseMirror").first.click()
                 await asyncio.sleep(0.1)
+
+        # Check for heading pattern (## h2, ### h3, etc.)
+        heading_match = _HEADING_PATTERN.match(stripped_line)
+        if heading_match:
+            heading_level = heading_match.group(1)  # "##", "###", etc.
+            heading_content = heading_match.group(2)  # The heading text
+
+            # Type heading prefix with space to trigger ProseMirror conversion
+            # ProseMirror converts "## " at the start of a line to <h2>
+            await page.keyboard.type(f"{heading_level} ")
+            await asyncio.sleep(0.1)  # Wait for conversion
+
+            # Type the heading content
+            if heading_content:
+                await _type_with_strikethrough(page, heading_content)
+
+            # Reset list/blockquote states
+            in_unordered_list = False
+            in_ordered_list = False
+            in_blockquote = False
+
+            # Press Enter for next line
+            if i < len(lines) - 1:
+                await page.keyboard.press("Enter")
+            continue
 
         # Check for unordered list item
         ul_match = _UNORDERED_LIST_PATTERN.match(line)

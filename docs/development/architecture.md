@@ -23,6 +23,7 @@ src/note_mcp/
 │   ├── update_article.py # 記事更新
 │   ├── preview.py     # プレビュー表示
 │   ├── insert_image.py # 画像挿入
+│   ├── toc_helpers.py # 目次挿入ヘルパー
 │   ├── typing_helpers.py # 入力ヘルパー
 │   └── url_helpers.py # URL操作ヘルパー
 ├── utils/             # ユーティリティ
@@ -102,7 +103,27 @@ from note_mcp.utils.markdown_to_html import markdown_to_html
 html = markdown_to_html("# タイトル\n本文")
 ```
 
-変換時にルビ記法も処理されます。
+変換時にルビ記法や数式記法も処理されます。
+
+#### 目次（TOC）機能
+
+`[TOC]`記法はnote.comのネイティブ目次機能に変換されます。
+
+```
+Markdown入力: [TOC]
+    ↓
+テキストプレースホルダ: §§TOC§§
+    ↓
+ブラウザ自動化でnote.com目次機能を挿入
+```
+
+プレースホルダはHTMLコメントではなく、テキストマーカー（`§§TOC§§`）を使用します。
+これはProseMirrorエディタでテキストノードとして認識される必要があるためです。
+
+`toc_helpers.py`がブラウザ操作を担当します：
+
+1. `has_toc_placeholder()` - エディタ内のプレースホルダを検出
+2. `insert_toc_at_placeholder()` - note.comの[+]ボタン→[目次]でTOC挿入
 
 ### Investigatorモード
 

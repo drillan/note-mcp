@@ -7,15 +7,21 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import re
 from typing import TYPE_CHECKING, Any
 
+from playwright.async_api import Error as PlaywrightError
+
 from note_mcp.browser.manager import BrowserManager
+from note_mcp.browser.toc_helpers import insert_toc_at_placeholder
 from note_mcp.browser.typing_helpers import type_markdown_content
-from note_mcp.models import Article, ArticleStatus
+from note_mcp.models import Article, ArticleStatus, BrowserArticleResult
 
 if TYPE_CHECKING:
     from note_mcp.models import ArticleInput, Session
+
+logger = logging.getLogger(__name__)
 
 
 # note.com URLs
@@ -25,7 +31,7 @@ NOTE_NEW_ARTICLE_URL = "https://note.com/notes/new"
 async def create_draft_via_browser(
     session: Session,
     article_input: ArticleInput,
-) -> Article:
+) -> BrowserArticleResult:
     """Create a draft article via browser automation.
 
     Navigates to the note.com new article page, fills in the content,
@@ -36,7 +42,7 @@ async def create_draft_via_browser(
         article_input: Article content and metadata
 
     Returns:
-        Created Article object
+        BrowserArticleResult containing the created article and TOC insertion status
 
     Raises:
         RuntimeError: If draft creation fails
@@ -143,6 +149,18 @@ async def create_draft_via_browser(
         except Exception:
             pass
 
+    # Insert TOC at placeholder if present (after body typing, before save)
+    toc_inserted = False
+    toc_error: str | None = None
+    try:
+        toc_inserted = await insert_toc_at_placeholder(page)
+        if toc_inserted:
+            logger.info("TOC inserted into draft")
+    except (TimeoutError, PlaywrightError) as e:
+        toc_error = str(e)
+        logger.warning(f"TOC insertion failed: {toc_error}")
+        # TOC insertion failure is not fatal
+
     # Click save draft button explicitly instead of relying on auto-save
     await asyncio.sleep(1)
 
@@ -190,11 +208,17 @@ async def create_draft_via_browser(
         raise RuntimeError("Failed to create draft: could not get article key from URL")
 
     # Create Article object with available info
-    return Article(
+    article = Article(
         id=article_key,  # Use key as ID since we don't have the actual ID
         key=article_key,
         title=article_input.title,
         body=article_input.body,
         status=ArticleStatus.DRAFT,
         tags=article_input.tags,
+    )
+
+    return BrowserArticleResult(
+        article=article,
+        toc_inserted=toc_inserted if toc_inserted else None,
+        toc_error=toc_error,
     )

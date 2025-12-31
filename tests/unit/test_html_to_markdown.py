@@ -322,3 +322,37 @@ y = 2
         html = markdown_to_html(original)
         result = html_to_markdown(html)
         assert "~~deleted~~" in result
+
+    # TOC conversion tests - Issue #39
+
+    def test_toc_element_to_markdown(self) -> None:
+        """Test converting TOC HTML element back to [TOC] marker."""
+        html = '<div class="p-TableOfContents">...</div>'
+        result = html_to_markdown(html)
+        assert "[TOC]" in result
+
+    def test_toc_element_with_full_classname(self) -> None:
+        """Test TOC element with note.com-style class names."""
+        html = '<div class="p-editorTableOfContents__wrapper TableOfContents">...</div>'
+        result = html_to_markdown(html)
+        assert "[TOC]" in result
+
+    def test_toc_element_preserves_surrounding_content(self) -> None:
+        """Test TOC conversion preserves other content."""
+        html = '<h1>Title</h1><div class="TableOfContents">...</div><h2>Section</h2>'
+        result = html_to_markdown(html)
+        assert "[TOC]" in result
+        assert "# Title" in result
+        assert "## Section" in result
+
+    def test_toc_with_section_tag(self) -> None:
+        """Test TOC element using section tag."""
+        html = '<section class="TableOfContents">...</section>'
+        result = html_to_markdown(html)
+        assert "[TOC]" in result
+
+    def test_toc_with_nav_tag(self) -> None:
+        """Test TOC element using nav tag."""
+        html = '<nav class="TableOfContents">...</nav>'
+        result = html_to_markdown(html)
+        assert "[TOC]" in result
