@@ -76,4 +76,5 @@ testpaths = ["tests"]
 markers = [
     "requires_auth: tests requiring real authentication",
     "e2e: end-to-end tests",
+    "docker: tests requiring Docker environment with browser/proxy",
 ]
