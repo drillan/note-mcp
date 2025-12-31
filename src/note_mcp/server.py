@@ -14,6 +14,7 @@ from note_mcp.api.images import upload_body_image, upload_eyecatch_image
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
 from note_mcp.browser.create_draft import create_draft_via_browser
+from note_mcp.browser.insert_image import insert_image_via_browser
 from note_mcp.browser.preview import show_preview
 from note_mcp.browser.update_article import update_article_via_browser
 from note_mcp.models import ArticleInput, ArticleStatus
@@ -278,8 +279,8 @@ async def note_upload_body_image(
     JPEG、PNG、GIF、WebP形式の画像をアップロードできます。
     最大ファイルサイズは10MBです。
 
-    返されたURLを記事本文にMarkdown形式で挿入してください。
-    例: ![代替テキスト](返されたURL)
+    **重要**: このツールは画像をアップロードしてURLを返すだけです。
+    画像を記事に直接挿入するには note_insert_body_image を使用してください。
 
     note_list_articlesで記事一覧を取得し、IDを確認できます。
 
@@ -297,9 +298,51 @@ async def note_upload_body_image(
     image = await upload_body_image(session, file_path, note_id=note_id)
     return (
         f"本文用画像をアップロードしました。URL: {image.url}\n\n"
-        f"Markdownで挿入: ![説明]({image.url})\n"
-        f'キャプション付き: ![説明]({image.url} "キャプションテキスト")'
+        f"※画像を記事に直接挿入するには note_insert_body_image を使用してください。"
     )
+
+
+@mcp.tool()
+async def note_insert_body_image(
+    file_path: Annotated[str, "挿入する画像ファイルのパス"],
+    article_id: Annotated[str, "画像を挿入する記事のID（数字のみ）"],
+    caption: Annotated[str | None, "画像のキャプション（オプション）"] = None,
+) -> str:
+    """記事本文内に画像を直接挿入します。
+
+    ブラウザ自動化を使用してnote.comエディタに画像を挿入します。
+    JPEG、PNG、GIF、WebP形式の画像を挿入できます。
+    最大ファイルサイズは10MBです。
+
+    note.comのAPIでは画像のHTML埋め込みが正しく保存されないため、
+    このツールはブラウザ経由でエディタの「画像を追加」機能を使用します。
+
+    note_list_articlesで記事一覧を取得し、IDを確認できます。
+
+    Args:
+        file_path: 挿入する画像ファイルのパス
+        article_id: 画像を挿入する記事のID
+        caption: 画像のキャプション（オプション）
+
+    Returns:
+        挿入結果のメッセージ
+    """
+    session = _session_manager.load()
+    if session is None or session.is_expired():
+        return "セッションが無効です。note_loginでログインしてください。"
+
+    result = await insert_image_via_browser(
+        session=session,
+        article_id=article_id,
+        file_path=file_path,
+        caption=caption,
+    )
+
+    if result["success"]:
+        caption_info = f"、キャプション: {result['caption']}" if result.get("caption") else ""
+        return f"画像を挿入しました。記事ID: {result['article_id']}{caption_info}"
+    else:
+        return "画像の挿入に失敗しました。"
 
 
 @mcp.tool()

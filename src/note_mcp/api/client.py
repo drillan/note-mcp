@@ -167,14 +167,20 @@ class NoteAPIClient:
             headers["Content-Type"] = "application/json"
 
         request_method = getattr(self._client, method.lower())
-        response = await request_method(
-            path,
-            headers=headers,
-            params=params,
-            json=json,
-            data=data,
-            files=files,
-        )
+
+        # Build kwargs based on method - GET doesn't support json/data/files
+        kwargs: dict[str, Any] = {"headers": headers}
+        if params is not None:
+            kwargs["params"] = params
+        if method.upper() != "GET":
+            if json is not None:
+                kwargs["json"] = json
+            if data is not None:
+                kwargs["data"] = data
+            if files is not None:
+                kwargs["files"] = files
+
+        response = await request_method(path, **kwargs)
 
         if not response.is_success:
             self._handle_error_response(response)
