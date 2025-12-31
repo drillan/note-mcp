@@ -1,10 +1,12 @@
 """FastMCP server for note.com article management.
 
 Provides MCP tools for creating, updating, and managing note.com articles.
+Supports investigator mode for API investigation via INVESTIGATOR_MODE=1.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -17,6 +19,7 @@ from note_mcp.browser.create_draft import create_draft_via_browser
 from note_mcp.browser.insert_image import insert_image_via_browser
 from note_mcp.browser.preview import show_preview
 from note_mcp.browser.update_article import update_article_via_browser
+from note_mcp.investigator import register_investigator_tools
 from note_mcp.models import ArticleInput, ArticleStatus
 
 # Create MCP server instance
@@ -458,3 +461,8 @@ async def note_list_articles(
         lines.append(f"  （続きはpage={result.page + 1}で取得できます）")
 
     return "\n".join(lines)
+
+
+# Register investigator tools if in investigator mode
+if os.environ.get("INVESTIGATOR_MODE") == "1":
+    register_investigator_tools(mcp)

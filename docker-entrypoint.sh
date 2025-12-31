@@ -195,6 +195,7 @@ log_info "  User: $(id -u):$(id -g)"
 log_info "  HOME=$HOME"
 log_info "  DISPLAY=$DISPLAY"
 log_info "  PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-not set}"
+log_info "  INVESTIGATOR_MODE=${INVESTIGATOR_MODE:-not set}"
 log_info "  Python: $(python --version 2>&1)"
 
 # Execute the command

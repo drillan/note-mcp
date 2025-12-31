@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
 from unittest.mock import MagicMock
-
-import pytest
 
 from note_mcp.investigator.mcp_tools import register_investigator_tools
 
@@ -19,10 +19,10 @@ class TestRegisterInvestigatorTools:
         # Create a list to track registered tools
         registered_tools: list[str] = []
 
-        def tool_decorator() -> MagicMock:
+        def tool_decorator() -> Callable[[Any], Any]:
             """Mock decorator that tracks function names."""
 
-            def wrapper(func: MagicMock) -> MagicMock:
+            def wrapper(func: Any) -> Any:
                 registered_tools.append(func.__name__)
                 return func
 

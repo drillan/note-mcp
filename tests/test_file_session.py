@@ -5,8 +5,6 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import pytest
-
 from note_mcp.auth.file_session import FileBasedSessionManager
 from note_mcp.models import Session
 
