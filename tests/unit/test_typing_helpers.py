@@ -5,6 +5,13 @@ from unittest.mock import AsyncMock
 import pytest
 
 from note_mcp.browser.typing_helpers import (
+    _ALIGN_CENTER_PATTERN,
+    _ALIGN_CENTER_PLACEHOLDER,
+    _ALIGN_END_PLACEHOLDER,
+    _ALIGN_LEFT_PATTERN,
+    _ALIGN_LEFT_PLACEHOLDER,
+    _ALIGN_RIGHT_PATTERN,
+    _ALIGN_RIGHT_PLACEHOLDER,
     _BLOCKQUOTE_PATTERN,
     _CITATION_PATTERN,
     _CITATION_URL_PATTERN,
@@ -697,3 +704,262 @@ More content"""
         press_calls = mock_page.keyboard.press.call_args_list
         pressed_keys = [call[0][0] for call in press_calls]
         assert "Enter" in pressed_keys
+
+
+class TestAlignCenterPattern:
+    """Tests for center alignment pattern detection (->text<-)."""
+
+    def test_matches_center_aligned_text(self) -> None:
+        """Test that center alignment pattern is detected."""
+        match = _ALIGN_CENTER_PATTERN.match("->centered text<-")
+        assert match is not None
+        assert match.group(1) == "centered text"
+
+    def test_matches_center_with_japanese(self) -> None:
+        """Test that center alignment with Japanese is detected."""
+        match = _ALIGN_CENTER_PATTERN.match("->中央寄せテキスト<-")
+        assert match is not None
+        assert match.group(1) == "中央寄せテキスト"
+
+    def test_requires_both_markers(self) -> None:
+        """Test that both opening and closing markers are required."""
+        # Only opening marker
+        match = _ALIGN_CENTER_PATTERN.match("->text")
+        assert match is None
+
+    def test_no_match_for_plain_text(self) -> None:
+        """Test that plain text is not matched."""
+        match = _ALIGN_CENTER_PATTERN.match("Regular text")
+        assert match is None
+
+
+class TestAlignRightPattern:
+    """Tests for right alignment pattern detection (->text)."""
+
+    def test_matches_right_aligned_text(self) -> None:
+        """Test that right alignment pattern is detected."""
+        match = _ALIGN_RIGHT_PATTERN.match("->right aligned text")
+        assert match is not None
+        assert match.group(1) == "right aligned text"
+
+    def test_matches_right_with_japanese(self) -> None:
+        """Test that right alignment with Japanese is detected."""
+        match = _ALIGN_RIGHT_PATTERN.match("->右寄せテキスト")
+        assert match is not None
+        assert match.group(1) == "右寄せテキスト"
+
+    def test_also_matches_center_pattern(self) -> None:
+        """Test that center pattern (->text<-) also matches right pattern.
+
+        Note: Center pattern is checked first in the code to handle this overlap.
+        """
+        match = _ALIGN_RIGHT_PATTERN.match("->centered<-")
+        assert match is not None
+        # Full match includes <-
+        assert match.group(1) == "centered<-"
+
+    def test_no_match_for_plain_text(self) -> None:
+        """Test that plain text is not matched."""
+        match = _ALIGN_RIGHT_PATTERN.match("Regular text")
+        assert match is None
+
+
+class TestAlignLeftPattern:
+    """Tests for left alignment pattern detection (<-text)."""
+
+    def test_matches_left_aligned_text(self) -> None:
+        """Test that left alignment pattern is detected."""
+        match = _ALIGN_LEFT_PATTERN.match("<-left aligned text")
+        assert match is not None
+        assert match.group(1) == "left aligned text"
+
+    def test_matches_left_with_japanese(self) -> None:
+        """Test that left alignment with Japanese is detected."""
+        match = _ALIGN_LEFT_PATTERN.match("<-左寄せテキスト")
+        assert match is not None
+        assert match.group(1) == "左寄せテキスト"
+
+    def test_no_match_for_plain_text(self) -> None:
+        """Test that plain text is not matched."""
+        match = _ALIGN_LEFT_PATTERN.match("Regular text")
+        assert match is None
+
+    def test_no_match_for_arrow_in_middle(self) -> None:
+        """Test that <- in middle of text is not matched."""
+        match = _ALIGN_LEFT_PATTERN.match("text <- more")
+        assert match is None
+
+
+class TestAlignmentPlaceholderConstants:
+    """Tests for alignment placeholder constants used in typing helpers."""
+
+    def test_center_placeholder_contains_marker(self) -> None:
+        """Test that center placeholder contains section sign markers."""
+        assert "§§" in _ALIGN_CENTER_PLACEHOLDER
+        assert "CENTER" in _ALIGN_CENTER_PLACEHOLDER
+
+    def test_right_placeholder_contains_marker(self) -> None:
+        """Test that right placeholder contains section sign markers."""
+        assert "§§" in _ALIGN_RIGHT_PLACEHOLDER
+        assert "RIGHT" in _ALIGN_RIGHT_PLACEHOLDER
+
+    def test_left_placeholder_contains_marker(self) -> None:
+        """Test that left placeholder contains section sign markers."""
+        assert "§§" in _ALIGN_LEFT_PLACEHOLDER
+        assert "LEFT" in _ALIGN_LEFT_PLACEHOLDER
+
+    def test_end_placeholder_contains_marker(self) -> None:
+        """Test that end placeholder contains section sign markers."""
+        assert "§§" in _ALIGN_END_PLACEHOLDER
+        assert "/ALIGN" in _ALIGN_END_PLACEHOLDER
+
+    def test_all_placeholders_unique(self) -> None:
+        """Test that all placeholders are unique."""
+        placeholders = [
+            _ALIGN_CENTER_PLACEHOLDER,
+            _ALIGN_RIGHT_PLACEHOLDER,
+            _ALIGN_LEFT_PLACEHOLDER,
+            _ALIGN_END_PLACEHOLDER,
+        ]
+        assert len(placeholders) == len(set(placeholders))
+
+
+class TestTypeMarkdownContentAlignment:
+    """Tests for type_markdown_content with text alignment handling."""
+
+    @pytest.mark.asyncio
+    async def test_center_alignment_types_placeholder(self) -> None:
+        """Test that center alignment notation types placeholder."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        await type_markdown_content(mock_page, "->centered text<-")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        # Should contain placeholder with content
+        expected = f"{_ALIGN_CENTER_PLACEHOLDER}centered text{_ALIGN_END_PLACEHOLDER}"
+        assert expected in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_right_alignment_types_placeholder(self) -> None:
+        """Test that right alignment notation types placeholder."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        await type_markdown_content(mock_page, "->right aligned")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        expected = f"{_ALIGN_RIGHT_PLACEHOLDER}right aligned{_ALIGN_END_PLACEHOLDER}"
+        assert expected in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_left_alignment_types_placeholder(self) -> None:
+        """Test that left alignment notation types placeholder."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        await type_markdown_content(mock_page, "<-left aligned")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        expected = f"{_ALIGN_LEFT_PLACEHOLDER}left aligned{_ALIGN_END_PLACEHOLDER}"
+        assert expected in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_alignment_with_other_content(self) -> None:
+        """Test alignment mixed with other content."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = """Normal text
+
+->centered text<-
+
+More normal text"""
+
+        await type_markdown_content(mock_page, content)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        assert "Normal text" in typed_texts
+        expected_center = f"{_ALIGN_CENTER_PLACEHOLDER}centered text{_ALIGN_END_PLACEHOLDER}"
+        assert expected_center in typed_texts
+        assert "More normal text" in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_multiple_alignments(self) -> None:
+        """Test multiple alignment notations in same document."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = """->center text<-
+->right text
+<-left text"""
+
+        await type_markdown_content(mock_page, content)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+
+        expected_center = f"{_ALIGN_CENTER_PLACEHOLDER}center text{_ALIGN_END_PLACEHOLDER}"
+        expected_right = f"{_ALIGN_RIGHT_PLACEHOLDER}right text{_ALIGN_END_PLACEHOLDER}"
+        expected_left = f"{_ALIGN_LEFT_PLACEHOLDER}left text{_ALIGN_END_PLACEHOLDER}"
+
+        assert expected_center in typed_texts
+        assert expected_right in typed_texts
+        assert expected_left in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_alignment_presses_enter_for_next_line(self) -> None:
+        """Test that Enter is pressed after alignment when more content follows."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        await type_markdown_content(mock_page, "->centered<-\nMore text")
+
+        press_calls = mock_page.keyboard.press.call_args_list
+        pressed_keys = [call[0][0] for call in press_calls]
+        assert "Enter" in pressed_keys
+
+    @pytest.mark.asyncio
+    async def test_alignment_resets_list_state(self) -> None:
+        """Test that alignment resets list state."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = """- List item 1
+- List item 2
+
+->centered<-
+
+More content"""
+
+        await type_markdown_content(mock_page, content)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        expected_center = f"{_ALIGN_CENTER_PLACEHOLDER}centered{_ALIGN_END_PLACEHOLDER}"
+        assert expected_center in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_alignment_with_headings(self) -> None:
+        """Test alignment with headings."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = """## Section Title
+
+->centered text<-
+
+More content"""
+
+        await type_markdown_content(mock_page, content)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        assert "## " in typed_texts
+        assert "Section Title" in typed_texts
+        expected_center = f"{_ALIGN_CENTER_PLACEHOLDER}centered text{_ALIGN_END_PLACEHOLDER}"
+        assert expected_center in typed_texts

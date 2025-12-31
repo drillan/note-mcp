@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from playwright.async_api import Error as PlaywrightError
 
 from note_mcp.browser.manager import BrowserManager
+from note_mcp.browser.text_align_helpers import apply_text_alignments
 from note_mcp.browser.toc_helpers import insert_toc_at_placeholder
 from note_mcp.browser.typing_helpers import type_markdown_content
 from note_mcp.models import Article, ArticleStatus, BrowserArticleResult
@@ -161,6 +162,18 @@ async def create_draft_via_browser(
         logger.warning(f"TOC insertion failed: {toc_error}")
         # TOC insertion failure is not fatal
 
+    # Apply text alignments at placeholder positions (after body typing, before save)
+    alignments_applied = 0
+    alignment_error: str | None = None
+    try:
+        alignments_applied = await apply_text_alignments(page)
+        if alignments_applied > 0:
+            logger.info(f"Applied {alignments_applied} text alignment(s) to draft")
+    except (TimeoutError, PlaywrightError) as e:
+        alignment_error = str(e)
+        logger.warning(f"Text alignment application failed: {alignment_error}")
+        # Text alignment failure is not fatal
+
     # Click save draft button explicitly instead of relying on auto-save
     await asyncio.sleep(1)
 
@@ -221,4 +234,6 @@ async def create_draft_via_browser(
         article=article,
         toc_inserted=toc_inserted if toc_inserted else None,
         toc_error=toc_error,
+        alignments_applied=alignments_applied if alignments_applied > 0 else None,
+        alignment_error=alignment_error,
     )
