@@ -140,7 +140,54 @@ services:
       - note-mcp-data:/app/data
     command: ["uv", "run", "python", "-m", "note_mcp"]
 
+  # ===========================================================================
+  # Investigator MCP Server (AI自律API調査用)
+  # ===========================================================================
+  investigator:
+    <<: *base
+    build:
+      context: .
+      target: dev  # mitmproxyを含む開発イメージ
+    environment:
+      # Investigatorモードを有効化
+      - INVESTIGATOR_MODE=1
+      # Xvfbでヘッドレスディスプレイを提供
+      - USE_XVFB=1
+      - DISPLAY=:99
+      - XVFB_WHD=1920x1080x24
+      # VNCでブラウザ動作を視覚確認可能
+      - VNC_PORT=5900
+      - NOVNC_PORT=6080
+      # Playwrightをheadedモードで起動
+      - HEADED=1
+      # mitmproxyポート
+      - MITMPROXY_PORT=8080
+      # Docker内ではファイルベースセッション管理を使用
+      - USE_FILE_SESSION=1
+      # MCP HTTPサーバーポート
+      - MCP_PORT=9000
+    ports:
+      - "5900:5900"   # VNC
+      - "6080:6080"   # noVNC
+      - "8080:8080"   # mitmproxy
+      - "9000:9000"   # MCP HTTP server
+    volumes:
+      # プロジェクトルートをマウント
+      - .:/app:rw
+      # ホストの.venvを除外
+      - /app/.venv
+      # セッション・キャプチャデータの永続化
+      - investigator-data:/app/data
+      # Chrome拡張機能・設定の永続化
+      - chrome-data:/home/ubuntu/.config/google-chrome
+      # 証明書の共有（オプション）
+      - ./.cred:/app/.cred:ro
+    # MCPサーバーをinvestigatorモードでHTTP公開
+    command: ["uv", "run", "python", "-m", "note_mcp", "--investigator", "--http", "--port", "9000"]
+
 volumes:
   note-mcp-data:
   # Chrome拡張機能・設定の永続化用
   chrome-data:
+  # Investigatorセッション・キャプチャデータ
+  investigator-data:

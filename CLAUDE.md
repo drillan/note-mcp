@@ -125,6 +125,38 @@ if has_more_content:
 - 認証状態はセッション管理で適切に維持すること
 - セッション期限切れ時は適切なエラーメッセージを返すこと
 
+## Available Skills
+
+プロジェクト固有のスキルが `.claude/skills/` に用意されています。
+
+### API Investigation (`api-investigator`)
+
+note.com APIの調査・解析を支援するスキルです。mitmproxyとPlaywrightを使用してHTTPトラフィックをキャプチャ・分析します。
+
+**主な用途:**
+- 未ドキュメントのAPIエンドポイント調査
+- リクエスト/レスポンスパターンの分析
+- 新機能実装前のAPI動作確認
+
+**クイックスタート:**
+```bash
+# Docker環境で起動
+docker compose up --build
+
+# MCPツール経由で使用
+# investigator_start_capture → investigator_navigate → investigator_get_traffic
+```
+
+**詳細:** `.claude/skills/api-investigator/SKILL.md` を参照
+
+### Other Skills
+
+- **code-quality-gate** - コード品質基準の完全遵守を保証
+- **constitution-checker** - プロジェクト憲法への準拠を検証
+- **tdd-workflow** - TDDワークフローを強制
+- **doc-updater** - コード変更時にドキュメントを自動更新
+- **mcp-development** - MCPサーバー開発のベストプラクティス
+
 ## Development Principles
 
 開発原則の詳細は **Constitution** を参照してください。以下は主要な原則の概要です：
@@ -203,5 +235,6 @@ if has_more_content:
 
 ## Recent Changes
 
+- 2025-12-31: Added Available Skills section with api-investigator導線
 - 001-note-mcp: Added Python 3.11+
 - 2025-12-20: Updated CLAUDE.md based on Constitution v1.0.0

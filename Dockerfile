@@ -116,6 +116,11 @@ RUN uv sync --no-cache --no-dev
 COPY src/ ./src/
 COPY tests/ ./tests/
 
+# Create data directory for session/capture data persistence
+# This directory will be used by named volumes (investigator-data, note-mcp-data)
+# Creating it here ensures correct ownership when volume is first mounted
+RUN mkdir -p /app/data
+
 # Set ownership of /app to appuser
 RUN chown -R ${UID}:${GID} /app
 

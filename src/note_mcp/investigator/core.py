@@ -10,12 +10,13 @@ import base64
 import contextlib
 import json
 import logging
+import os
 import re
 import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, TextIO
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser, BrowserContext, Page, Playwright
@@ -54,6 +55,7 @@ class ProxyManager:
         self.port = port
         self.process: subprocess.Popen[bytes] | None = None
         self.output_file: Path | None = None
+        self._log_handle: TextIO | None = None
 
     def start(self, output: Path, domain_filter: str | None = None) -> None:
         """Start mitmproxy in dump mode.
@@ -83,15 +85,17 @@ class ProxyManager:
 
         # Don't capture stdout/stderr with PIPE - it causes blocking issues
         # mitmproxy needs to write output freely without buffer pressure
-        # Redirect to DEVNULL since we capture traffic to file anyway
+        # Log to file for debugging, stdout to DEVNULL
+        log_file = Path("/tmp/mitmproxy_debug.log")
+        self._log_handle = open(log_file, "w")  # noqa: SIM115
         self.process = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=self._log_handle,
         )
 
-        # Wait for proxy to start
-        time.sleep(1.0)
+        # Wait for proxy to start - mitmproxy needs time to initialize
+        time.sleep(3.0)
 
         if self.process.poll() is not None:
             raise RuntimeError(f"Failed to start mitmproxy on port {self.port}. Check if the port is already in use.")
@@ -106,6 +110,9 @@ class ProxyManager:
                 self.process.kill()
                 self.process.wait()
             self.process = None
+        if self._log_handle:
+            self._log_handle.close()
+            self._log_handle = None
 
     def is_running(self) -> bool:
         """Check if mitmproxy is running.
@@ -379,6 +386,7 @@ class CaptureSession:
         traffic: list[dict[str, Any]] = []
         try:
             # Read mitmproxy flow file using mitmdump
+            # Note: flow_detail=1 produces concise output, flow_detail=0 produces nothing
             result = subprocess.run(
                 [
                     "uv",
@@ -388,7 +396,7 @@ class CaptureSession:
                     str(self.proxy.output_file),
                     "-n",  # No upstream connection
                     "--set",
-                    "flow_detail=0",
+                    "flow_detail=1",
                 ],
                 capture_output=True,
                 text=True,
@@ -396,31 +404,49 @@ class CaptureSession:
             )
 
             # Parse output lines
+            # Format with flow_detail=1:
+            # "127.0.0.1:49898: GET https://note.com/ HTTP/2.0"
+            # "     << HTTP/2.0 200 OK 38.5k"
+            current_entry: dict[str, Any] | None = None
             for line in result.stdout.strip().split("\n"):
                 if not line:
                     continue
-                # Basic parsing of mitmdump output
-                # Format: "GET https://example.com/path [200 OK]"
-                parts = line.strip().split()
-                if len(parts) >= 2:
-                    method = parts[0]
-                    url = parts[1]
-                    status = 0
-                    if len(parts) >= 3 and parts[2].startswith("["):
-                        with contextlib.suppress(ValueError):
-                            status = int(parts[2].strip("[]"))
 
-                    # Apply pattern filter
-                    if pattern and not re.search(pattern, url):
-                        continue
+                # Request line: contains method and URL
+                methods = [": GET ", ": POST ", ": PUT ", ": DELETE ", ": PATCH "]
+                if any(m in line for m in methods):
+                    # Parse request line
+                    parts = line.split(": ", 1)
+                    if len(parts) >= 2:
+                        request_part = parts[1]
+                        req_parts = request_part.split()
+                        if len(req_parts) >= 2:
+                            method = req_parts[0]
+                            url = req_parts[1]
 
-                    traffic.append(
-                        {
-                            "method": method,
-                            "url": url,
-                            "status": status,
-                        }
-                    )
+                            # Apply pattern filter
+                            if pattern and not re.search(pattern, url):
+                                current_entry = None
+                                continue
+
+                            current_entry = {
+                                "method": method,
+                                "url": url,
+                                "status": 0,
+                            }
+
+                # Response line: contains status code
+                elif line.strip().startswith("<<") and current_entry:
+                    # Parse response status
+                    # Format: "<< HTTP/2.0 200 OK 38.5k" or "<< 200 OK 105b"
+                    resp_parts = line.strip().split()
+                    for part in resp_parts:
+                        if part.isdigit():
+                            current_entry["status"] = int(part)
+                            break
+
+                    traffic.append(current_entry)
+                    current_entry = None
 
         except subprocess.TimeoutExpired:
             logger.warning("Traffic read timed out")
@@ -516,7 +542,10 @@ class CaptureSessionManager:
             if cls._instance is None:
                 cls._instance = CaptureSession(port)
                 cls._domain = domain
-                cls._output_file = Path(f"/app/data/capture_{int(time.time())}.flow")
+                # Use APP_DATA_DIR environment variable with fallback to /app/data
+                data_dir = Path(os.environ.get("APP_DATA_DIR", "/app/data"))
+                data_dir.mkdir(parents=True, exist_ok=True)
+                cls._output_file = data_dir / f"capture_{int(time.time())}.flow"
                 await cls._instance.start(
                     output=cls._output_file,
                     domain_filter=domain,
