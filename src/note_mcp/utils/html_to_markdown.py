@@ -76,6 +76,13 @@ _TOC_ELEMENT_SIMPLE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Text alignment pattern (Issue #40)
+# Match <p ... style="text-align: center/right/left" ...> with possible other style properties
+_TEXT_ALIGN_P_PATTERN = re.compile(
+    r'<p([^>]*style="[^"]*text-align:\s*(center|right|left)[^"]*"[^>]*)>(.*?)</p>',
+    re.DOTALL | re.IGNORECASE,
+)
+
 # Cleanup patterns
 _UUID_ATTR_PATTERN = re.compile(
     r'\s(?:name|id)="[a-f0-9-]{36}"',
@@ -134,6 +141,29 @@ def _create_code_block_extractor(code_blocks: list[str]) -> Callable[[re.Match[s
         return f"__CODE_BLOCK_{len(code_blocks) - 1}__"
 
     return extract_code_block
+
+
+def _convert_text_align_paragraph(match: re.Match[str]) -> str:
+    """Convert text-aligned paragraph to Markdown format with alignment markers.
+
+    Args:
+        match: Regex match with groups (attrs, alignment, content)
+
+    Returns:
+        Markdown with alignment markers:
+        - center: ->text<-
+        - right: ->text
+        - left: <-text
+    """
+    alignment = match.group(2).lower()
+    content = match.group(3).strip()
+
+    alignment_formats = {
+        "center": f"->{content}<-\n\n",
+        "right": f"->{content}\n\n",
+        "left": f"<-{content}\n\n",
+    }
+    return alignment_formats.get(alignment, f"{content}\n\n")
 
 
 def _convert_heading(match: re.Match[str]) -> str:
@@ -419,7 +449,10 @@ def html_to_markdown(html_content: str) -> str:
     # 7. インライン要素（リンク、太字、斜体、インラインコード）
     result = _convert_inline_elements(result)
 
-    # 8. 段落（他の要素処理後に適用）
+    # 8. テキスト配置を持つ段落（通常の段落変換より先に処理）
+    result = _TEXT_ALIGN_P_PATTERN.sub(_convert_text_align_paragraph, result)
+
+    # 9. 段落（他の要素処理後に適用）
     result = _PARAGRAPH_PATTERN.sub(_convert_paragraph, result)
 
     # === 最終処理 ===

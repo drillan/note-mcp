@@ -579,3 +579,105 @@ print(formula)
         assert "x_1" in result
         assert "x_2" in result
         assert "^2" in result
+
+    # Text alignment tests - Issue #40
+
+    def test_text_align_center_basic(self) -> None:
+        """Test center alignment: ->text<-
+
+        Markdown: ->テキスト<-
+        Expected: <p style="text-align: center">テキスト</p>
+        """
+        result = markdown_to_html("->テキスト<-")
+        assert 'style="text-align: center"' in result
+        assert "テキスト" in result
+
+    def test_text_align_right_basic(self) -> None:
+        """Test right alignment: ->text
+
+        Markdown: ->テキスト
+        Expected: <p style="text-align: right">テキスト</p>
+        """
+        result = markdown_to_html("->テキスト")
+        assert 'style="text-align: right"' in result
+        assert "テキスト" in result
+
+    def test_text_align_left_basic(self) -> None:
+        """Test left alignment: <-text
+
+        Markdown: <-テキスト
+        Expected: <p style="text-align: left">テキスト</p>
+        """
+        result = markdown_to_html("<-テキスト")
+        assert 'style="text-align: left"' in result
+        assert "テキスト" in result
+
+    def test_text_align_center_with_bold(self) -> None:
+        """Test center alignment with bold text."""
+        result = markdown_to_html("->**太字**テキスト<-")
+        assert 'style="text-align: center"' in result
+        assert "<strong>" in result
+        assert "太字" in result
+
+    def test_text_align_right_with_italic(self) -> None:
+        """Test right alignment with italic text."""
+        result = markdown_to_html("->*斜体*テキスト")
+        assert 'style="text-align: right"' in result
+        assert "<em>" in result
+        assert "斜体" in result
+
+    def test_text_align_center_multiline_paragraph(self) -> None:
+        """Test that alignment applies to entire paragraph.
+
+        Only the first line with -> marker should be aligned.
+        """
+        markdown = """->中央寄せ<-
+
+通常のテキスト"""
+        result = markdown_to_html(markdown)
+        assert 'style="text-align: center"' in result
+        assert "中央寄せ" in result
+        assert "通常のテキスト" in result
+
+    def test_text_align_not_in_code_block(self) -> None:
+        """Test that alignment markers in code blocks are not processed."""
+        markdown = """```
+->テキスト<-
+```"""
+        result = markdown_to_html(markdown)
+        # Should preserve the markers as-is in code block (HTML-escaped)
+        # HTML escapes < and > to &lt; and &gt;
+        assert "-&gt;テキスト&lt;-" in result
+        assert 'style="text-align' not in result
+
+    def test_text_align_center_with_link(self) -> None:
+        """Test center alignment with a link."""
+        result = markdown_to_html("->[リンク](https://example.com)<-")
+        assert 'style="text-align: center"' in result
+        assert 'href="https://example.com"' in result
+        assert "リンク" in result
+
+    def test_text_align_right_end_of_document(self) -> None:
+        """Test right alignment at end of document (no trailing content)."""
+        result = markdown_to_html("->右寄せ")
+        assert 'style="text-align: right"' in result
+        assert "右寄せ" in result
+
+    def test_text_align_arrow_in_middle_not_processed(self) -> None:
+        """Test that arrows in middle of text are not processed as alignment."""
+        result = markdown_to_html("これは->矢印<-です")
+        # Arrows in middle should not trigger alignment
+        assert 'style="text-align' not in result
+        assert "->矢印<-" in result or "矢印" in result
+
+    def test_text_align_multiple_paragraphs(self) -> None:
+        """Test multiple aligned paragraphs."""
+        markdown = """->中央寄せ<-
+
+->右寄せ
+
+<-左寄せ"""
+        result = markdown_to_html(markdown)
+        assert result.count("text-align: center") == 1
+        assert result.count("text-align: right") == 1
+        assert result.count("text-align: left") == 1

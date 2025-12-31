@@ -356,3 +356,68 @@ y = 2
         html = '<nav class="TableOfContents">...</nav>'
         result = html_to_markdown(html)
         assert "[TOC]" in result
+
+    # Text alignment tests - Issue #40
+
+    def test_text_align_center_to_markdown(self) -> None:
+        """Test converting center-aligned HTML to markdown."""
+        html = '<p name="abc" id="abc" style="text-align: center">中央寄せ</p>'
+        result = html_to_markdown(html)
+        assert "->中央寄せ<-" in result
+
+    def test_text_align_right_to_markdown(self) -> None:
+        """Test converting right-aligned HTML to markdown."""
+        html = '<p name="abc" id="abc" style="text-align: right">右寄せ</p>'
+        result = html_to_markdown(html)
+        assert "->右寄せ" in result
+        # Should NOT have closing marker
+        assert "右寄せ<-" not in result
+
+    def test_text_align_left_to_markdown(self) -> None:
+        """Test converting left-aligned HTML to markdown."""
+        html = '<p name="abc" id="abc" style="text-align: left">左寄せ</p>'
+        result = html_to_markdown(html)
+        assert "<-左寄せ" in result
+
+    def test_text_align_with_bold_to_markdown(self) -> None:
+        """Test converting aligned text with bold formatting."""
+        html = '<p name="abc" id="abc" style="text-align: center"><strong>太字</strong>テキスト</p>'
+        result = html_to_markdown(html)
+        assert "->**太字**テキスト<-" in result
+
+    def test_text_align_with_link_to_markdown(self) -> None:
+        """Test converting aligned text with a link."""
+        html = '<p name="abc" id="abc" style="text-align: center"><a href="https://example.com">リンク</a></p>'
+        result = html_to_markdown(html)
+        assert "->[リンク](https://example.com)<-" in result
+
+    def test_roundtrip_text_align_center(self) -> None:
+        """Test center alignment survives roundtrip conversion."""
+        original = "->中央寄せテキスト<-"
+        html = markdown_to_html(original)
+        result = html_to_markdown(html)
+        assert "->中央寄せテキスト<-" in result
+
+    def test_roundtrip_text_align_right(self) -> None:
+        """Test right alignment survives roundtrip conversion."""
+        original = "->右寄せテキスト"
+        html = markdown_to_html(original)
+        result = html_to_markdown(html)
+        # Note: right alignment doesn't have closing marker
+        assert "->右寄せテキスト" in result
+        assert "右寄せテキスト<-" not in result
+
+    def test_roundtrip_text_align_left(self) -> None:
+        """Test left alignment survives roundtrip conversion."""
+        original = "<-左寄せテキスト"
+        html = markdown_to_html(original)
+        result = html_to_markdown(html)
+        assert "<-左寄せテキスト" in result
+
+    def test_text_align_default_not_converted(self) -> None:
+        """Test that paragraphs without explicit alignment don't get markers."""
+        html = '<p name="abc" id="abc">通常のテキスト</p>'
+        result = html_to_markdown(html)
+        assert "->" not in result
+        assert "<-" not in result
+        assert "通常のテキスト" in result

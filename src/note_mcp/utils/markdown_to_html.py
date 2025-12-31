@@ -49,6 +49,15 @@ _CITATION_URL_PATTERN = re.compile(r"^(.+?)\s+\((\S+)\)\s*$")
 # Vertical bar can be full-width (｜) or half-width (|) or omitted for kanji/kana
 _RUBY_PATTERN = re.compile(r"[｜|]?([一-龯ぁ-んァ-ヶー]+)《([^》]+)》")
 
+# Text alignment patterns (Issue #40)
+# Center: ->text<- (must be at start of line, ends with <- at end of line)
+# Right: ->text (must be at start of line, no closing marker)
+# Left: <-text (must be at start of line)
+# Order matters: center must be checked before right to avoid partial matches
+_TEXT_ALIGN_CENTER_PATTERN = re.compile(r"^->(.+)<-$", re.MULTILINE)
+_TEXT_ALIGN_RIGHT_PATTERN = re.compile(r"^->(.+)$", re.MULTILINE)
+_TEXT_ALIGN_LEFT_PATTERN = re.compile(r"^<-(.+)$", re.MULTILINE)
+
 
 def _generate_uuid() -> str:
     """Generate a UUID for note.com element IDs."""
@@ -124,6 +133,90 @@ def _convert_ruby_to_html(text: str) -> str:
         return f"<ruby>{base}<rp>（</rp><rt>{reading}</rt><rp>）</rp></ruby>"
 
     return _RUBY_PATTERN.sub(replace_ruby, text)
+
+
+def _convert_text_alignment(content: str) -> str:
+    """Convert text alignment Markdown notation to internal placeholders.
+
+    This function processes text alignment markers BEFORE markdown conversion.
+    It converts the custom notation to placeholders that will be converted
+    to proper HTML after markdown processing.
+
+    Notation:
+        ->text<- : center alignment
+        ->text   : right alignment
+        <-text   : left alignment
+
+    Args:
+        content: Markdown content with alignment markers
+
+    Returns:
+        Content with alignment markers converted to placeholders
+    """
+    # Protect code blocks from alignment processing
+    code_blocks: list[tuple[str, str]] = []
+
+    def protect_code_block(match: re.Match[str]) -> str:
+        placeholder = f"__CODE_BLOCK_ALIGN_{len(code_blocks)}__"
+        code_blocks.append((placeholder, match.group(0)))
+        return placeholder
+
+    # Temporarily replace code blocks (fenced and inline)
+    protected = re.sub(r"```[\s\S]*?```", protect_code_block, content)
+    protected = re.sub(r"`[^`]+`", protect_code_block, protected)
+
+    # Convert alignment markers to placeholders
+    # Order matters: center first (more specific), then right/left
+    protected = _TEXT_ALIGN_CENTER_PATTERN.sub(r"§§ALIGN_CENTER§§\1§§/ALIGN§§", protected)
+    protected = _TEXT_ALIGN_RIGHT_PATTERN.sub(r"§§ALIGN_RIGHT§§\1§§/ALIGN§§", protected)
+    protected = _TEXT_ALIGN_LEFT_PATTERN.sub(r"§§ALIGN_LEFT§§\1§§/ALIGN§§", protected)
+
+    # Restore code blocks
+    for placeholder, original in code_blocks:
+        protected = protected.replace(placeholder, original)
+
+    return protected
+
+
+def _apply_text_alignment_to_html(html: str) -> str:
+    """Convert text alignment placeholders to HTML style attributes.
+
+    This function processes the alignment placeholders created by
+    _convert_text_alignment and converts them to proper HTML paragraphs
+    with text-align styles.
+
+    Args:
+        html: HTML content with alignment placeholders
+
+    Returns:
+        HTML with proper text-align styles applied
+    """
+    # Pattern to match paragraphs containing alignment placeholders
+    # The placeholders will be inside <p> tags after markdown conversion
+    align_p_pattern = re.compile(
+        r"<p([^>]*)>§§ALIGN_(CENTER|RIGHT|LEFT)§§(.*?)§§/ALIGN§§</p>",
+        re.DOTALL | re.IGNORECASE,
+    )
+
+    def apply_alignment(match: re.Match[str]) -> str:
+        attrs = match.group(1)
+        alignment = match.group(2).lower()
+        content = match.group(3)
+
+        # Add style attribute for text-align
+        style = f"text-align: {alignment}"
+
+        # If there are existing attributes, append style
+        if attrs and 'style="' in attrs:
+            # Append to existing style (unlikely but handle it)
+            attrs = attrs.replace('style="', f'style="{style}; ')
+        else:
+            # Add new style attribute before other attrs
+            attrs = f' style="{style}"' + (attrs or "")
+
+        return f"<p{attrs}>{content}</p>"
+
+    return align_p_pattern.sub(apply_alignment, html)
 
 
 def _wrap_li_content_in_p(html: str) -> str:
@@ -441,7 +534,10 @@ def markdown_to_html(content: str) -> str:
     # 2. Convert ruby notation BEFORE markdown conversion
     content = _convert_ruby_to_html(content)
 
-    # 3. Markdown conversion
+    # 3. Convert text alignment markers to placeholders BEFORE markdown conversion
+    content = _convert_text_alignment(content)
+
+    # 4. Markdown conversion
     md = MarkdownIt().enable("strikethrough")
     result: str = md.render(content)
 
@@ -456,6 +552,9 @@ def markdown_to_html(content: str) -> str:
 
     # Add UUID to all elements (note.com requirement)
     result = _add_uuid_to_elements(result)
+
+    # Apply text alignment styles to paragraphs (must be after UUID addition)
+    result = _apply_text_alignment_to_html(result)
 
     # Convert blockquotes to note.com figure format
     # This is required for the API to preserve <br> tags inside blockquotes
