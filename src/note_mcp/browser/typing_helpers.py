@@ -1,7 +1,8 @@
 """Typing helpers for browser automation.
 
 Provides functions to type Markdown content into ProseMirror editors
-with proper handling for lists, blockquotes, citations, code blocks, and strikethrough.
+with proper handling for lists, blockquotes, citations, code blocks, strikethrough,
+and text alignment.
 """
 
 from __future__ import annotations
@@ -40,6 +41,20 @@ _TOC_PLACEHOLDER = "§§TOC§§"
 # Heading patterns: ## for h2, ### for h3, etc.
 # ProseMirror requires typing the pattern followed by space to trigger conversion
 _HEADING_PATTERN = re.compile(r"^(#{2,6})\s+(.*)$")
+
+# Text alignment patterns:
+# ->text<- : center alignment
+# ->text   : right alignment (no closing marker)
+# <-text   : left alignment (opening marker only)
+_ALIGN_CENTER_PATTERN = re.compile(r"^->(.+)<-$")
+_ALIGN_RIGHT_PATTERN = re.compile(r"^->(.+)$")
+_ALIGN_LEFT_PATTERN = re.compile(r"^<-(.+)$")
+
+# Text alignment placeholders (must match text_align_helpers.py)
+_ALIGN_CENTER_PLACEHOLDER = "§§ALIGN_CENTER§§"
+_ALIGN_RIGHT_PLACEHOLDER = "§§ALIGN_RIGHT§§"
+_ALIGN_LEFT_PLACEHOLDER = "§§ALIGN_LEFT§§"
+_ALIGN_END_PLACEHOLDER = "§§/ALIGN§§"
 
 
 async def _type_with_strikethrough(page: Any, text: str) -> None:
@@ -228,6 +243,46 @@ async def type_markdown_content(page: Any, content: str) -> None:
             # Type placeholder for TOC insertion
             # insert_toc_at_placeholder() will replace this with actual TOC
             await page.keyboard.type(_TOC_PLACEHOLDER)
+            if i < len(lines) - 1:
+                await page.keyboard.press("Enter")
+            in_unordered_list = False
+            in_ordered_list = False
+            in_blockquote = False
+            continue
+
+        # Check for text alignment patterns
+        # Order matters: check center first (->text<-), then right (->text), then left (<-text)
+        align_center_match = _ALIGN_CENTER_PATTERN.match(stripped_line)
+        align_right_match = _ALIGN_RIGHT_PATTERN.match(stripped_line)
+        align_left_match = _ALIGN_LEFT_PATTERN.match(stripped_line)
+
+        if align_center_match:
+            # Center alignment: ->text<-
+            content = align_center_match.group(1)
+            placeholder = f"{_ALIGN_CENTER_PLACEHOLDER}{content}{_ALIGN_END_PLACEHOLDER}"
+            await page.keyboard.type(placeholder)
+            if i < len(lines) - 1:
+                await page.keyboard.press("Enter")
+            in_unordered_list = False
+            in_ordered_list = False
+            in_blockquote = False
+            continue
+        elif align_right_match and not align_center_match:
+            # Right alignment: ->text (but not ->text<-)
+            content = align_right_match.group(1)
+            placeholder = f"{_ALIGN_RIGHT_PLACEHOLDER}{content}{_ALIGN_END_PLACEHOLDER}"
+            await page.keyboard.type(placeholder)
+            if i < len(lines) - 1:
+                await page.keyboard.press("Enter")
+            in_unordered_list = False
+            in_ordered_list = False
+            in_blockquote = False
+            continue
+        elif align_left_match:
+            # Left alignment: <-text
+            content = align_left_match.group(1)
+            placeholder = f"{_ALIGN_LEFT_PLACEHOLDER}{content}{_ALIGN_END_PLACEHOLDER}"
+            await page.keyboard.type(placeholder)
             if i < len(lines) - 1:
                 await page.keyboard.press("Enter")
             in_unordered_list = False
