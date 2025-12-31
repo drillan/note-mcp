@@ -398,10 +398,10 @@ class TestListArticles:
         """Test successful article listing."""
         session = create_mock_session()
 
-        # Mock response matches /v2/creators/{username}/contents API structure
+        # Mock response matches /v2/note_list/contents API structure
         mock_response = {
             "data": {
-                "contents": [
+                "notes": [
                     {
                         "id": "123",
                         "key": "n123",
@@ -447,10 +447,10 @@ class TestListArticles:
         """Test listing articles with status filter."""
         session = create_mock_session()
 
-        # Mock response matches /v2/creators/{username}/contents API structure
+        # Mock response matches /v2/note_list/contents API structure
         mock_response = {
             "data": {
-                "contents": [
+                "notes": [
                     {
                         "id": "123",
                         "key": "n123",
@@ -482,10 +482,10 @@ class TestListArticles:
         """Test listing articles with pagination."""
         session = create_mock_session()
 
-        # Mock response matches /v2/creators/{username}/contents API structure
+        # Mock response matches /v2/note_list/contents API structure
         mock_response = {
             "data": {
-                "contents": [
+                "notes": [
                     {
                         "id": "789",
                         "key": "n789",
