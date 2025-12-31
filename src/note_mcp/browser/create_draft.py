@@ -7,15 +7,19 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import re
 from typing import TYPE_CHECKING, Any
 
 from note_mcp.browser.manager import BrowserManager
+from note_mcp.browser.toc_helpers import insert_toc_at_placeholder
 from note_mcp.browser.typing_helpers import type_markdown_content
 from note_mcp.models import Article, ArticleStatus
 
 if TYPE_CHECKING:
     from note_mcp.models import ArticleInput, Session
+
+logger = logging.getLogger(__name__)
 
 
 # note.com URLs
@@ -142,6 +146,15 @@ async def create_draft_via_browser(
             await type_markdown_content(page, article_input.body)
         except Exception:
             pass
+
+    # Insert TOC at placeholder if present (after body typing, before save)
+    try:
+        toc_inserted = await insert_toc_at_placeholder(page)
+        if toc_inserted:
+            logger.info("TOC inserted into draft")
+    except Exception as e:
+        logger.warning(f"TOC insertion failed: {e}")
+        # TOC insertion failure is not fatal
 
     # Click save draft button explicitly instead of relying on auto-save
     await asyncio.sleep(1)

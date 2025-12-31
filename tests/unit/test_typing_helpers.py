@@ -9,10 +9,14 @@ from note_mcp.browser.typing_helpers import (
     _CITATION_PATTERN,
     _CITATION_URL_PATTERN,
     _CODE_FENCE_PATTERN,
+    _HEADING_PATTERN,
     _ORDERED_LIST_PATTERN,
     _STRIKETHROUGH_PATTERN,
+    _TOC_PATTERN,
+    _TOC_PLACEHOLDER,
     _UNORDERED_LIST_PATTERN,
     _type_with_strikethrough,
+    type_markdown_content,
 )
 
 
@@ -379,3 +383,317 @@ class TestTypeWithStrikethrough:
         typed_texts = [call[0][0] for call in calls]
         assert "これは" in typed_texts
         assert "~~削除~~" in typed_texts
+
+
+class TestTocPattern:
+    """Tests for TOC pattern detection."""
+
+    def test_matches_toc_marker(self) -> None:
+        """Test that [TOC] marker is detected."""
+        match = _TOC_PATTERN.match("[TOC]")
+        assert match is not None
+
+    def test_no_match_for_lowercase_toc(self) -> None:
+        """Test that lowercase [toc] is not matched."""
+        match = _TOC_PATTERN.match("[toc]")
+        assert match is None
+
+    def test_no_match_for_toc_with_text_before(self) -> None:
+        """Test that text before [TOC] is not matched."""
+        match = _TOC_PATTERN.match("Text [TOC]")
+        assert match is None
+
+    def test_no_match_for_toc_with_text_after(self) -> None:
+        """Test that text after [TOC] is not matched."""
+        match = _TOC_PATTERN.match("[TOC] text")
+        assert match is None
+
+    def test_no_match_for_plain_text(self) -> None:
+        """Test that plain text is not matched."""
+        match = _TOC_PATTERN.match("Regular text")
+        assert match is None
+
+    def test_no_match_for_toc_in_sentence(self) -> None:
+        """Test that [TOC] in a sentence is not matched."""
+        match = _TOC_PATTERN.match("Add a [TOC] here")
+        assert match is None
+
+
+class TestTocPlaceholderConstant:
+    """Tests for TOC placeholder constant."""
+
+    def test_placeholder_is_text_marker(self) -> None:
+        """Placeholder should be a unique text marker with section signs."""
+        assert "§§" in _TOC_PLACEHOLDER
+
+    def test_placeholder_contains_toc(self) -> None:
+        """Placeholder should contain TOC identifier."""
+        assert "TOC" in _TOC_PLACEHOLDER
+
+
+class TestTypeMarkdownContentToc:
+    """Tests for type_markdown_content with TOC handling."""
+
+    @pytest.mark.asyncio
+    async def test_toc_types_placeholder(self) -> None:
+        """Test that [TOC] types placeholder instead of raw text."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        await type_markdown_content(mock_page, "[TOC]")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        assert _TOC_PLACEHOLDER in typed_texts
+        assert "[TOC]" not in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_toc_with_content_before(self) -> None:
+        """Test [TOC] with content before it."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        await type_markdown_content(mock_page, "# Title\n\n[TOC]")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        assert "# Title" in typed_texts
+        assert _TOC_PLACEHOLDER in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_toc_with_content_after(self) -> None:
+        """Test [TOC] with content after it."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        await type_markdown_content(mock_page, "[TOC]\n\n## Section 1")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        assert _TOC_PLACEHOLDER in typed_texts
+        # With heading handling, "## Section 1" is typed as "## " (trigger) + "Section 1" (content)
+        assert "## " in typed_texts
+        assert "Section 1" in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_toc_presses_enter_when_more_content(self) -> None:
+        """Test that Enter is pressed after [TOC] when more content follows."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        await type_markdown_content(mock_page, "[TOC]\nMore text")
+
+        press_calls = mock_page.keyboard.press.call_args_list
+        pressed_keys = [call[0][0] for call in press_calls]
+        assert "Enter" in pressed_keys
+
+    @pytest.mark.asyncio
+    async def test_toc_in_middle_of_document(self) -> None:
+        """Test [TOC] in the middle of a document."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = """# Title
+
+[TOC]
+
+## Section 1
+Content here
+
+## Section 2
+More content"""
+
+        await type_markdown_content(mock_page, content)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        assert "# Title" in typed_texts
+        assert _TOC_PLACEHOLDER in typed_texts
+        assert "Content here" in typed_texts
+
+
+class TestHeadingPattern:
+    """Tests for heading pattern detection (## h2, ### h3, etc.)."""
+
+    def test_matches_h2_heading(self) -> None:
+        """Test that h2 heading (##) is detected."""
+        match = _HEADING_PATTERN.match("## Section Title")
+        assert match is not None
+        assert match.group(1) == "##"
+        assert match.group(2) == "Section Title"
+
+    def test_matches_h3_heading(self) -> None:
+        """Test that h3 heading (###) is detected."""
+        match = _HEADING_PATTERN.match("### Subsection Title")
+        assert match is not None
+        assert match.group(1) == "###"
+        assert match.group(2) == "Subsection Title"
+
+    def test_matches_h4_heading(self) -> None:
+        """Test that h4 heading (####) is detected."""
+        match = _HEADING_PATTERN.match("#### Deep Section")
+        assert match is not None
+        assert match.group(1) == "####"
+        assert match.group(2) == "Deep Section"
+
+    def test_matches_h5_heading(self) -> None:
+        """Test that h5 heading (#####) is detected."""
+        match = _HEADING_PATTERN.match("##### Very Deep Section")
+        assert match is not None
+        assert match.group(1) == "#####"
+        assert match.group(2) == "Very Deep Section"
+
+    def test_matches_h6_heading(self) -> None:
+        """Test that h6 heading (######) is detected."""
+        match = _HEADING_PATTERN.match("###### Deepest Section")
+        assert match is not None
+        assert match.group(1) == "######"
+        assert match.group(2) == "Deepest Section"
+
+    def test_no_match_for_h1_heading(self) -> None:
+        """Test that h1 heading (#) is NOT matched (note.com uses title for h1)."""
+        match = _HEADING_PATTERN.match("# Title")
+        assert match is None
+
+    def test_requires_space_after_hashes(self) -> None:
+        """Test that space after # marks is required."""
+        match = _HEADING_PATTERN.match("##NoSpace")
+        assert match is None
+
+    def test_matches_japanese_heading(self) -> None:
+        """Test that Japanese heading text is matched."""
+        match = _HEADING_PATTERN.match("## 大見出し（h2）")
+        assert match is not None
+        assert match.group(1) == "##"
+        assert match.group(2) == "大見出し（h2）"
+
+    def test_matches_heading_with_special_characters(self) -> None:
+        """Test heading with special characters."""
+        match = _HEADING_PATTERN.match("### Section: Important!")
+        assert match is not None
+        assert match.group(2) == "Section: Important!"
+
+    def test_no_match_for_plain_text(self) -> None:
+        """Test that plain text is not matched."""
+        match = _HEADING_PATTERN.match("Regular text")
+        assert match is None
+
+    def test_no_match_for_code_with_hashes(self) -> None:
+        """Test that code comments with # are not matched."""
+        match = _HEADING_PATTERN.match("# This is a code comment")
+        assert match is None
+
+
+class TestTypeMarkdownContentHeadings:
+    """Tests for type_markdown_content with heading handling."""
+
+    @pytest.mark.asyncio
+    async def test_h2_heading_triggers_prosemirror(self) -> None:
+        """Test that h2 heading types prefix with space to trigger ProseMirror."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        await type_markdown_content(mock_page, "## Section Title")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        # Should type "## " to trigger ProseMirror, then "Section Title"
+        assert "## " in typed_texts
+        assert "Section Title" in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_h3_heading_triggers_prosemirror(self) -> None:
+        """Test that h3 heading types prefix with space to trigger ProseMirror."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        await type_markdown_content(mock_page, "### Subsection")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        assert "### " in typed_texts
+        assert "Subsection" in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_multiple_headings(self) -> None:
+        """Test multiple headings in a document."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = """## 大見出し（h2）
+
+### 小見出し（h3）
+
+## もう一つの大見出し"""
+
+        await type_markdown_content(mock_page, content)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        assert "## " in typed_texts
+        assert "大見出し（h2）" in typed_texts
+        assert "### " in typed_texts
+        assert "小見出し（h3）" in typed_texts
+        assert "もう一つの大見出し" in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_headings_with_toc(self) -> None:
+        """Test headings with TOC marker."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = """[TOC]
+
+## Section 1
+
+Some content
+
+### Subsection 1.1
+
+## Section 2"""
+
+        await type_markdown_content(mock_page, content)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        # Verify TOC placeholder and headings are typed correctly
+        assert _TOC_PLACEHOLDER in typed_texts
+        assert "## " in typed_texts
+        assert "Section 1" in typed_texts
+        assert "### " in typed_texts
+        assert "Subsection 1.1" in typed_texts
+        assert "Section 2" in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_heading_resets_list_state(self) -> None:
+        """Test that heading resets list state."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = """- List item 1
+- List item 2
+
+## New Section
+
+More content"""
+
+        await type_markdown_content(mock_page, content)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        # Verify both list items and heading are processed
+        assert "- " in typed_texts or "List item 1" in typed_texts
+        assert "## " in typed_texts
+        assert "New Section" in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_heading_presses_enter_for_next_line(self) -> None:
+        """Test that Enter is pressed after heading when more content follows."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        await type_markdown_content(mock_page, "## Heading\nContent")
+
+        press_calls = mock_page.keyboard.press.call_args_list
+        pressed_keys = [call[0][0] for call in press_calls]
+        assert "Enter" in pressed_keys

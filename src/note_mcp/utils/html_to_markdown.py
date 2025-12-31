@@ -64,6 +64,18 @@ _EM_PATTERN = re.compile(r"<em>(.*?)</em>", re.DOTALL | re.IGNORECASE)
 _INLINE_CODE_PATTERN = re.compile(r"<code>(.*?)</code>", re.DOTALL | re.IGNORECASE)
 _STRIKETHROUGH_PATTERN = re.compile(r"<s>(.*?)</s>", re.DOTALL | re.IGNORECASE)
 
+# TOC element pattern (note.com uses TableOfContents class)
+# Match elements with class containing "TableOfContents"
+_TOC_ELEMENT_PATTERN = re.compile(
+    r'<[^>]*class="[^"]*TableOfContents[^"]*"[^>]*>.*?</(?:div|section|nav)>',
+    re.DOTALL | re.IGNORECASE,
+)
+# Also match self-closing or empty TOC elements
+_TOC_ELEMENT_SIMPLE_PATTERN = re.compile(
+    r'<[^>]*class="[^"]*TableOfContents[^"]*"[^>]*/?>',
+    re.IGNORECASE,
+)
+
 # Cleanup patterns
 _UUID_ATTR_PATTERN = re.compile(
     r'\s(?:name|id)="[a-f0-9-]{36}"',
@@ -386,24 +398,28 @@ def html_to_markdown(html_content: str) -> str:
     # Also handle <pre> without <code> tag (some note.com formats)
     result = _PRE_ONLY_PATTERN.sub(extract_code_block, result)
 
-    # 2. figure要素（blockquoteとimageを先に処理）
+    # 2. TOC要素を[TOC]マーカーに変換
+    result = _TOC_ELEMENT_PATTERN.sub("[TOC]\n\n", result)
+    result = _TOC_ELEMENT_SIMPLE_PATTERN.sub("[TOC]\n\n", result)
+
+    # 3. figure要素（blockquoteとimageを先に処理）
     result = _BLOCKQUOTE_FIGURE_PATTERN.sub(_convert_blockquote_figure, result)
     result = _IMAGE_FIGURE_PATTERN.sub(lambda m: _convert_image_figure(m, alt_first=False), result)
     result = _IMAGE_FIGURE_PATTERN_ALT.sub(lambda m: _convert_image_figure(m, alt_first=True), result)
 
-    # 3. 見出し
+    # 4. 見出し
     result = _HEADING_PATTERN.sub(_convert_heading, result)
 
-    # 4. リスト（ネスト対応 - 適切なタグマッチングを使用）
+    # 5. リスト（ネスト対応 - 適切なタグマッチングを使用）
     result = _convert_all_lists(result)
 
-    # 5. 水平線
+    # 6. 水平線
     result = _HR_PATTERN.sub("\n---\n\n", result)
 
-    # 6. インライン要素（リンク、太字、斜体、インラインコード）
+    # 7. インライン要素（リンク、太字、斜体、インラインコード）
     result = _convert_inline_elements(result)
 
-    # 7. 段落（他の要素処理後に適用）
+    # 8. 段落（他の要素処理後に適用）
     result = _PARAGRAPH_PATTERN.sub(_convert_paragraph, result)
 
     # === 最終処理 ===

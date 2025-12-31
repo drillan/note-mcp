@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from note_mcp.browser.manager import BrowserManager
+from note_mcp.browser.toc_helpers import insert_toc_at_placeholder
 from note_mcp.browser.typing_helpers import type_markdown_content
 from note_mcp.browser.url_helpers import validate_article_edit_url
 from note_mcp.models import Article, ArticleStatus
@@ -149,6 +150,15 @@ async def update_article_via_browser(
             body_filled = True
         except Exception as e:
             logger.warning(f"Body fill fallback failed for article {article_id}: {type(e).__name__}: {e}")
+
+    # Insert TOC at placeholder if present (after body typing, before save)
+    try:
+        toc_inserted = await insert_toc_at_placeholder(page)
+        if toc_inserted:
+            logger.info(f"TOC inserted into article {article_id}")
+    except Exception as e:
+        logger.warning(f"TOC insertion failed for article {article_id}: {e}")
+        # TOC insertion failure is not fatal
 
     # Click save draft button explicitly instead of relying on auto-save
     await asyncio.sleep(1)
