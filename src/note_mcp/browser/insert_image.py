@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from note_mcp.api.images import validate_image_file
 from note_mcp.browser.manager import BrowserManager
 from note_mcp.browser.url_helpers import validate_article_edit_url
 from note_mcp.models import ErrorCode, NoteAPIError
@@ -53,7 +54,8 @@ async def _dismiss_ai_dialog(page: Page) -> None:
                     await asyncio.sleep(0.5)
                     logger.debug(f"Dismissed AI dialog using selector: {selector}")
                     return
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Selector '{selector}' failed: {type(e).__name__}: {e}")
                 continue
 
         # Try clicking × directly by locating the dialog element
@@ -176,10 +178,15 @@ async def _setup_page_with_session(session: Session, article_id: str) -> Page:
             editor_found = True
         except Exception as e:
             logger.warning(f"Second editor wait failed: {type(e).__name__}: {e}")
-            await page.screenshot(path="debug/editor_wait_failed.png")
-            # Save HTML for debugging
-            html_content = await page.content()
-            Path("debug/editor_html.html").write_text(html_content)
+            # Save debug files only if debug directory exists
+            try:
+                debug_dir = Path("debug")
+                if debug_dir.exists():
+                    await page.screenshot(path="debug/editor_wait_failed.png")
+                    html_content = await page.content()
+                    Path("debug/editor_html.html").write_text(html_content)
+            except Exception as debug_error:
+                logger.debug(f"Failed to save debug files: {debug_error}")
 
     if not editor_found:
         raise RuntimeError("Editor failed to load - ProseMirror element not found")
@@ -346,7 +353,9 @@ async def _wait_for_image_insertion(
 
         # Enter caption if provided
         if caption:
-            await _input_image_caption(page, caption)
+            caption_success = await _input_image_caption(page, caption)
+            if not caption_success:
+                logger.warning(f"Failed to input caption: {caption}")
 
         return True
 
@@ -508,23 +517,9 @@ async def insert_image_via_browser(
     Raises:
         NoteAPIError: If image insertion fails
     """
-    # Validate file exists
+    # Validate file (existence, extension, and size)
+    validate_image_file(file_path)
     path = Path(file_path)
-    if not path.exists():
-        raise NoteAPIError(
-            code=ErrorCode.INVALID_INPUT,
-            message=f"File not found: {file_path}",
-            details={"file_path": file_path},
-        )
-
-    # Validate file extension
-    allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-    if path.suffix.lower() not in allowed_extensions:
-        raise NoteAPIError(
-            code=ErrorCode.INVALID_INPUT,
-            message=f"Invalid file format: {path.suffix}",
-            details={"file_path": file_path, "allowed": list(allowed_extensions)},
-        )
 
     # Setup page
     page = await _setup_page_with_session(session, article_id)
@@ -560,7 +555,12 @@ async def insert_image_via_browser(
         )
 
     # Save article
-    await _save_article(page)
+    if not await _save_article(page):
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Failed to save article after image insertion",
+            details={"article_id": article_id, "file_path": file_path},
+        )
 
     return {
         "success": True,
