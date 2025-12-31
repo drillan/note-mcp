@@ -252,10 +252,18 @@ def from_api_response(data: dict[str, object]) -> Article:
     if not isinstance(status_str, str) or not status_str:
         status_str = "draft"
 
+    # Extract title: use "name" field, fallback to "noteDraft.name" for drafts
+    title = data.get("name")
+    if not title:
+        note_draft = data.get("noteDraft")
+        if isinstance(note_draft, dict):
+            title = note_draft.get("name")
+    title_str = str(title) if title else ""
+
     return Article(
         id=str(data.get("id", "")),
         key=str(data.get("key", "")),
-        title=str(data.get("name", "")),
+        title=title_str,
         body=str(data.get("body", "")),
         status=ArticleStatus(status_str),
         tags=tags,
