@@ -1,4 +1,9 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(/home/driller/.claude/plugins/cache/claude-plugins-official/ralph-wiggum/*/scripts/*:*)"
+    ]
+  },
   "enabledPlugins": {
     "code-review@claude-plugins-official": true,
     "pr-review-toolkit@claude-plugins-official": true,
