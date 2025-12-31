@@ -20,7 +20,7 @@ from note_mcp.browser.insert_image import insert_image_via_browser
 from note_mcp.browser.preview import show_preview
 from note_mcp.browser.update_article import update_article_via_browser
 from note_mcp.investigator import register_investigator_tools
-from note_mcp.models import ArticleInput, ArticleStatus
+from note_mcp.models import ArticleInput, ArticleStatus, NoteAPIError
 
 # Create MCP server instance
 mcp = FastMCP("note-mcp")
@@ -193,7 +193,7 @@ async def note_get_article(
 
     try:
         article = await get_article(session, article_id)
-    except RuntimeError as e:
+    except NoteAPIError as e:
         return f"記事の取得に失敗しました: {e}"
 
     tag_info = f"\nタグ: {', '.join(article.tags)}" if article.tags else ""

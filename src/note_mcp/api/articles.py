@@ -171,13 +171,61 @@ async def update_article(
     return from_api_response(article_data)
 
 
+async def get_article_via_api(
+    session: Session,
+    article_id: str,
+) -> Article:
+    """Get article content by ID via API.
+
+    Retrieves article content directly from the note.com API.
+    Faster and more reliable than browser-based retrieval.
+
+    Args:
+        session: Authenticated session
+        article_id: ID of the article to retrieve (numeric or key format)
+
+    Returns:
+        Article object with title, body (as Markdown), and status
+
+    Raises:
+        NoteAPIError: If API request fails
+    """
+    from note_mcp.utils.html_to_markdown import html_to_markdown
+
+    async with NoteAPIClient(session) as client:
+        response = await client.get(f"/v3/notes/{article_id}")
+
+    # Parse response
+    article_data = response.get("data", {})
+    article = from_api_response(article_data)
+
+    # Convert HTML body to Markdown for consistent output
+    if article.body:
+        article = Article(
+            id=article.id,
+            key=article.key,
+            title=article.title,
+            body=html_to_markdown(article.body),
+            status=article.status,
+            tags=article.tags,
+            eyecatch_image_key=article.eyecatch_image_key,
+            prev_access_key=article.prev_access_key,
+            created_at=article.created_at,
+            updated_at=article.updated_at,
+            published_at=article.published_at,
+            url=article.url,
+        )
+
+    return article
+
+
 async def get_article(
     session: Session,
     article_id: str,
 ) -> Article:
     """Get article content by ID.
 
-    Retrieves article content via browser automation.
+    Retrieves article content via API.
     Use this to retrieve existing content before editing.
 
     Recommended workflow:
@@ -190,14 +238,12 @@ async def get_article(
         article_id: ID of the article to retrieve
 
     Returns:
-        Article object with title, body, and status
+        Article object with title, body (as Markdown), and status
 
     Raises:
-        RuntimeError: If article retrieval fails
+        NoteAPIError: If API request fails
     """
-    from note_mcp.browser.get_article import get_article_via_browser
-
-    return await get_article_via_browser(session, article_id)
+    return await get_article_via_api(session, article_id)
 
 
 async def list_articles(

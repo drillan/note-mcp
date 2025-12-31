@@ -181,7 +181,7 @@ class TestGetArticle:
 
     @pytest.mark.asyncio
     async def test_get_article_success(self) -> None:
-        """Test successful article retrieval via browser."""
+        """Test successful article retrieval via API."""
         from note_mcp.models import Article
 
         session = create_mock_session()
@@ -195,7 +195,7 @@ class TestGetArticle:
             tags=[],
         )
 
-        with patch("note_mcp.browser.get_article.get_article_via_browser") as mock_get:
+        with patch("note_mcp.api.articles.get_article_via_api") as mock_get:
             mock_get.return_value = mock_article
 
             article = await get_article(session, "123456")
@@ -221,7 +221,7 @@ class TestGetArticle:
             tags=[],
         )
 
-        with patch("note_mcp.browser.get_article.get_article_via_browser") as mock_get:
+        with patch("note_mcp.api.articles.get_article_via_api") as mock_get:
             mock_get.return_value = mock_article
 
             article = await get_article(session, "123")
@@ -244,7 +244,7 @@ class TestGetArticle:
             tags=[],
         )
 
-        with patch("note_mcp.browser.get_article.get_article_via_browser") as mock_get:
+        with patch("note_mcp.api.articles.get_article_via_api") as mock_get:
             mock_get.return_value = mock_article
 
             article = await get_article(session, "789")
