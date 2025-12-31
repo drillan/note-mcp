@@ -254,9 +254,12 @@ async def list_articles(
 ) -> ArticleListResult:
     """List articles for the authenticated user.
 
+    Uses the note_list/contents endpoint which returns both drafts and
+    published articles for the authenticated user.
+
     Args:
         session: Authenticated session
-        status: Filter by article status (draft, published, all)
+        status: Filter by article status (draft, published, or None for all)
         page: Page number (1-indexed)
         limit: Number of articles per page (max 10)
 
@@ -266,26 +269,27 @@ async def list_articles(
     Raises:
         NoteAPIError: If API request fails
     """
-    # Build query parameters using the v2 creators endpoint
-    # Reference: https://note.com/karupoimou/n/n5d8124747158
+    # Build query parameters for note_list endpoint
+    # This endpoint returns both drafts and published articles
     params: dict[str, Any] = {
-        "kind": "note",
         "page": page,
     }
 
     # Add status filter if specified
+    # Note: The note_list endpoint uses "publish_status" parameter
     if status is not None:
-        params["status"] = status.value
+        params["publish_status"] = status.value
 
-    # Use the username-specific endpoint to get the user's own articles
+    # Use note_list/contents endpoint for authenticated user's articles
+    # This endpoint requires authentication and returns both drafts and published
     async with NoteAPIClient(session) as client:
-        response = await client.get(f"/v2/creators/{session.username}/contents", params=params)
+        response = await client.get("/v2/note_list/contents", params=params)
 
-    # Parse response - v2 endpoint returns different structure
+    # Parse response
     data = response.get("data", {})
 
-    # The v2 endpoint returns contents directly in data
-    contents = data.get("contents", [])
+    # The endpoint returns notes (not contents) in data
+    contents = data.get("notes", [])
     total_count = data.get("totalCount", len(contents))
     is_last_page = data.get("isLastPage", True)
 
@@ -295,7 +299,7 @@ async def list_articles(
         article = from_api_response(item)
         articles.append(article)
 
-    # Apply limit client-side if needed (v2 may not support limit param)
+    # Apply limit client-side if needed
     articles = articles[:limit]
 
     return ArticleListResult(
