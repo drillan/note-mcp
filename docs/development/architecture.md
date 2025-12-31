@@ -112,10 +112,13 @@ html = markdown_to_html("# タイトル\n本文")
 ```
 Markdown入力: [TOC]
     ↓
-HTMLプレースホルダ: <!-- note-toc-placeholder -->
+テキストプレースホルダ: §§TOC§§
     ↓
 ブラウザ自動化でnote.com目次機能を挿入
 ```
+
+プレースホルダはHTMLコメントではなく、テキストマーカー（`§§TOC§§`）を使用します。
+これはProseMirrorエディタでテキストノードとして認識される必要があるためです。
 
 `toc_helpers.py`がブラウザ操作を担当します：
 

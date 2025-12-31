@@ -66,10 +66,14 @@ async def insert_toc_at_placeholder(page: Page, timeout: int = 10000) -> bool:
     logger.info("TOC placeholder found, inserting table of contents...")
 
     # 1. Move cursor to placeholder position
-    await _move_cursor_to_placeholder(page)
+    if not await _move_cursor_to_placeholder(page):
+        logger.error("Failed to move cursor to TOC placeholder")
+        return False
 
     # 2. Remove the placeholder
-    await _remove_placeholder(page)
+    if not await _remove_placeholder(page):
+        logger.error("Failed to remove TOC placeholder")
+        return False
 
     # 3. Click [+] button to open menu
     await _click_add_button(page, timeout)
@@ -84,19 +88,26 @@ async def insert_toc_at_placeholder(page: Page, timeout: int = 10000) -> bool:
     return True
 
 
-async def _move_cursor_to_placeholder(page: Page) -> None:
+async def _move_cursor_to_placeholder(page: Page) -> bool:
     """Move cursor to TOC placeholder position.
 
     Uses JavaScript to find and select the placeholder text node.
 
     Args:
         page: Playwright page with note.com editor.
+
+    Returns:
+        True if cursor was successfully moved to placeholder.
     """
-    await page.evaluate(
+    result = await page.evaluate(
         f"""
         () => {{
             const placeholder = '{TOC_PLACEHOLDER}';
             const editor = document.querySelector('.p-editorBody');
+            if (!editor) {{
+                return {{ success: false, error: 'Editor element not found' }};
+            }}
+
             const walker = document.createTreeWalker(
                 editor,
                 NodeFilter.SHOW_TEXT,
@@ -116,26 +127,42 @@ async def _move_cursor_to_placeholder(page: Page) -> None:
                     const selection = window.getSelection();
                     selection.removeAllRanges();
                     selection.addRange(range);
-                    break;
+                    return {{ success: true }};
                 }}
             }}
+            return {{ success: false, error: 'Placeholder not found in text nodes' }};
         }}
     """
     )
     await asyncio.sleep(0.1)
 
+    if not result.get("success"):
+        logger.warning(f"Failed to move cursor to placeholder: {result.get('error')}")
+        return False
+    return True
 
-async def _remove_placeholder(page: Page) -> None:
+
+async def _remove_placeholder(page: Page) -> bool:
     """Remove the TOC placeholder text from editor.
+
+    Modifies the DOM by removing the placeholder text from the text node.
+    If the parent paragraph becomes empty, focuses it for TOC insertion.
 
     Args:
         page: Playwright page with note.com editor.
+
+    Returns:
+        True if placeholder was successfully removed.
     """
-    await page.evaluate(
+    result = await page.evaluate(
         f"""
         () => {{
             const placeholder = '{TOC_PLACEHOLDER}';
             const editor = document.querySelector('.p-editorBody');
+            if (!editor) {{
+                return {{ success: false, error: 'Editor element not found' }};
+            }}
+
             const walker = document.createTreeWalker(
                 editor,
                 NodeFilter.SHOW_TEXT,
@@ -155,13 +182,19 @@ async def _remove_placeholder(page: Page) -> None:
                         // Parent paragraph is empty, focus it for TOC insertion
                         parent.focus();
                     }}
-                    break;
+                    return {{ success: true }};
                 }}
             }}
+            return {{ success: false, error: 'Placeholder not found in text nodes' }};
         }}
     """
     )
     await asyncio.sleep(0.1)
+
+    if not result.get("success"):
+        logger.warning(f"Failed to remove placeholder: {result.get('error')}")
+        return False
+    return True
 
 
 async def _click_add_button(page: Page, timeout: int) -> None:
