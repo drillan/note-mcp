@@ -230,3 +230,6 @@ __marimo__/
 /.cred
 # Investigation output files
 /output
+
+# Local-specific Claude commands (contain machine-specific paths)
+.claude/commands/ralph-loop.md
