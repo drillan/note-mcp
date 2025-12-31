@@ -19,13 +19,20 @@ src/note_mcp/
 ├── browser/           # ブラウザ自動化
 │   ├── manager.py     # ブラウザマネージャー
 │   ├── create_draft.py # 下書き作成
+│   ├── get_article.py # 記事取得
+│   ├── update_article.py # 記事更新
+│   ├── preview.py     # プレビュー表示
 │   ├── insert_image.py # 画像挿入
-│   └── typing_helpers.py # 入力ヘルパー
+│   ├── typing_helpers.py # 入力ヘルパー
+│   └── url_helpers.py # URL操作ヘルパー
 ├── utils/             # ユーティリティ
 │   ├── markdown_to_html.py # Markdown→HTML変換
 │   ├── html_to_markdown.py # HTML→Markdown変換
+│   ├── markdown.py    # Markdown共通処理
 │   └── logging.py     # ロギング設定
 └── investigator/      # API調査ツール
+    ├── __main__.py    # CLIエントリーポイント
+    ├── cli.py         # CLIコマンド定義
     ├── core.py        # キャプチャセッション
     └── mcp_tools.py   # MCPツール定義
 ```
