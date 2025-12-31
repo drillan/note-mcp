@@ -29,6 +29,9 @@ _CITATION_PATTERN = re.compile(r"^—\s+(.+)$")
 _CITATION_URL_PATTERN = re.compile(r"^(.+?)\s+\((\S+)\)\s*$")
 # Strikethrough pattern: ~~text~~
 _STRIKETHROUGH_PATTERN = re.compile(r"~~(.+?)~~")
+# Ruby notation pattern: ｜漢字《かんじ》 or |漢字《かんじ》 or 漢字《かんじ》
+# Vertical bar can be full-width (｜) or half-width (|) or omitted for kanji/kana
+_RUBY_PATTERN = re.compile(r"[｜|]?([一-龯ぁ-んァ-ヶー]+)《([^》]+)》")
 
 
 async def _type_with_strikethrough(page: Any, text: str) -> None:

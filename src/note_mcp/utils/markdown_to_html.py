@@ -39,6 +39,9 @@ _CITATION_PATTERN = re.compile(
 )
 # Pattern to extract URL from citation: "Text (URL)"
 _CITATION_URL_PATTERN = re.compile(r"^(.+?)\s+\((\S+)\)\s*$")
+# Ruby notation pattern: ｜漢字《かんじ》 or |漢字《かんじ》 or 漢字《かんじ》
+# Vertical bar can be full-width (｜) or half-width (|) or omitted for kanji/kana
+_RUBY_PATTERN = re.compile(r"[｜|]?([一-龯ぁ-んァ-ヶー]+)《([^》]+)》")
 
 
 def _generate_uuid() -> str:
@@ -94,6 +97,27 @@ def _extract_citation(blockquote_content: str) -> tuple[str, str]:
         figcaption_html = citation_text
 
     return modified_content, figcaption_html
+
+
+def _convert_ruby_to_html(text: str) -> str:
+    """Convert note.com ruby notation to HTML ruby tags.
+
+    Converts: ｜漢字《かんじ》 or 漢字《かんじ》
+    To: <ruby>漢字<rp>（</rp><rt>かんじ</rt><rp>）</rp></ruby>
+
+    Args:
+        text: Text containing ruby notation
+
+    Returns:
+        Text with ruby notation converted to HTML
+    """
+
+    def replace_ruby(match: re.Match[str]) -> str:
+        base = match.group(1)
+        reading = match.group(2)
+        return f"<ruby>{base}<rp>（</rp><rt>{reading}</rt><rp>）</rp></ruby>"
+
+    return _RUBY_PATTERN.sub(replace_ruby, text)
 
 
 def _wrap_li_content_in_p(html: str) -> str:
@@ -350,6 +374,10 @@ def markdown_to_html(content: str) -> str:
     if not content or not content.strip():
         return ""
 
+    # 1. Convert ruby notation BEFORE markdown conversion
+    content = _convert_ruby_to_html(content)
+
+    # 2. Markdown conversion
     md = MarkdownIt().enable("strikethrough")
     result: str = md.render(content)
 
