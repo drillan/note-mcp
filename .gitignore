@@ -225,3 +225,8 @@ __marimo__/
 
 # working directories
 /ai_working
+
+# credentials files
+/.cred
+# Investigation output files
+/output

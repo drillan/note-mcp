@@ -2,17 +2,22 @@
 
 Provides secure session storage using the system keyring.
 Includes diagnostic information when keyring is not available.
+
+For Docker/headless environments where keyring is not available,
+set USE_FILE_SESSION=1 to use file-based session storage.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import platform
 from typing import TYPE_CHECKING
 
 import keyring
 from keyring.errors import PasswordDeleteError
 
+from note_mcp.auth.file_session import FileBasedSessionManager
 from note_mcp.models import Session
 
 if TYPE_CHECKING:
@@ -114,10 +119,13 @@ def _get_setup_instructions() -> list[str]:
 
 
 class SessionManager:
-    """Manages session storage using keyring.
+    """Manages session storage using keyring or file-based backend.
 
     Provides secure storage of session data in the system keyring.
     When keyring is not available, provides clear diagnostic information.
+
+    For Docker/headless environments, set USE_FILE_SESSION=1 to use
+    file-based session storage instead of keyring.
 
     Attributes:
         service_name: The keyring service name used for storage
@@ -134,15 +142,26 @@ class SessionManager:
         """
         self.service_name = service_name or self.DEFAULT_SERVICE_NAME
 
+        # Use file-based backend when USE_FILE_SESSION=1
+        if os.environ.get("USE_FILE_SESSION") == "1":
+            self._backend: FileBasedSessionManager | None = FileBasedSessionManager()
+        else:
+            self._backend = None  # Use keyring directly
+
     def save(self, session: Session) -> None:
-        """Save session to keyring.
+        """Save session to keyring or file backend.
 
         Args:
             session: Session object to save
 
         Raises:
-            KeyringError: If keyring operation fails
+            KeyringError: If keyring operation fails (when using keyring)
+            OSError: If file operation fails (when using file backend)
         """
+        if self._backend:
+            self._backend.save(session)
+            return
+
         try:
             session_data = session.model_dump()
             session_json = json.dumps(session_data)
@@ -156,14 +175,17 @@ class SessionManager:
             ) from e
 
     def load(self) -> Session | None:
-        """Load session from keyring.
+        """Load session from keyring or file backend.
 
         Returns:
             Session object if found and valid, None otherwise
 
         Raises:
-            KeyringError: If keyring operation fails (not including missing session)
+            KeyringError: If keyring operation fails (when using keyring)
         """
+        if self._backend:
+            return self._backend.load()
+
         try:
             session_json = keyring.get_password(self.service_name, self.SESSION_KEY)
         except Exception as e:
@@ -185,10 +207,14 @@ class SessionManager:
             return None
 
     def clear(self) -> None:
-        """Clear session from keyring.
+        """Clear session from keyring or file backend.
 
         Does not raise an error if no session exists.
         """
+        if self._backend:
+            self._backend.clear()
+            return
+
         try:
             keyring.delete_password(self.service_name, self.SESSION_KEY)
         except PasswordDeleteError:
@@ -199,11 +225,14 @@ class SessionManager:
             pass
 
     def has_session(self) -> bool:
-        """Check if a session exists in keyring.
+        """Check if a session exists in keyring or file backend.
 
         Returns:
             True if a valid session exists, False otherwise
         """
+        if self._backend:
+            return self._backend.has_session()
+
         try:
             session_json = keyring.get_password(self.service_name, self.SESSION_KEY)
             return session_json is not None

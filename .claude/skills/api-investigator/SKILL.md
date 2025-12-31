@@ -206,6 +206,338 @@ uv run python -m note_mcp.investigator analyze auth.flow --pattern "login\|sessi
 | `--output` | `-o` | `traffic.json` | 出力JSONファイル |
 | `--domain` | `-d` | なし | ドメインでフィルタ |
 
+## MCPツール（AI自律調査用）
+
+AI（Claude Code/Claude Desktop）がMCPツールを直接呼び出してAPI調査を自律実行できます。
+Docker内でブラウザ操作とトラフィック分析が完結します。
+
+### 前提条件
+
+```bash
+# Docker環境でinvestigatorサービスを起動
+docker compose up -d investigator
+
+# VNC経由でブラウザ動作を確認（オプション）
+vncviewer localhost:5900
+```
+
+### キャプチャ制御ツール
+
+#### investigator_start_capture
+
+キャプチャセッションを開始します。
+
+```
+investigator_start_capture(domain: str, port: int = 8080) -> str
+```
+
+| パラメータ | 型 | デフォルト | 説明 |
+|-----------|-----|-----------|------|
+| domain | str | - | キャプチャ対象ドメイン（例: "api.note.com"） |
+| port | int | 8080 | プロキシポート |
+
+**戻り値**: セッション開始の成功/失敗メッセージ
+
+#### investigator_stop_capture
+
+キャプチャセッションを停止します。
+
+```
+investigator_stop_capture() -> str
+```
+
+**戻り値**: セッション終了の成功/失敗メッセージ
+
+#### investigator_get_status
+
+現在のキャプチャセッション状態を取得します。
+
+```
+investigator_get_status() -> str
+```
+
+**戻り値**: セッション状態（アクティブ/非アクティブ、キャプチャ済みリクエスト数など）
+
+### ブラウザ操作ツール
+
+#### investigator_navigate
+
+指定URLに移動します。
+
+```
+investigator_navigate(url: str) -> str
+```
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| url | str | 移動先URL |
+
+**戻り値**: ナビゲーション結果（成功/失敗、ページタイトル）
+
+#### investigator_click
+
+セレクタで指定した要素をクリックします。
+
+```
+investigator_click(selector: str) -> str
+```
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| selector | str | CSSセレクタ |
+
+**戻り値**: クリック結果（成功/失敗）
+
+#### investigator_type
+
+指定要素にテキストを入力します。
+
+```
+investigator_type(selector: str, text: str) -> str
+```
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| selector | str | CSSセレクタ |
+| text | str | 入力テキスト |
+
+**戻り値**: 入力結果（成功/失敗）
+
+#### investigator_screenshot
+
+現在のページのスクリーンショットを取得します。
+
+```
+investigator_screenshot() -> str
+```
+
+**戻り値**: Base64エンコードされた画像データ
+
+#### investigator_get_page_content
+
+現在のページのHTMLを取得します。
+
+```
+investigator_get_page_content() -> str
+```
+
+**戻り値**: ページのHTMLコンテンツ
+
+### トラフィック分析ツール
+
+#### investigator_get_traffic
+
+キャプチャしたトラフィック一覧を取得します。
+
+```
+investigator_get_traffic(pattern: str | None = None) -> str
+```
+
+| パラメータ | 型 | デフォルト | 説明 |
+|-----------|-----|-----------|------|
+| pattern | str | None | URLパターンでフィルタ（正規表現） |
+
+**戻り値**: トラフィック一覧（JSON形式）
+
+#### investigator_analyze
+
+特定パターンのトラフィックを詳細分析します。
+
+```
+investigator_analyze(pattern: str, method: str | None = None) -> str
+```
+
+| パラメータ | 型 | デフォルト | 説明 |
+|-----------|-----|-----------|------|
+| pattern | str | - | URLパターン（正規表現） |
+| method | str | None | HTTPメソッドでフィルタ |
+
+**戻り値**: 分析結果（リクエスト/レスポンス詳細）
+
+#### investigator_export
+
+キャプチャデータをJSONファイルにエクスポートします。
+
+```
+investigator_export(output_path: str) -> str
+```
+
+| パラメータ | 型 | 説明 |
+|-----------|-----|------|
+| output_path | str | 出力ファイルパス |
+
+**戻り値**: エクスポート結果（ファイルパス、レコード数）
+
+### AI自律調査ワークフロー例
+
+#### 例1: note.com記事作成APIの調査
+
+```
+# 1. キャプチャ開始
+→ investigator_start_capture(domain="note.com")
+
+# 2. note.comにアクセス
+→ investigator_navigate("https://note.com/")
+
+# 3. ログインボタンをクリック
+→ investigator_click("button.login")
+
+# 4. 認証情報を入力（セッション復元される場合は不要）
+→ investigator_type("input[name=email]", "...")
+→ investigator_type("input[name=password]", "...")
+→ investigator_click("button[type=submit]")
+
+# 5. 記事作成画面に移動
+→ investigator_navigate("https://note.com/notes/new")
+
+# 6. 記事内容を入力
+→ investigator_click(".editor-content")
+→ investigator_type(".editor-content", "テスト記事")
+
+# 7. 下書き保存（APIリクエスト発生）
+→ investigator_click("button.save-draft")
+
+# 8. draft_save APIを分析
+→ investigator_analyze(pattern="draft_save", method="POST")
+
+# 9. 結果をエクスポート
+→ investigator_export(output_path="api_investigation.json")
+
+# 10. キャプチャ終了
+→ investigator_stop_capture()
+```
+
+#### 例2: 画像アップロードAPIの調査
+
+```
+# 1. キャプチャ開始
+→ investigator_start_capture(domain="note.com")
+
+# 2. 記事編集画面に移動
+→ investigator_navigate("https://note.com/notes/new")
+
+# 3. 画像アップロードボタンをクリック
+→ investigator_click("button.upload-image")
+
+# 4. POSTリクエストを分析
+→ investigator_analyze(pattern="upload", method="POST")
+
+# 5. レスポンス形式を確認
+→ investigator_get_traffic(pattern="upload")
+
+# 6. キャプチャ終了
+→ investigator_stop_capture()
+```
+
+## ホストClaude Codeからの自律調査
+
+### アーキテクチャ
+
+```
+┌─────────────────────────────────────────────┐
+│ Host                                        │
+│  ┌─────────────────┐    ┌────────────────┐ │
+│  │ Claude Code CLI │───►│ MCP Client     │ │
+│  └─────────────────┘    └───────┬────────┘ │
+└─────────────────────────────────┼───────────┘
+                                  │ HTTP :9000
+┌─────────────────────────────────┼───────────┐
+│ Docker Container                ▼           │
+│  ┌───────────────────────────────────────┐  │
+│  │ Investigator MCP Server (FastMCP)    │  │
+│  │ - investigator_start_capture          │  │
+│  │ - investigator_navigate               │  │
+│  │ - investigator_click                  │  │
+│  │ - investigator_screenshot             │  │
+│  │ - investigator_get_traffic            │  │
+│  │ - investigator_analyze                │  │
+│  └───────────────────────────────────────┘  │
+│           │                                 │
+│   ┌───────┴───────┐                        │
+│   ▼               ▼                        │
+│ ┌─────────┐  ┌───────────┐                 │
+│ │mitmproxy│  │Playwright │                 │
+│ │ :8080   │  │ Browser   │                 │
+│ └─────────┘  └───────────┘                 │
+│                  ▲                          │
+│                  │ VNC :5900 / noVNC :6080 │
+└──────────────────┼──────────────────────────┘
+                   │
+            [Visual Monitoring]
+```
+
+### セットアップ
+
+#### 1. Dockerコンテナを起動
+
+```bash
+cd /home/driller/amplifier/note-mcp
+
+# investigatorサービスを起動
+docker compose up -d investigator
+
+# ログを確認
+docker compose logs -f investigator
+```
+
+#### 2. 接続確認
+
+```bash
+# MCP HTTPサーバーの動作確認
+curl http://localhost:9000/mcp
+
+# VNCでブラウザ確認（オプション）
+vncviewer localhost:5900
+# または noVNC: http://localhost:6080/vnc.html
+```
+
+#### 3. MCPクライアント設定
+
+`.mcp.json` にHTTPトランスポート設定が追加済み：
+
+```json
+{
+  "mcpServers": {
+    "note-investigator": {
+      "url": "http://localhost:9000/mcp",
+      "transport": "http"
+    }
+  }
+}
+```
+
+### 利用可能なポート
+
+| ポート | サービス | 説明 |
+|--------|----------|------|
+| 9000 | MCP HTTP | Claude Codeからの接続 |
+| 5900 | VNC | ブラウザ視覚確認 |
+| 6080 | noVNC | Webブラウザ経由VNC |
+| 8080 | mitmproxy | HTTPトラフィックキャプチャ |
+
+### 技術的な注意事項
+
+#### Docker内での動作
+
+- mitmproxy、Playwright、MCPサーバーすべてがDocker内で動作
+- VNC経由でブラウザ動作を視覚確認可能（port 5900）
+- noVNCでブラウザ経由確認も可能（port 6080）
+
+#### セッション管理
+
+- Docker内ではkeyringが利用できないため、ファイルベースセッション管理を使用
+- セッション情報は `/app/data` にマウントされたボリュームに永続化
+
+#### HTTPS証明書
+
+- `--ignore-certificate-errors` フラグでHTTPS通信をキャプチャ
+- 証明書インストールは不要
+
+#### Issue#15の教訓
+
+- `subprocess.PIPE` → `subprocess.DEVNULL`（バッファブロッキング回避）
+- `localhost` → `127.0.0.1`（WSL2互換性）
+
 ## トラブルシューティング
 
 ### mitmproxyが見つからない

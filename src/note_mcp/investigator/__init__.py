@@ -17,13 +17,17 @@ Usage:
 from note_mcp.investigator.core import (
     CapturedRequest,
     CaptureSession,
+    CaptureSessionManager,
     ProxyManager,
     run_capture_session,
 )
+from note_mcp.investigator.mcp_tools import register_investigator_tools
 
 __all__ = [
     "CapturedRequest",
     "CaptureSession",
+    "CaptureSessionManager",
     "ProxyManager",
+    "register_investigator_tools",
     "run_capture_session",
 ]

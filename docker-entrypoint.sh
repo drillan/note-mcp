@@ -169,6 +169,32 @@ if [ -d "$CHROME_DATA_DIR" ] && [ ! -w "$CHROME_DATA_DIR" ]; then
     fi
 fi
 
+# =============================================================================
+# Fix volume mount permissions (Application data directory)
+# =============================================================================
+APP_DATA_DIR="/app/data"
+if [ -d "$APP_DATA_DIR" ]; then
+    if [ ! -w "$APP_DATA_DIR" ]; then
+        log_warn "Application data directory not writable, attempting to fix..."
+        if [ "$CURRENT_UID" = "0" ]; then
+            chown -R "$CURRENT_UID:$CURRENT_GID" "$APP_DATA_DIR" 2>/dev/null && \
+                log_info "Fixed application data directory ownership" || \
+                log_warn "Failed to fix application data directory ownership"
+        else
+            log_warn "Application data directory is not writable."
+            log_warn "To fix, run once as root or delete the volume:"
+            log_warn "  docker volume rm note-mcp_investigator-data"
+            log_warn "Using /tmp as fallback for data storage."
+            export APP_DATA_DIR="/tmp"
+        fi
+    fi
+else
+    # Create directory if it doesn't exist
+    mkdir -p "$APP_DATA_DIR" 2>/dev/null && \
+        log_info "Created application data directory: $APP_DATA_DIR" || \
+        log_warn "Failed to create application data directory"
+fi
+
 # Check if we should start display server
 if [ -n "${VNC_PORT}" ]; then
     # TigerVNC server provides its own X server, no need for Xvfb
@@ -195,6 +221,7 @@ log_info "  User: $(id -u):$(id -g)"
 log_info "  HOME=$HOME"
 log_info "  DISPLAY=$DISPLAY"
 log_info "  PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-not set}"
+log_info "  INVESTIGATOR_MODE=${INVESTIGATOR_MODE:-not set}"
 log_info "  Python: $(python --version 2>&1)"
 
 # Execute the command
