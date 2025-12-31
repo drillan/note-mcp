@@ -11,14 +11,18 @@ from typing import Annotated
 
 from fastmcp import FastMCP
 
-from note_mcp.api.articles import get_article, list_articles, publish_article
+from note_mcp.api.articles import (
+    create_draft,
+    get_article,
+    list_articles,
+    publish_article,
+    update_article,
+)
 from note_mcp.api.images import upload_body_image, upload_eyecatch_image
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
-from note_mcp.browser.create_draft import create_draft_via_browser
 from note_mcp.browser.insert_image import insert_image_via_browser
 from note_mcp.browser.preview import show_preview
-from note_mcp.browser.update_article import update_article_via_browser
 from note_mcp.investigator import register_investigator_tools
 from note_mcp.models import ArticleInput, ArticleStatus, NoteAPIError
 
@@ -158,7 +162,7 @@ async def note_create_draft(
         tags=tags or [],
     )
 
-    article = await create_draft_via_browser(session, article_input)
+    article = await create_draft(session, article_input)
 
     # Show preview in browser
     await show_preview(session, article.key)
@@ -238,7 +242,7 @@ async def note_update_article(
         tags=tags or [],
     )
 
-    article = await update_article_via_browser(session, article_id, article_input)
+    article = await update_article(session, article_id, article_input)
 
     tag_info = f"、タグ: {', '.join(article.tags)}" if article.tags else ""
     return f"記事を更新しました。ID: {article.id}{tag_info}"

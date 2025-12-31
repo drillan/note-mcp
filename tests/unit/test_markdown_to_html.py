@@ -404,3 +404,62 @@ def hello():
         result = markdown_to_html("~~first~~ and ~~second~~")
         assert result.count("<s>") == 2
         assert result.count("</s>") == 2
+
+    # Ruby (ルビ/ふりがな) tests - Issue #34
+
+    def test_ruby_basic_conversion(self) -> None:
+        """Test basic ruby conversion: ｜漢字《かんじ》"""
+        result = markdown_to_html("｜漢字《かんじ》")
+        assert "<ruby>漢字<rp>（</rp><rt>かんじ</rt><rp>）</rp></ruby>" in result
+
+    def test_ruby_half_width_bar(self) -> None:
+        """Test ruby with half-width bar: |漢字《かんじ》"""
+        result = markdown_to_html("|漢字《かんじ》")
+        assert "<ruby>" in result
+        assert "漢字" in result
+        assert "<rt>かんじ</rt>" in result
+
+    def test_ruby_without_bar(self) -> None:
+        """Test ruby without bar (kanji only): 漢字《かんじ》"""
+        result = markdown_to_html("漢字《かんじ》")
+        assert "<ruby>" in result
+        assert "漢字" in result
+        assert "<rt>かんじ</rt>" in result
+
+    def test_ruby_multiple(self) -> None:
+        """Test multiple rubies: ｜東京《とうきょう》の｜天気《てんき》"""
+        result = markdown_to_html("｜東京《とうきょう》の｜天気《てんき》")
+        assert result.count("<ruby>") == 2
+
+    def test_ruby_with_bold(self) -> None:
+        """Test ruby combined with bold: **｜重要《じゅうよう》**"""
+        result = markdown_to_html("**｜重要《じゅうよう》**")
+        assert "<strong>" in result
+        assert "<ruby>" in result
+
+    def test_ruby_with_italic(self) -> None:
+        """Test ruby combined with italic."""
+        result = markdown_to_html("*｜大切《たいせつ》*")
+        assert "<em>" in result
+        assert "<ruby>" in result
+
+    def test_ruby_hiragana_base(self) -> None:
+        """Test ruby on hiragana base."""
+        result = markdown_to_html("｜ひらがな《平仮名》")
+        assert "<ruby>" in result
+        assert "ひらがな" in result
+        assert "<rt>平仮名</rt>" in result
+
+    def test_ruby_katakana_base(self) -> None:
+        """Test ruby on katakana base."""
+        result = markdown_to_html("｜カタカナ《片仮名》")
+        assert "<ruby>" in result
+        assert "カタカナ" in result
+        assert "<rt>片仮名</rt>" in result
+
+    def test_ruby_in_sentence(self) -> None:
+        """Test ruby embedded in sentence."""
+        result = markdown_to_html("これは｜漢字《かんじ》のテストです")
+        assert "これは" in result
+        assert "<ruby>" in result
+        assert "のテストです" in result
