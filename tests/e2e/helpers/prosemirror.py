@@ -17,6 +17,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from playwright.async_api import Error as PlaywrightError
+
 if TYPE_CHECKING:
     from playwright.async_api import Page
 
@@ -28,7 +30,15 @@ DEFAULT_TIMEOUT_MS = 15000
 EDITOR_LOAD_WAIT_MS = 20000
 IMAGE_INSERT_TIMEOUT_MS = 10000
 SAVE_COMPLETION_TIMEOUT_MS = 5000
-POLL_INTERVAL_MS = 100
+
+# UI element positioning constants
+FLOATING_MENU_MIN_Y = 200  # Minimum Y position for floating menu buttons
+FLOATING_MENU_MAX_Y = 800  # Maximum Y position for floating menu buttons
+
+# UI text constants
+IMAGE_BUTTON_TEXT = "画像"
+DRAFT_SAVE_BUTTON_TEXT = "下書き保存"
+SAVE_FAILED_TEXT = "保存に失敗"
 
 
 class ProseMirrorStabilizer:
@@ -116,9 +126,15 @@ class ProseMirrorStabilizer:
                 logger.debug(f"AI dialog dismissed via {dialog_dismissed.get('strategy')}")
             return True
 
+        except PlaywrightError as e:
+            # Playwright errors (timeouts, element not found) are expected
+            logger.debug(f"AI dialog check completed (no dialog found): {e}")
+            return True  # No dialog present is a valid state
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
-            logger.debug(f"AI dialog dismissal check completed: {e}")
-            return True  # Assume success if no dialog exists
+            logger.warning(f"Unexpected error during AI dialog dismissal: {type(e).__name__}: {e}")
+            return False
 
     async def wait_for_editor_ready(self, timeout_ms: int = EDITOR_LOAD_WAIT_MS) -> bool:
         """Wait for the ProseMirror editor to be fully ready.
@@ -196,19 +212,19 @@ class ProseMirrorStabilizer:
             await editor.click()
             await asyncio.sleep(0.3)
 
-            # Wait for "画像" button to appear
+            # Wait for image button to appear using shared search logic
             menu_ready = await self.page.evaluate(
                 """
-                async (timeout) => {
+                async (args) => {
+                    const { buttonText, minY, maxY, timeout } = args;
                     const startTime = Date.now();
                     while (Date.now() - startTime < timeout) {
                         const buttons = document.querySelectorAll('button');
                         for (const btn of buttons) {
-                            if (btn.textContent.trim() === '画像' &&
+                            if (btn.textContent.trim() === buttonText &&
                                 btn.offsetParent !== null) {
                                 const rect = btn.getBoundingClientRect();
-                                // Verify button is in reasonable position
-                                if (rect.y > 200 && rect.y < 800) {
+                                if (rect.y > minY && rect.y < maxY) {
                                     return { found: true, y: rect.y };
                                 }
                             }
@@ -218,7 +234,12 @@ class ProseMirrorStabilizer:
                     return { found: false };
                 }
                 """,
-                timeout_ms,
+                {
+                    "buttonText": IMAGE_BUTTON_TEXT,
+                    "minY": FLOATING_MENU_MIN_Y,
+                    "maxY": FLOATING_MENU_MAX_Y,
+                    "timeout": timeout_ms,
+                },
             )
 
             if menu_ready.get("found"):
@@ -228,28 +249,31 @@ class ProseMirrorStabilizer:
             logger.warning("Floating menu not found")
             return False
 
+        except PlaywrightError as e:
+            logger.error(f"Playwright error during floating menu wait: {e}")
+            return False
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
-            logger.error(f"Floating menu wait failed: {e}")
+            logger.warning(f"Unexpected error during floating menu wait: {type(e).__name__}: {e}")
             return False
 
     async def click_image_button(self) -> bool:
         """Click the "画像" (image) button in the floating menu.
-
-        Args:
-            None
 
         Returns:
             True if button was clicked successfully
         """
         clicked = await self.page.evaluate(
             """
-            () => {
+            (args) => {
+                const { buttonText, minY, maxY } = args;
                 const buttons = document.querySelectorAll('button');
                 for (const btn of buttons) {
-                    if (btn.textContent.trim() === '画像' &&
+                    if (btn.textContent.trim() === buttonText &&
                         btn.offsetParent !== null) {
                         const rect = btn.getBoundingClientRect();
-                        if (rect.y > 200 && rect.y < 800) {
+                        if (rect.y > minY && rect.y < maxY) {
                             btn.click();
                             return true;
                         }
@@ -257,12 +281,17 @@ class ProseMirrorStabilizer:
                 }
                 return false;
             }
-            """
+            """,
+            {
+                "buttonText": IMAGE_BUTTON_TEXT,
+                "minY": FLOATING_MENU_MIN_Y,
+                "maxY": FLOATING_MENU_MAX_Y,
+            },
         )
 
         if clicked:
             await asyncio.sleep(0.3)  # Wait for file chooser activation
-            logger.debug("Clicked '画像' button")
+            logger.debug(f"Clicked '{IMAGE_BUTTON_TEXT}' button")
         return bool(clicked)
 
     async def wait_for_image_insertion(
@@ -316,8 +345,13 @@ class ProseMirrorStabilizer:
             logger.warning("Image insertion not detected within timeout")
             return False
 
+        except PlaywrightError as e:
+            logger.error(f"Playwright error during image insertion wait: {e}")
+            return False
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
-            logger.error(f"Image insertion wait failed: {e}")
+            logger.warning(f"Unexpected error during image insertion wait: {type(e).__name__}: {e}")
             return False
 
     async def focus_figcaption(self, timeout_ms: int = DEFAULT_TIMEOUT_MS) -> bool:
@@ -371,8 +405,13 @@ class ProseMirrorStabilizer:
             logger.warning("Could not focus figcaption")
             return False
 
+        except PlaywrightError as e:
+            logger.error(f"Playwright error during figcaption focus: {e}")
+            return False
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
-            logger.error(f"Figcaption focus failed: {e}")
+            logger.warning(f"Unexpected error during figcaption focus: {type(e).__name__}: {e}")
             return False
 
     async def type_caption(self, caption: str) -> bool:
@@ -392,8 +431,13 @@ class ProseMirrorStabilizer:
             await asyncio.sleep(0.2)  # Wait for text to be processed
             logger.debug(f"Typed caption: {caption}")
             return True
+        except PlaywrightError as e:
+            logger.error(f"Playwright error during caption typing: {e}")
+            return False
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:
-            logger.error(f"Caption typing failed: {e}")
+            logger.warning(f"Unexpected error during caption typing: {type(e).__name__}: {e}")
             return False
 
     async def save_article(
@@ -415,13 +459,13 @@ class ProseMirrorStabilizer:
         """
         for attempt in range(max_retries):
             try:
-                # Click save button
+                # Click save button using constants
                 save_clicked = await self.page.evaluate(
                     """
-                    () => {
+                    (buttonText) => {
                         const buttons = document.querySelectorAll('button');
                         for (const btn of buttons) {
-                            if (btn.textContent.trim() === '下書き保存' &&
+                            if (btn.textContent.trim() === buttonText &&
                                 btn.offsetParent !== null &&
                                 !btn.disabled) {
                                 btn.click();
@@ -430,7 +474,8 @@ class ProseMirrorStabilizer:
                         }
                         return false;
                     }
-                    """
+                    """,
+                    DRAFT_SAVE_BUTTON_TEXT,
                 )
 
                 if not save_clicked:
@@ -442,26 +487,27 @@ class ProseMirrorStabilizer:
                 # Wait for save to complete - check for various indicators
                 save_result = await self.page.evaluate(
                     """
-                    async (timeout) => {
+                    async (args) => {
+                        const { timeout, buttonText, errorText } = args;
                         const startTime = Date.now();
 
                         while (Date.now() - startTime < timeout) {
                             // Check for error messages
                             const body = document.body.innerText;
-                            if (body.includes('保存に失敗')) {
-                                return { success: false, error: '保存に失敗' };
+                            if (body.includes(errorText)) {
+                                return { success: false, error: errorText };
                             }
 
                             // Check for success indicators (button state change, toast)
                             const saveBtn = Array.from(document.querySelectorAll('button'))
-                                .find(b => b.textContent.trim() === '下書き保存');
+                                .find(b => b.textContent.trim() === buttonText);
 
                             // If button is not disabled and no error, assume success
                             if (saveBtn && !saveBtn.disabled) {
                                 // Wait a bit more to ensure save is processed
                                 await new Promise(r => setTimeout(r, 500));
                                 // Recheck for error
-                                if (!document.body.innerText.includes('保存に失敗')) {
+                                if (!document.body.innerText.includes(errorText)) {
                                     return { success: true };
                                 }
                             }
@@ -470,13 +516,17 @@ class ProseMirrorStabilizer:
                         }
 
                         // Timeout reached - check final state
-                        if (!document.body.innerText.includes('保存に失敗')) {
+                        if (!document.body.innerText.includes(errorText)) {
                             return { success: true };
                         }
                         return { success: false, error: 'timeout' };
                     }
                     """,
-                    timeout_ms,
+                    {
+                        "timeout": timeout_ms,
+                        "buttonText": DRAFT_SAVE_BUTTON_TEXT,
+                        "errorText": SAVE_FAILED_TEXT,
+                    },
                 )
 
                 if save_result.get("success"):
@@ -491,8 +541,18 @@ class ProseMirrorStabilizer:
                     await self.page.keyboard.press("Escape")
                     await asyncio.sleep(1)
 
+            except PlaywrightError as e:
+                # Playwright errors are retryable
+                logger.warning(f"Playwright error on save attempt {attempt + 1}: {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+            except (KeyboardInterrupt, SystemExit):
+                raise
             except Exception as e:
-                logger.error(f"Save attempt {attempt + 1} exception: {e}")
+                # Unexpected errors - log and continue to next attempt
+                logger.error(f"Unexpected error on save attempt {attempt + 1}: {type(e).__name__}: {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
 
         return False
 
