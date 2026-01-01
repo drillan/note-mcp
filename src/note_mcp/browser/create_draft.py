@@ -176,6 +176,9 @@ async def create_draft_via_browser(
         # Text alignment failure is not fatal
 
     # Insert embeds at placeholder positions (after text alignments, before save)
+    # Wait for ProseMirror to fully process typed content and stabilize DOM
+    await asyncio.sleep(1.0)
+
     embeds_inserted = 0
     embed_error: str | None = None
     debug_info: str | None = None
