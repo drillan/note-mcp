@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from playwright.async_api import Error as PlaywrightError
 
+from note_mcp.browser.embed_helpers import apply_embeds
 from note_mcp.browser.manager import BrowserManager
 from note_mcp.browser.text_align_helpers import apply_text_alignments
 from note_mcp.browser.toc_helpers import insert_toc_at_placeholder
@@ -178,6 +179,18 @@ async def update_article_via_browser(
         logger.warning(f"Text alignment application failed for article {article_id}: {alignment_error}")
         # Text alignment failure is not fatal
 
+    # Insert embeds at placeholder positions (after text alignments, before save)
+    embeds_inserted = 0
+    embed_error: str | None = None
+    try:
+        embeds_inserted, _embed_debug = await apply_embeds(page)
+        if embeds_inserted > 0:
+            logger.info(f"Inserted {embeds_inserted} embed(s) to article {article_id}")
+    except (TimeoutError, PlaywrightError) as e:
+        embed_error = str(e)
+        logger.warning(f"Embed insertion failed for article {article_id}: {embed_error}")
+        # Embed insertion failure is not fatal
+
     # Click save draft button explicitly instead of relying on auto-save
     await asyncio.sleep(1)
 
@@ -222,4 +235,6 @@ async def update_article_via_browser(
         toc_error=toc_error,
         alignments_applied=alignments_applied if alignments_applied > 0 else None,
         alignment_error=alignment_error,
+        embeds_inserted=embeds_inserted if embeds_inserted > 0 else None,
+        embed_error=embed_error,
     )

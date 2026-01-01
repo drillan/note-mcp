@@ -16,12 +16,18 @@ from note_mcp.browser.typing_helpers import (
     _CITATION_PATTERN,
     _CITATION_URL_PATTERN,
     _CODE_FENCE_PATTERN,
+    _EMBED_NOTE_PATTERN,
+    _EMBED_PLACEHOLDER_END,
+    _EMBED_PLACEHOLDER_START,
+    _EMBED_TWITTER_PATTERN,
+    _EMBED_YOUTUBE_PATTERN,
     _HEADING_PATTERN,
     _ORDERED_LIST_PATTERN,
     _STRIKETHROUGH_PATTERN,
     _TOC_PATTERN,
     _TOC_PLACEHOLDER,
     _UNORDERED_LIST_PATTERN,
+    _is_embed_url,
     _type_with_strikethrough,
     type_markdown_content,
 )
@@ -963,3 +969,375 @@ More content"""
         assert "Section Title" in typed_texts
         expected_center = f"{_ALIGN_CENTER_PLACEHOLDER}centered text{_ALIGN_END_PLACEHOLDER}"
         assert expected_center in typed_texts
+
+
+class TestEmbedYouTubePattern:
+    """Tests for YouTube embed URL pattern detection."""
+
+    def test_matches_youtube_watch_url(self) -> None:
+        """Test that YouTube watch URLs are detected."""
+        match = _EMBED_YOUTUBE_PATTERN.match("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        assert match is not None
+
+    def test_matches_youtube_watch_url_without_www(self) -> None:
+        """Test that YouTube watch URLs without www are detected."""
+        match = _EMBED_YOUTUBE_PATTERN.match("https://youtube.com/watch?v=dQw4w9WgXcQ")
+        assert match is not None
+
+    def test_matches_youtu_be_short_url(self) -> None:
+        """Test that youtu.be short URLs are detected."""
+        match = _EMBED_YOUTUBE_PATTERN.match("https://youtu.be/dQw4w9WgXcQ")
+        assert match is not None
+
+    def test_matches_http_youtube_url(self) -> None:
+        """Test that HTTP YouTube URLs are detected."""
+        match = _EMBED_YOUTUBE_PATTERN.match("http://www.youtube.com/watch?v=abc123XYZ")
+        assert match is not None
+
+    def test_matches_video_id_with_hyphens(self) -> None:
+        """Test that video IDs with hyphens are matched."""
+        match = _EMBED_YOUTUBE_PATTERN.match("https://youtu.be/abc-123_XYZ")
+        assert match is not None
+
+    def test_no_match_for_channel_url(self) -> None:
+        """Test that channel URLs are not matched."""
+        match = _EMBED_YOUTUBE_PATTERN.match("https://www.youtube.com/channel/UC123")
+        assert match is None
+
+    def test_no_match_for_playlist_url(self) -> None:
+        """Test that playlist URLs are not matched."""
+        match = _EMBED_YOUTUBE_PATTERN.match("https://www.youtube.com/playlist?list=PL123")
+        assert match is None
+
+    def test_no_match_for_homepage(self) -> None:
+        """Test that YouTube homepage is not matched."""
+        match = _EMBED_YOUTUBE_PATTERN.match("https://www.youtube.com/")
+        assert match is None
+
+    def test_no_match_without_protocol(self) -> None:
+        """Test that URLs without protocol are not matched."""
+        match = _EMBED_YOUTUBE_PATTERN.match("youtube.com/watch?v=abc123")
+        assert match is None
+
+
+class TestEmbedTwitterPattern:
+    """Tests for Twitter/X embed URL pattern detection."""
+
+    def test_matches_twitter_status_url(self) -> None:
+        """Test that Twitter status URLs are detected."""
+        match = _EMBED_TWITTER_PATTERN.match("https://twitter.com/user/status/1234567890")
+        assert match is not None
+
+    def test_matches_twitter_with_www(self) -> None:
+        """Test that Twitter URLs with www are detected."""
+        match = _EMBED_TWITTER_PATTERN.match("https://www.twitter.com/user/status/1234567890")
+        assert match is not None
+
+    def test_matches_x_com_status_url(self) -> None:
+        """Test that X.com status URLs are detected."""
+        match = _EMBED_TWITTER_PATTERN.match("https://x.com/user/status/1234567890")
+        assert match is not None
+
+    def test_matches_x_com_with_www(self) -> None:
+        """Test that X.com URLs with www are detected."""
+        match = _EMBED_TWITTER_PATTERN.match("https://www.x.com/user/status/1234567890")
+        assert match is not None
+
+    def test_matches_http_twitter_url(self) -> None:
+        """Test that HTTP Twitter URLs are detected."""
+        match = _EMBED_TWITTER_PATTERN.match("http://twitter.com/user/status/9876543210")
+        assert match is not None
+
+    def test_no_match_for_profile_url(self) -> None:
+        """Test that profile URLs are not matched."""
+        match = _EMBED_TWITTER_PATTERN.match("https://twitter.com/user")
+        assert match is None
+
+    def test_no_match_for_likes_url(self) -> None:
+        """Test that likes URLs are not matched."""
+        match = _EMBED_TWITTER_PATTERN.match("https://twitter.com/user/likes")
+        assert match is None
+
+    def test_no_match_for_homepage(self) -> None:
+        """Test that Twitter homepage is not matched."""
+        match = _EMBED_TWITTER_PATTERN.match("https://twitter.com/")
+        assert match is None
+
+    def test_no_match_without_protocol(self) -> None:
+        """Test that URLs without protocol are not matched."""
+        match = _EMBED_TWITTER_PATTERN.match("twitter.com/user/status/123")
+        assert match is None
+
+
+class TestEmbedNotePattern:
+    """Tests for note.com embed URL pattern detection."""
+
+    def test_matches_note_article_url(self) -> None:
+        """Test that note.com article URLs are detected."""
+        match = _EMBED_NOTE_PATTERN.match("https://note.com/username/n/n1234567890ab")
+        assert match is not None
+
+    def test_matches_http_note_url(self) -> None:
+        """Test that HTTP note.com URLs are detected."""
+        match = _EMBED_NOTE_PATTERN.match("http://note.com/user123/n/nabc123def456")
+        assert match is not None
+
+    def test_matches_note_with_underscore_username(self) -> None:
+        """Test that note.com URLs with underscore in username are detected."""
+        match = _EMBED_NOTE_PATTERN.match("https://note.com/user_name/n/n12345")
+        assert match is not None
+
+    def test_no_match_for_profile_url(self) -> None:
+        """Test that profile URLs are not matched."""
+        match = _EMBED_NOTE_PATTERN.match("https://note.com/username")
+        assert match is None
+
+    def test_no_match_for_magazine_url(self) -> None:
+        """Test that magazine URLs are not matched."""
+        match = _EMBED_NOTE_PATTERN.match("https://note.com/username/m/m123")
+        assert match is None
+
+    def test_no_match_for_homepage(self) -> None:
+        """Test that note.com homepage is not matched."""
+        match = _EMBED_NOTE_PATTERN.match("https://note.com/")
+        assert match is None
+
+    def test_no_match_for_old_domain(self) -> None:
+        """Test that old note.mu domain is not matched."""
+        match = _EMBED_NOTE_PATTERN.match("https://note.mu/user/n/n123")
+        assert match is None
+
+    def test_no_match_without_protocol(self) -> None:
+        """Test that URLs without protocol are not matched."""
+        match = _EMBED_NOTE_PATTERN.match("note.com/user/n/n123")
+        assert match is None
+
+
+class TestEmbedPlaceholderConstants:
+    """Tests for embed placeholder constant definitions."""
+
+    def test_placeholder_start_marker(self) -> None:
+        """Placeholder start marker should be §§EMBED:"""
+        assert _EMBED_PLACEHOLDER_START == "§§EMBED:"
+
+    def test_placeholder_end_marker(self) -> None:
+        """Placeholder end marker should be §§"""
+        assert _EMBED_PLACEHOLDER_END == "§§"
+
+    def test_placeholder_markers_are_distinct(self) -> None:
+        """Start and end markers should be different."""
+        assert _EMBED_PLACEHOLDER_START != _EMBED_PLACEHOLDER_END
+
+    def test_placeholder_format_example(self) -> None:
+        """Placeholder format should be §§EMBED:url§§"""
+        url = "https://www.youtube.com/watch?v=abc123"
+        placeholder = f"{_EMBED_PLACEHOLDER_START}{url}{_EMBED_PLACEHOLDER_END}"
+        assert placeholder == "§§EMBED:https://www.youtube.com/watch?v=abc123§§"
+
+
+class TestIsEmbedUrl:
+    """Tests for _is_embed_url function."""
+
+    def test_returns_true_for_youtube_url(self) -> None:
+        """Should return True for YouTube URLs."""
+        assert _is_embed_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ") is True
+
+    def test_returns_true_for_youtu_be_url(self) -> None:
+        """Should return True for youtu.be URLs."""
+        assert _is_embed_url("https://youtu.be/dQw4w9WgXcQ") is True
+
+    def test_returns_true_for_twitter_url(self) -> None:
+        """Should return True for Twitter URLs."""
+        assert _is_embed_url("https://twitter.com/user/status/1234567890") is True
+
+    def test_returns_true_for_x_com_url(self) -> None:
+        """Should return True for X.com URLs."""
+        assert _is_embed_url("https://x.com/user/status/1234567890") is True
+
+    def test_returns_true_for_note_url(self) -> None:
+        """Should return True for note.com article URLs."""
+        assert _is_embed_url("https://note.com/username/n/n1234567890ab") is True
+
+    def test_returns_false_for_generic_url(self) -> None:
+        """Should return False for generic URLs."""
+        assert _is_embed_url("https://example.com/page") is False
+
+    def test_returns_false_for_github_url(self) -> None:
+        """Should return False for GitHub URLs."""
+        assert _is_embed_url("https://github.com/user/repo") is False
+
+    def test_returns_false_for_vimeo_url(self) -> None:
+        """Should return False for Vimeo URLs."""
+        assert _is_embed_url("https://vimeo.com/123456") is False
+
+    def test_returns_false_for_empty_string(self) -> None:
+        """Should return False for empty string."""
+        assert _is_embed_url("") is False
+
+    def test_returns_false_for_plain_text(self) -> None:
+        """Should return False for plain text."""
+        assert _is_embed_url("not a url") is False
+
+    def test_returns_false_for_youtube_channel(self) -> None:
+        """Should return False for YouTube channel URLs."""
+        assert _is_embed_url("https://www.youtube.com/channel/UC123") is False
+
+    def test_returns_false_for_twitter_profile(self) -> None:
+        """Should return False for Twitter profile URLs."""
+        assert _is_embed_url("https://twitter.com/user") is False
+
+    def test_returns_false_for_note_profile(self) -> None:
+        """Should return False for note.com profile URLs."""
+        assert _is_embed_url("https://note.com/username") is False
+
+
+class TestTypeMarkdownContentEmbeds:
+    """Tests for type_markdown_content with embed URL handling."""
+
+    @pytest.mark.asyncio
+    async def test_embed_url_types_placeholder(self) -> None:
+        """Test that embed URLs are converted to placeholders."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        await type_markdown_content(mock_page, url)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        expected = f"{_EMBED_PLACEHOLDER_START}{url}{_EMBED_PLACEHOLDER_END}"
+        assert expected in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_youtube_url_in_text_types_placeholder(self) -> None:
+        """Test YouTube URL embedded in text is converted to placeholder."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = "Check this video:\nhttps://www.youtube.com/watch?v=abc123"
+        await type_markdown_content(mock_page, content)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        expected = f"{_EMBED_PLACEHOLDER_START}https://www.youtube.com/watch?v=abc123{_EMBED_PLACEHOLDER_END}"
+        assert expected in typed_texts
+        assert "Check this video:" in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_twitter_url_types_placeholder(self) -> None:
+        """Test Twitter URL is converted to placeholder."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        url = "https://twitter.com/user/status/1234567890"
+        await type_markdown_content(mock_page, url)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        expected = f"{_EMBED_PLACEHOLDER_START}{url}{_EMBED_PLACEHOLDER_END}"
+        assert expected in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_x_com_url_types_placeholder(self) -> None:
+        """Test X.com URL is converted to placeholder."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        url = "https://x.com/user/status/9876543210"
+        await type_markdown_content(mock_page, url)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        expected = f"{_EMBED_PLACEHOLDER_START}{url}{_EMBED_PLACEHOLDER_END}"
+        assert expected in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_note_url_types_placeholder(self) -> None:
+        """Test note.com article URL is converted to placeholder."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        url = "https://note.com/username/n/n1234567890ab"
+        await type_markdown_content(mock_page, url)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        expected = f"{_EMBED_PLACEHOLDER_START}{url}{_EMBED_PLACEHOLDER_END}"
+        assert expected in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_non_embed_url_types_directly(self) -> None:
+        """Test non-embed URLs are typed directly without placeholder."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        url = "https://example.com/page"
+        await type_markdown_content(mock_page, url)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        # Should NOT contain embed placeholder
+        for text in typed_texts:
+            assert _EMBED_PLACEHOLDER_START not in text
+        # Should type the URL directly
+        assert url in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_multiple_embed_urls(self) -> None:
+        """Test multiple embed URLs in same document."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = """Check out these videos:
+
+https://www.youtube.com/watch?v=abc123
+
+And this tweet:
+
+https://twitter.com/user/status/456"""
+
+        await type_markdown_content(mock_page, content)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+
+        yt_placeholder = f"{_EMBED_PLACEHOLDER_START}https://www.youtube.com/watch?v=abc123{_EMBED_PLACEHOLDER_END}"
+        tw_placeholder = f"{_EMBED_PLACEHOLDER_START}https://twitter.com/user/status/456{_EMBED_PLACEHOLDER_END}"
+
+        assert yt_placeholder in typed_texts
+        assert tw_placeholder in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_embed_url_with_headings(self) -> None:
+        """Test embed URL works with headings."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = """## Video Section
+
+https://www.youtube.com/watch?v=abc123
+
+## Text Section"""
+
+        await type_markdown_content(mock_page, content)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+
+        assert "## " in typed_texts
+        assert "Video Section" in typed_texts
+        expected = f"{_EMBED_PLACEHOLDER_START}https://www.youtube.com/watch?v=abc123{_EMBED_PLACEHOLDER_END}"
+        assert expected in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_embed_url_presses_enter_for_next_line(self) -> None:
+        """Test that Enter is pressed after embed URL when more content follows."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = "https://www.youtube.com/watch?v=abc123\nMore text"
+        await type_markdown_content(mock_page, content)
+
+        press_calls = mock_page.keyboard.press.call_args_list
+        pressed_keys = [call[0][0] for call in press_calls]
+        assert "Enter" in pressed_keys

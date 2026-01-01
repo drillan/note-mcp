@@ -58,6 +58,38 @@ _TEXT_ALIGN_CENTER_PATTERN = re.compile(r"^->(.+)<-$", re.MULTILINE)
 _TEXT_ALIGN_RIGHT_PATTERN = re.compile(r"^->(.+)$", re.MULTILINE)
 _TEXT_ALIGN_LEFT_PATTERN = re.compile(r"^<-(.+)$", re.MULTILINE)
 
+# Embed URL patterns (Issue #41)
+# YouTube: youtube.com/watch?v=xxx or youtu.be/xxx
+# Twitter/X: twitter.com/user/status/xxx or x.com/user/status/xxx
+# note.com: note.com/user/n/xxx
+_EMBED_YOUTUBE_PATTERN = re.compile(r"^https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w-]+$")
+_EMBED_TWITTER_PATTERN = re.compile(r"^https?://(?:www\.)?(?:twitter\.com|x\.com)/\w+/status/\d+$")
+_EMBED_NOTE_PATTERN = re.compile(r"^https?://note\.com/\w+/n/\w+$")
+
+# Pattern to find URLs that are alone on a line (potential embed URLs)
+_STANDALONE_URL_PATTERN = re.compile(r"^(https?://\S+)$", re.MULTILINE)
+
+
+def has_embed_url(content: str) -> bool:
+    """Check if content contains URLs that should be embedded.
+
+    Detects YouTube, Twitter/X, and note.com article URLs that appear
+    alone on a line (indicating they should be embedded, not linked).
+
+    Args:
+        content: Markdown content to check.
+
+    Returns:
+        True if content contains embed-worthy URLs.
+    """
+    # Find all standalone URLs (URLs alone on their own line)
+    for match in _STANDALONE_URL_PATTERN.finditer(content):
+        url = match.group(1)
+        # Check if this URL matches any embed pattern
+        if _EMBED_YOUTUBE_PATTERN.match(url) or _EMBED_TWITTER_PATTERN.match(url) or _EMBED_NOTE_PATTERN.match(url):
+            return True
+    return False
+
 
 def _generate_uuid() -> str:
     """Generate a UUID for note.com element IDs."""

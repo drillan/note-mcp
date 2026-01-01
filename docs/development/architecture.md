@@ -125,6 +125,43 @@ Markdown入力: [TOC]
 1. `has_toc_placeholder()` - エディタ内のプレースホルダを検出
 2. `insert_toc_at_placeholder()` - note.comの[+]ボタン→[目次]でTOC挿入
 
+#### 埋め込み（Embed）機能
+
+対応サービスのURLは、ブラウザ自動化でnote.comの埋め込みウィジェットに変換されます。
+
+**対応サービス:**
+- YouTube（youtube.com, youtu.be）
+- Twitter/X（twitter.com, x.com）
+- note.com記事
+
+```
+Markdown入力: https://www.youtube.com/watch?v=abc123
+    ↓
+URL検出: _is_embed_url()で対応サービスかを判定
+    ↓
+プレースホルダ挿入: §§EMBED:url§§ 形式でエディタに入力
+    ↓
+ブラウザ自動化: insert_embed.pyで[+]ボタン→[埋め込み]→URL入力
+    ↓
+埋め込みウィジェット: note.comが自動変換
+```
+
+**モジュール構成:**
+
+- `typing_helpers.py` - URL検出とプレースホルダ挿入
+  - `_is_embed_url()` - 対応サービスURLかを判定
+  - `_EMBED_YOUTUBE_PATTERN`, `_EMBED_TWITTER_PATTERN`, `_EMBED_NOTE_PATTERN`
+
+- `embed_helpers.py` - プレースホルダ検出と埋め込み適用
+  - `has_embed_placeholders()` - エディタ内のプレースホルダを検出
+  - `apply_embeds()` - 全プレースホルダを埋め込みに変換
+
+- `insert_embed.py` - ブラウザ自動化で実際に埋め込み挿入
+  - `insert_embed_at_cursor()` - カーソル位置に埋め込み挿入
+  - note.comの「+」→「埋め込み」メニューを操作
+
+> **注意**: 非対応サービスのURLは通常のリンクとして表示されます。埋め込みカードにはなりません。
+
 ### Investigatorモード
 
 `INVESTIGATOR_MODE=1`で有効になるAPI調査機能です。

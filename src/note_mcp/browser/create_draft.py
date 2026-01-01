@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from playwright.async_api import Error as PlaywrightError
 
+from note_mcp.browser.embed_helpers import apply_embeds
 from note_mcp.browser.manager import BrowserManager
 from note_mcp.browser.text_align_helpers import apply_text_alignments
 from note_mcp.browser.toc_helpers import insert_toc_at_placeholder
@@ -174,6 +175,57 @@ async def create_draft_via_browser(
         logger.warning(f"Text alignment application failed: {alignment_error}")
         # Text alignment failure is not fatal
 
+    # Insert embeds at placeholder positions (after text alignments, before save)
+    # Wait for ProseMirror to fully process typed content and stabilize DOM
+    await asyncio.sleep(1.0)
+
+    embeds_inserted = 0
+    embed_error: str | None = None
+    debug_info: str | None = None
+    try:
+        logger.info("Starting embed application...")
+        # Debug: Log editor content before embed application
+        debug_content = await page.evaluate(
+            """() => {
+                const editor = document.querySelector('.ProseMirror');
+                return editor ? editor.textContent : 'Editor not found';
+            }"""
+        )
+        has_placeholder = "§§EMBED:" in debug_content if debug_content else False
+
+        # Debug: Test JavaScript regex directly
+        placeholder_test = await page.evaluate(
+            """() => {
+                const editor = document.querySelector('.ProseMirror');
+                if (!editor) return {text: 'Editor not found', urls: []};
+                const text = editor.textContent || '';
+                const pattern = /§§EMBED:(.+?)§§/g;
+                const urls = [];
+                let match;
+                while ((match = pattern.exec(text)) !== null) {
+                    urls.push(match[1]);
+                }
+                return {text: text.substring(0, 200), urls: urls};
+            }"""
+        )
+
+        debug_info = (
+            f"Before apply_embeds - "
+            f"Has placeholder marker: {has_placeholder}, "
+            f"JS regex found URLs: {placeholder_test.get('urls', [])}, "
+            f"Text preview: {placeholder_test.get('text', '')[:100]}"
+        )
+        logger.info(f"DEBUG: {debug_info}")
+        embeds_inserted, embed_debug = await apply_embeds(page)
+        debug_info += f" | apply_embeds returned: {embeds_inserted} | Steps: {embed_debug}"
+        logger.info(f"apply_embeds returned: {embeds_inserted}, debug: {embed_debug}")
+        if embeds_inserted > 0:
+            logger.info(f"Inserted {embeds_inserted} embed(s) to draft")
+    except (TimeoutError, PlaywrightError) as e:
+        embed_error = str(e)
+        logger.warning(f"Embed insertion failed: {embed_error}")
+        # Embed insertion failure is not fatal
+
     # Click save draft button explicitly instead of relying on auto-save
     await asyncio.sleep(1)
 
@@ -236,4 +288,7 @@ async def create_draft_via_browser(
         toc_error=toc_error,
         alignments_applied=alignments_applied if alignments_applied > 0 else None,
         alignment_error=alignment_error,
+        embeds_inserted=embeds_inserted if embeds_inserted > 0 else None,
+        embed_error=embed_error,
+        debug_info=debug_info,
     )
