@@ -58,7 +58,7 @@ class TestHasAlignmentPlaceholders:
         result = await has_alignment_placeholders(mock_page)
 
         assert result is True
-        mock_page.locator.assert_called_once_with(".p-editorBody")
+        mock_page.locator.assert_called_once_with(".ProseMirror")
 
     @pytest.mark.asyncio
     async def test_returns_true_for_right_placeholder(self) -> None:
@@ -122,24 +122,34 @@ class TestHasAlignmentPlaceholders:
 
 
 class TestSelectPlaceholderText:
-    """Tests for _select_placeholder_text function."""
+    """Tests for _select_placeholder_text function using Playwright locators."""
 
     @pytest.mark.asyncio
     async def test_returns_true_when_placeholder_found(self) -> None:
-        """Returns True when placeholder is found and selected."""
+        """Returns True when placeholder paragraph is found and clicked."""
         mock_page = MagicMock()
-        mock_page.evaluate = AsyncMock(return_value={"success": True})
+        mock_paragraphs = MagicMock()
+        mock_page.locator.return_value = mock_paragraphs
+        mock_paragraphs.count = AsyncMock(return_value=1)
+
+        mock_p = MagicMock()
+        mock_paragraphs.nth.return_value = mock_p
+        mock_p.text_content = AsyncMock(return_value=f"{ALIGN_CENTER_START}test text{ALIGN_END}")
+        mock_p.click = AsyncMock()
 
         result = await _select_placeholder_text(mock_page, "center", "test text")
 
         assert result is True
-        mock_page.evaluate.assert_called_once()
+        mock_page.locator.assert_called_once_with(".ProseMirror p")
+        mock_p.click.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_editor_not_found(self) -> None:
-        """Returns False when editor element is not found."""
+    async def test_returns_false_when_no_paragraphs(self) -> None:
+        """Returns False when editor has no paragraphs."""
         mock_page = MagicMock()
-        mock_page.evaluate = AsyncMock(return_value={"success": False, "error": "Editor element not found"})
+        mock_paragraphs = MagicMock()
+        mock_page.locator.return_value = mock_paragraphs
+        mock_paragraphs.count = AsyncMock(return_value=0)
 
         result = await _select_placeholder_text(mock_page, "center", "test text")
 
@@ -147,9 +157,18 @@ class TestSelectPlaceholderText:
 
     @pytest.mark.asyncio
     async def test_returns_false_when_placeholder_not_found(self) -> None:
-        """Returns False when placeholder is not found in text nodes."""
+        """Returns False when placeholder is not found in paragraphs."""
         mock_page = MagicMock()
-        mock_page.evaluate = AsyncMock(return_value={"success": False, "error": "Placeholder not found in text nodes"})
+        mock_paragraphs = MagicMock()
+        mock_page.locator.return_value = mock_paragraphs
+        mock_paragraphs.count = AsyncMock(return_value=2)
+
+        mock_p1 = MagicMock()
+        mock_p1.text_content = AsyncMock(return_value="Some other text")
+        mock_p2 = MagicMock()
+        mock_p2.text_content = AsyncMock(return_value="Another paragraph")
+
+        mock_paragraphs.nth.side_effect = [mock_p1, mock_p2]
 
         result = await _select_placeholder_text(mock_page, "right", "missing text")
 
@@ -159,35 +178,55 @@ class TestSelectPlaceholderText:
     async def test_uses_correct_alignment_marker(self) -> None:
         """Uses correct alignment marker based on alignment_type."""
         mock_page = MagicMock()
-        mock_page.evaluate = AsyncMock(return_value={"success": True})
+        mock_paragraphs = MagicMock()
+        mock_page.locator.return_value = mock_paragraphs
+        mock_paragraphs.count = AsyncMock(return_value=1)
 
-        await _select_placeholder_text(mock_page, "right", "test")
+        mock_p = MagicMock()
+        mock_paragraphs.nth.return_value = mock_p
+        # Use RIGHT marker
+        mock_p.text_content = AsyncMock(return_value=f"{ALIGN_RIGHT_START}test{ALIGN_END}")
+        mock_p.click = AsyncMock()
 
-        # Check that the evaluate was called with RIGHT marker
-        call_args = mock_page.evaluate.call_args[0][0]
-        assert "§§ALIGN_RIGHT§§" in call_args
-        assert "§§/ALIGN§§" in call_args
+        result = await _select_placeholder_text(mock_page, "right", "test")
+
+        assert result is True
 
 
 class TestRemovePlaceholderMarkers:
-    """Tests for _remove_placeholder_markers function."""
+    """Tests for _remove_placeholder_markers function using Playwright operations."""
 
     @pytest.mark.asyncio
     async def test_returns_true_when_markers_removed(self) -> None:
         """Returns True when placeholder markers are successfully removed."""
         mock_page = MagicMock()
-        mock_page.evaluate = AsyncMock(return_value={"success": True})
+        mock_paragraphs = MagicMock()
+        mock_page.locator.return_value = mock_paragraphs
+        mock_paragraphs.count = AsyncMock(return_value=1)
+
+        mock_p = MagicMock()
+        mock_paragraphs.nth.return_value = mock_p
+        full_placeholder = f"{ALIGN_CENTER_START}aligned text{ALIGN_END}"
+        mock_p.text_content = AsyncMock(return_value=full_placeholder)
+        mock_p.click = AsyncMock()
+
+        mock_keyboard = MagicMock()
+        mock_page.keyboard = mock_keyboard
+        mock_keyboard.type = AsyncMock()
 
         result = await _remove_placeholder_markers(mock_page, "center", "aligned text")
 
         assert result is True
-        mock_page.evaluate.assert_called_once()
+        mock_p.click.assert_called_once_with(click_count=3)
+        mock_keyboard.type.assert_called_once_with("aligned text")
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_editor_not_found(self) -> None:
-        """Returns False when editor is not found."""
+    async def test_returns_false_when_no_paragraphs(self) -> None:
+        """Returns False when editor has no paragraphs."""
         mock_page = MagicMock()
-        mock_page.evaluate = AsyncMock(return_value={"success": False, "error": "Editor not found"})
+        mock_paragraphs = MagicMock()
+        mock_page.locator.return_value = mock_paragraphs
+        mock_paragraphs.count = AsyncMock(return_value=0)
 
         result = await _remove_placeholder_markers(mock_page, "center", "test text")
 
@@ -195,9 +234,15 @@ class TestRemovePlaceholderMarkers:
 
     @pytest.mark.asyncio
     async def test_returns_false_when_placeholder_not_found(self) -> None:
-        """Returns False when placeholder is not found in DOM."""
+        """Returns False when placeholder is not found in paragraphs."""
         mock_page = MagicMock()
-        mock_page.evaluate = AsyncMock(return_value={"success": False, "error": "Placeholder not found"})
+        mock_paragraphs = MagicMock()
+        mock_page.locator.return_value = mock_paragraphs
+        mock_paragraphs.count = AsyncMock(return_value=1)
+
+        mock_p = MagicMock()
+        mock_paragraphs.nth.return_value = mock_p
+        mock_p.text_content = AsyncMock(return_value="Different content")
 
         result = await _remove_placeholder_markers(mock_page, "left", "missing text")
 
@@ -205,15 +250,26 @@ class TestRemovePlaceholderMarkers:
 
     @pytest.mark.asyncio
     async def test_uses_correct_selector_constant(self) -> None:
-        """Uses _EDITOR_SELECTOR constant in JavaScript evaluation."""
+        """Uses _EDITOR_SELECTOR constant when locating paragraphs."""
         mock_page = MagicMock()
-        mock_page.evaluate = AsyncMock(return_value={"success": True})
+        mock_paragraphs = MagicMock()
+        mock_page.locator.return_value = mock_paragraphs
+        mock_paragraphs.count = AsyncMock(return_value=1)
+
+        mock_p = MagicMock()
+        mock_paragraphs.nth.return_value = mock_p
+        full_placeholder = f"{ALIGN_CENTER_START}test{ALIGN_END}"
+        mock_p.text_content = AsyncMock(return_value=full_placeholder)
+        mock_p.click = AsyncMock()
+
+        mock_keyboard = MagicMock()
+        mock_page.keyboard = mock_keyboard
+        mock_keyboard.type = AsyncMock()
 
         await _remove_placeholder_markers(mock_page, "center", "test")
 
-        call_args = mock_page.evaluate.call_args[0][0]
-        # Should use the constant value, not a hardcoded selector
-        assert ".p-editorBody" in call_args
+        # Should use .ProseMirror selector (from _EDITOR_SELECTOR constant)
+        mock_page.locator.assert_called_once_with(".ProseMirror p")
 
     @pytest.mark.asyncio
     async def test_logs_warning_on_failure(self, caplog: pytest.LogCaptureFixture) -> None:
@@ -221,7 +277,13 @@ class TestRemovePlaceholderMarkers:
         import logging
 
         mock_page = MagicMock()
-        mock_page.evaluate = AsyncMock(return_value={"success": False, "error": "Placeholder not found"})
+        mock_paragraphs = MagicMock()
+        mock_page.locator.return_value = mock_paragraphs
+        mock_paragraphs.count = AsyncMock(return_value=1)
+
+        mock_p = MagicMock()
+        mock_paragraphs.nth.return_value = mock_p
+        mock_p.text_content = AsyncMock(return_value="Different content - placeholder not found")
 
         with caplog.at_level(logging.WARNING):
             await _remove_placeholder_markers(mock_page, "center", "test content")

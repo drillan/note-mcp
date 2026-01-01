@@ -30,7 +30,7 @@ ALIGN_END = "§§/ALIGN§§"
 _ALIGN_PLACEHOLDER_PATTERN = re.compile(r"§§ALIGN_(CENTER|RIGHT|LEFT)§§(.+?)§§/ALIGN§§")
 
 # note.com editor selectors
-_EDITOR_SELECTOR = ".p-editorBody"
+_EDITOR_SELECTOR = ".ProseMirror"
 _ALIGN_BUTTON_SELECTOR = 'button[aria-label="文章の配置"]'
 
 # Alignment menu item texts
@@ -177,7 +177,10 @@ async def _select_placeholder_text(
     alignment_type: str,
     text_content: str,
 ) -> bool:
-    """Select the placeholder text including markers in the editor.
+    """Select the paragraph containing the placeholder using Playwright operations.
+
+    Uses Playwright locator and click operations instead of browser Selection API
+    to ensure ProseMirror recognizes the interaction.
 
     If multiple placeholders have identical text content, only the first match
     is selected and processed.
@@ -188,52 +191,26 @@ async def _select_placeholder_text(
         text_content: The text content within the placeholder.
 
     Returns:
-        True if text was successfully selected.
+        True if paragraph was found and clicked.
     """
     start_marker = f"§§ALIGN_{alignment_type.upper()}§§"
-    full_placeholder = f"{start_marker}{text_content}{ALIGN_END}"
 
-    result = await page.evaluate(
-        f"""
-        () => {{
-            const placeholder = `{full_placeholder}`;
-            const editor = document.querySelector('{_EDITOR_SELECTOR}');
-            if (!editor) {{
-                return {{ success: false, error: 'Editor element not found' }};
-            }}
+    # Find paragraphs in the editor using Playwright locator
+    paragraphs = page.locator(f"{_EDITOR_SELECTOR} p")
+    count = await paragraphs.count()
 
-            const walker = document.createTreeWalker(
-                editor,
-                NodeFilter.SHOW_TEXT,
-                null,
-                false
-            );
+    for i in range(count):
+        p = paragraphs.nth(i)
+        text = await p.text_content()
+        if text and start_marker in text:
+            # Click in the paragraph - ProseMirror recognizes Playwright clicks
+            # This is enough to apply alignment to the paragraph
+            await p.click()
+            await asyncio.sleep(0.2)
+            return True
 
-            let node;
-            while (node = walker.nextNode()) {{
-                if (node.nodeValue && node.nodeValue.includes(placeholder)) {{
-                    // Select the entire placeholder
-                    const range = document.createRange();
-                    const offset = node.nodeValue.indexOf(placeholder);
-                    range.setStart(node, offset);
-                    range.setEnd(node, offset + placeholder.length);
-
-                    const selection = window.getSelection();
-                    selection.removeAllRanges();
-                    selection.addRange(range);
-                    return {{ success: true }};
-                }}
-            }}
-            return {{ success: false, error: 'Placeholder not found in text nodes' }};
-        }}
-    """
-    )
-    await asyncio.sleep(0.2)
-
-    if not result.get("success"):
-        logger.warning(f"Failed to select placeholder: {result.get('error')}")
-        return False
-    return True
+    logger.warning(f"Placeholder paragraph not found for {alignment_type}")
+    return False
 
 
 async def _click_alignment_button(page: Page, timeout: int) -> None:
@@ -281,11 +258,14 @@ async def _remove_placeholder_markers(
     alignment_type: str,
     text_content: str,
 ) -> bool:
-    """Remove placeholder markers, keeping only the text content.
+    """Remove placeholder markers using keyboard operations.
 
-    After alignment is applied, we need to remove the §§ALIGN_*§§ markers
-    so only the actual text remains. If multiple placeholders have identical
-    text content, only the first match is processed.
+    Uses Playwright keyboard operations instead of direct DOM manipulation
+    to ensure ProseMirror syncs its internal state.
+
+    After alignment is applied, finds the paragraph containing the placeholder,
+    selects it, and types the clean content. If multiple placeholders have
+    identical text content, only the first match is processed.
 
     Args:
         page: Playwright page with note.com editor.
@@ -298,41 +278,30 @@ async def _remove_placeholder_markers(
     start_marker = f"§§ALIGN_{alignment_type.upper()}§§"
     full_placeholder = f"{start_marker}{text_content}{ALIGN_END}"
 
-    # Use JavaScript to find and replace the placeholder with clean text
-    result = await page.evaluate(
-        f"""
-        () => {{
-            const editor = document.querySelector('{_EDITOR_SELECTOR}');
-            if (!editor) return {{ success: false, error: 'Editor not found' }};
+    # Find the paragraph containing the placeholder using Playwright locator
+    paragraphs = page.locator(f"{_EDITOR_SELECTOR} p")
+    count = await paragraphs.count()
 
-            const walker = document.createTreeWalker(
-                editor,
-                NodeFilter.SHOW_TEXT,
-                null,
-                false
-            );
+    for i in range(count):
+        p = paragraphs.nth(i)
+        text = await p.text_content()
+        if text and full_placeholder in text:
+            # Calculate clean paragraph text (remove markers)
+            clean_text = text.replace(full_placeholder, text_content)
 
-            let node;
-            while (node = walker.nextNode()) {{
-                if (node.nodeValue && node.nodeValue.includes('{full_placeholder}')) {{
-                    // Replace placeholder with clean text
-                    node.nodeValue = node.nodeValue.replace(
-                        `{full_placeholder}`,
-                        `{text_content}`
-                    );
-                    return {{ success: true }};
-                }}
-            }}
-            return {{ success: false, error: 'Placeholder not found' }};
-        }}
-    """
+            # Triple-click to select entire paragraph
+            await p.click(click_count=3)
+            await asyncio.sleep(0.1)
+
+            # Type the clean text (replaces selection)
+            # ProseMirror recognizes keyboard input
+            await page.keyboard.type(clean_text)
+            await asyncio.sleep(0.1)
+            return True
+
+    # Placeholder not found - might have been handled differently
+    logger.warning(
+        f"Failed to remove placeholder markers for: {text_content[:30]}... "
+        "Alignment markers may remain in published article."
     )
-    await asyncio.sleep(0.1)
-
-    if not result.get("success"):
-        logger.warning(
-            f"Failed to remove placeholder markers for: {text_content[:30]}... "
-            f"({result.get('error')}). Alignment markers may remain in published article."
-        )
-        return False
-    return True
+    return False
