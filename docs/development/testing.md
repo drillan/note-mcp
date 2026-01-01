@@ -105,6 +105,55 @@ Markdown変換テストは以下の要素を検証します：
 | 中央配置 | `->text<-` | `text-align: center`スタイルが適用される |
 | 右配置 | `->text` | `text-align: right`スタイルが適用される |
 
+### ネイティブHTML検証テスト
+
+通常のMarkdown変換テストに加えて、ネイティブHTML検証テストを提供しています。
+
+#### 背景：トートロジー問題
+
+従来のE2Eテストには「トートロジー」問題がありました：
+
+- `update_article()` が内部で `markdown_to_html()` を使用してHTMLを生成
+- 生成されたHTMLがそのままプレビューページに表示される
+- つまり「自己生成HTMLを自己検証している」状態
+
+これではnote.comプラットフォームが実際に生成するHTMLを検証できません。
+
+#### ネイティブ検証アプローチ
+
+ネイティブHTML検証テストは、この問題を解決します：
+
+1. **エディタに直接入力**: キーボード操作でMarkdown記法をエディタに入力
+2. **ProseMirror変換**: スペースをトリガーにProseMirrorがMarkdownを変換
+3. **保存とプレビュー**: 変換結果を保存し、プレビューページを開く
+4. **ネイティブHTML検証**: note.comが生成したHTMLを検証
+
+これにより、実際のユーザー体験を反映したテストが可能になります。
+
+#### ネイティブ検証テストの実行
+
+```bash
+# 見出し変換テスト
+uv run pytest tests/e2e/test_native_html_validation.py::TestNativeHeadingConversion -v
+
+# 打消し線変換テスト
+uv run pytest tests/e2e/test_native_html_validation.py::TestNativeStrikethroughConversion -v
+
+# すべてのネイティブ検証テスト
+uv run pytest tests/e2e/test_native_html_validation.py -v
+```
+
+#### テストケース一覧
+
+| テストケース | 優先度 | 入力 | 期待結果 |
+|-------------|--------|------|----------|
+| H2見出し | P1 | `## text` + スペース | `<h2>text</h2>` |
+| H3見出し | P1 | `### text` + スペース | `<h3>text</h3>` |
+| 打消し線 | P1 | `~~text~~` + スペース | `<s>text</s>` |
+| コードブロック | P2 | ` ``` ` | `<pre><code>` |
+| 中央揃え | P2 | `->text<-` | `text-align: center` |
+| 右揃え | P2 | `->text` | `text-align: right` |
+
 ### トラブルシューティング
 
 #### 認証エラー
