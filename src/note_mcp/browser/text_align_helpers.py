@@ -114,9 +114,9 @@ async def _find_alignment_placeholders(page: Page) -> list[dict[str, str]]:
         List of dicts with 'type' and 'text' keys.
     """
     result = await page.evaluate(
-        """
-        () => {
-            const editor = document.querySelector('.p-editorBody');
+        f"""
+        () => {{
+            const editor = document.querySelector('{_EDITOR_SELECTOR}');
             if (!editor) return [];
 
             const text = editor.textContent || '';
@@ -124,14 +124,14 @@ async def _find_alignment_placeholders(page: Page) -> list[dict[str, str]]:
             const placeholders = [];
 
             let match;
-            while ((match = pattern.exec(text)) !== null) {
-                placeholders.push({
+            while ((match = pattern.exec(text)) !== null) {{
+                placeholders.push({{
                     type: match[1].toLowerCase(),
                     text: match[2]
-                });
-            }
+                }});
+            }}
             return placeholders;
-        }
+        }}
         """
     )
     return result or []
@@ -165,7 +165,9 @@ async def _apply_single_alignment(
     await _select_alignment_option(page, alignment_type, timeout)
 
     # 4. Remove placeholder markers (keep only the content)
-    await _remove_placeholder_markers(page, alignment_type, text_content)
+    marker_removed = await _remove_placeholder_markers(page, alignment_type, text_content)
+    if not marker_removed:
+        logger.warning(f"Alignment applied but marker removal failed for: {text_content[:30]}...")
 
     return True
 
@@ -176,6 +178,9 @@ async def _select_placeholder_text(
     text_content: str,
 ) -> bool:
     """Select the placeholder text including markers in the editor.
+
+    If multiple placeholders have identical text content, only the first match
+    is selected and processed.
 
     Args:
         page: Playwright page with note.com editor.
@@ -192,7 +197,7 @@ async def _select_placeholder_text(
         f"""
         () => {{
             const placeholder = `{full_placeholder}`;
-            const editor = document.querySelector('.p-editorBody');
+            const editor = document.querySelector('{_EDITOR_SELECTOR}');
             if (!editor) {{
                 return {{ success: false, error: 'Editor element not found' }};
             }}
@@ -275,27 +280,30 @@ async def _remove_placeholder_markers(
     page: Page,
     alignment_type: str,
     text_content: str,
-) -> None:
+) -> bool:
     """Remove placeholder markers, keeping only the text content.
 
     After alignment is applied, we need to remove the §§ALIGN_*§§ markers
-    so only the actual text remains.
+    so only the actual text remains. If multiple placeholders have identical
+    text content, only the first match is processed.
 
     Args:
         page: Playwright page with note.com editor.
         alignment_type: 'center', 'right', or 'left'.
         text_content: The text content to keep.
+
+    Returns:
+        True if markers were successfully removed, False otherwise.
     """
     start_marker = f"§§ALIGN_{alignment_type.upper()}§§"
     full_placeholder = f"{start_marker}{text_content}{ALIGN_END}"
 
-    # Use keyboard to delete selected text and type clean content
-    # The text should still be selected after alignment is applied
-    await page.evaluate(
+    # Use JavaScript to find and replace the placeholder with clean text
+    result = await page.evaluate(
         f"""
         () => {{
-            const editor = document.querySelector('.p-editorBody');
-            if (!editor) return;
+            const editor = document.querySelector('{_EDITOR_SELECTOR}');
+            if (!editor) return {{ success: false, error: 'Editor not found' }};
 
             const walker = document.createTreeWalker(
                 editor,
@@ -312,10 +320,19 @@ async def _remove_placeholder_markers(
                         `{full_placeholder}`,
                         `{text_content}`
                     );
-                    return;
+                    return {{ success: true }};
                 }}
             }}
+            return {{ success: false, error: 'Placeholder not found' }};
         }}
     """
     )
     await asyncio.sleep(0.1)
+
+    if not result.get("success"):
+        logger.warning(
+            f"Failed to remove placeholder markers for: {text_content[:30]}... "
+            f"({result.get('error')}). Alignment markers may remain in published article."
+        )
+        return False
+    return True
