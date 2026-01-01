@@ -105,6 +105,140 @@ Markdown変換テストは以下の要素を検証します：
 | 中央配置 | `->text<-` | `text-align: center`スタイルが適用される |
 | 右配置 | `->text` | `text-align: right`スタイルが適用される |
 
+### ネイティブHTML検証テスト
+
+通常のMarkdown変換テストに加えて、ネイティブHTML検証テストを提供しています。
+
+#### 背景：トートロジー問題
+
+従来のE2Eテストには「トートロジー」問題がありました：
+
+- `update_article()` が内部で `markdown_to_html()` を使用してHTMLを生成
+- 生成されたHTMLがそのままプレビューページに表示される
+- つまり「自己生成HTMLを自己検証している」状態
+
+これではnote.comプラットフォームが実際に生成するHTMLを検証できません。
+
+#### ネイティブ検証アプローチ
+
+ネイティブHTML検証テストは、この問題を解決します：
+
+1. **エディタに直接入力**: キーボード操作でMarkdown記法をエディタに入力
+2. **ProseMirror変換**: スペースをトリガーにProseMirrorがMarkdownを変換
+3. **保存とプレビュー**: 変換結果を保存し、プレビューページを開く
+4. **ネイティブHTML検証**: note.comが生成したHTMLを検証
+
+これにより、実際のユーザー体験を反映したテストが可能になります。
+
+#### ネイティブ検証テストの実行
+
+```bash
+# 見出し変換テスト
+uv run pytest tests/e2e/test_native_html_validation.py::TestNativeHeadingConversion -v
+
+# 打消し線変換テスト
+uv run pytest tests/e2e/test_native_html_validation.py::TestNativeStrikethroughConversion -v
+
+# すべてのネイティブ検証テスト
+uv run pytest tests/e2e/test_native_html_validation.py -v
+```
+
+#### テストケース一覧
+
+| テストケース | 優先度 | 入力 | 期待結果 |
+|-------------|--------|------|----------|
+| H2見出し | P1 | `## text` + スペース | `<h2>text</h2>` |
+| H3見出し | P1 | `### text` + スペース | `<h3>text</h3>` |
+| 打消し線 | P1 | `~~text~~` + スペース | `<s>text</s>` |
+| コードブロック | P2 | ` ``` ` | `<pre><code>` |
+| 中央揃え | P2 | `->text<-` | `text-align: center` |
+| 右揃え | P2 | `->text` | `text-align: right` |
+
+## MCPツールテスト
+
+MCPツールテストは、note-mcpが提供する11個のMCPツールの動作を検証するE2Eテストです。
+
+### 対象ツール
+
+| カテゴリ | ツール | 説明 |
+|----------|--------|------|
+| 認証フロー | `note_login` | ブラウザでnote.comにログイン |
+| | `note_check_auth` | 認証状態を確認 |
+| | `note_logout` | セッションをクリア |
+| | `note_set_username` | ユーザー名を設定 |
+| 記事CRUD | `note_create_draft` | 下書き記事を作成 |
+| | `note_get_article` | 記事の内容を取得 |
+| | `note_update_article` | 記事を更新 |
+| | `note_list_articles` | 記事一覧を取得 |
+| 画像操作 | `note_upload_eyecatch` | アイキャッチ画像をアップロード |
+| | `note_upload_body_image` | 本文用画像をアップロード |
+| プレビュー | `note_show_preview` | 記事のプレビューを表示 |
+
+> **Note**: `note_insert_body_image`はProseMirror状態への複雑な依存があるため、[別issue #53](https://github.com/drillan/note-mcp/issues/53)で対応しています。
+
+### MCPツールテストの実行
+
+```bash
+# すべてのMCPツールテストを実行
+uv run pytest tests/e2e/test_mcp_tools.py -v
+
+# 認証フローテストのみ
+uv run pytest tests/e2e/test_mcp_tools.py::TestAuthenticationFlow -v
+
+# 記事CRUDテストのみ
+uv run pytest tests/e2e/test_mcp_tools.py::TestArticleCRUD -v
+
+# 画像操作テストのみ
+uv run pytest tests/e2e/test_mcp_tools.py::TestImageOperations -v
+
+# プレビューテストのみ
+uv run pytest tests/e2e/test_mcp_tools.py::TestPreviewOperations -v
+```
+
+### テストの依存関係
+
+MCPツールテストは以下の順序で実行する必要があります：
+
+1. **認証フロー** (`TestAuthenticationFlow`)
+   - 他のすべてのテストの前提条件
+   - `note_login` → `note_check_auth` → `note_logout` の順で検証
+
+2. **記事CRUD** (`TestArticleCRUD`)
+   - 認証済み状態が必要
+   - `note_create_draft` → `note_get_article` → `note_update_article` → `note_list_articles`
+
+3. **画像操作** (`TestImageOperations`)
+   - 認証済み状態と下書き記事が必要
+   - テスト用画像ファイルが必要
+
+4. **プレビュー** (`TestPreviewOperations`)
+   - 認証済み状態と下書き記事が必要
+
+### テストデータ
+
+テストで使用するサンプルデータ：
+
+```python
+# tests/e2e/conftest.py で定義
+test_image_path = Path(__file__).parent / "assets" / "test_image.png"  # 100x100 PNG画像
+```
+
+### 技術詳細
+
+#### FunctionToolオブジェクトについて
+
+`@mcp.tool()`デコレータは関数を`FunctionTool`オブジェクトにラップします。テストでMCPツール関数を直接呼び出す場合は、`.fn`属性経由で元の関数にアクセスする必要があります：
+
+```python
+# ❌ 動作しない（FunctionToolは直接呼び出せない）
+result = await note_check_auth()
+
+# ✅ 正しい呼び出し方法
+result = await note_check_auth.fn()
+```
+
+詳細は`tests/e2e/test_mcp_tools.py`のdocstringを参照してください。
+
 ### トラブルシューティング
 
 #### 認証エラー

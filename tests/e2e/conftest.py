@@ -7,8 +7,10 @@ Requires valid session (via login) for authentication.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from collections.abc import AsyncGenerator, Generator
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -217,3 +219,92 @@ async def preview_page(
         await context.close()
         await browser.close()
         await playwright.stop()
+
+
+@pytest_asyncio.fixture
+async def editor_page(
+    real_session: Session,
+    draft_article: Article,
+) -> AsyncGenerator[Page, None]:
+    """エディタページを開いた状態のブラウザページ。
+
+    既存の下書き記事をエディタで開き、ProseMirrorが表示された状態を提供。
+    ネイティブHTML変換テスト用にエディタへの直接入力を可能にする。
+
+    Args:
+        real_session: 認証済みセッション
+        draft_article: テスト用下書き記事
+
+    Yields:
+        Page: ProseMirrorエディタが表示されたページ
+    """
+    from playwright.async_api import async_playwright
+
+    playwright = await async_playwright().start()
+    browser = await playwright.chromium.launch(headless=False)
+    context = await browser.new_context()
+    page = await context.new_page()
+
+    try:
+        # セッションCookie注入
+        await _inject_session_cookies(page, real_session)
+
+        # エディタページへ移動
+        editor_url = f"{NOTE_EDITOR_URL}/{draft_article.key}/edit/"
+        await page.goto(
+            editor_url,
+            wait_until="domcontentloaded",
+            timeout=DEFAULT_NAVIGATION_TIMEOUT_MS,
+        )
+
+        # ProseMirrorエディタ要素を待機
+        await page.locator(".ProseMirror").wait_for(
+            state="visible",
+            timeout=DEFAULT_ELEMENT_WAIT_TIMEOUT_MS,
+        )
+
+        yield page
+
+    finally:
+        await context.close()
+        await browser.close()
+        await playwright.stop()
+
+
+@pytest.fixture
+def test_image_path() -> Path:
+    """テスト用画像ファイルのパスを返す。
+
+    100x100ピクセルのPNG画像へのパスを返す。
+    画像アップロードテストで使用。
+
+    Returns:
+        Path: テスト画像ファイルのパス
+
+    Raises:
+        FileNotFoundError: 画像ファイルが存在しない場合
+    """
+    path = Path(__file__).parent / "assets" / "test_image.png"
+    if not path.exists():
+        raise FileNotFoundError(f"Test image not found: {path}")
+    return path
+
+
+@pytest.fixture
+def env_credentials() -> tuple[str, str]:
+    """環境変数から認証情報を取得。
+
+    NOTE_USERNAME と NOTE_PASSWORD 環境変数から
+    認証情報を取得する。未設定時はテストをスキップ。
+
+    Returns:
+        tuple[str, str]: (username, password)
+
+    Raises:
+        pytest.skip: 環境変数が設定されていない場合
+    """
+    username = os.environ.get("NOTE_USERNAME")
+    password = os.environ.get("NOTE_PASSWORD")
+    if not username or not password:
+        pytest.skip("NOTE_USERNAME and NOTE_PASSWORD required")
+    return username, password
