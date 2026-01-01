@@ -94,3 +94,45 @@ async def save_and_open_preview(
     await preview_page.wait_for_load_state("domcontentloaded", timeout=timeout)
 
     return preview_page
+
+
+async def type_code_block(
+    page: Page,
+    code: str,
+    language: str = "",
+    wait_time: float = DEFAULT_CONVERSION_WAIT_SECONDS,
+) -> None:
+    """コードブロックをエディタに入力。
+
+    バッククォート3つで囲んだコードブロックを入力し、
+    ProseMirror変換をトリガーする。
+
+    Args:
+        page: Playwright Pageインスタンス
+        code: コードブロック内のコード
+        language: 言語指定（オプション）
+        wait_time: 変換待機時間（秒）
+
+    Raises:
+        ValueError: codeが空の場合
+    """
+    if not code:
+        raise ValueError("code cannot be empty")
+
+    # エディタにフォーカス
+    editor = page.locator(".ProseMirror").first
+    await editor.click()
+
+    # 開始フェンス
+    await page.keyboard.type(f"```{language}")
+    await page.keyboard.press("Enter")
+
+    # コード本文
+    await page.keyboard.type(code)
+    await page.keyboard.press("Enter")
+
+    # 終了フェンス
+    await page.keyboard.type("```")
+    await page.keyboard.type(" ")  # 変換トリガー
+
+    await asyncio.sleep(wait_time)

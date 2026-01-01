@@ -7,8 +7,10 @@ Requires valid session (via login) for authentication.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from collections.abc import AsyncGenerator, Generator
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -267,3 +269,42 @@ async def editor_page(
         await context.close()
         await browser.close()
         await playwright.stop()
+
+
+@pytest.fixture
+def test_image_path() -> Path:
+    """テスト用画像ファイルのパスを返す。
+
+    100x100ピクセルのPNG画像へのパスを返す。
+    画像アップロードテストで使用。
+
+    Returns:
+        Path: テスト画像ファイルのパス
+
+    Raises:
+        FileNotFoundError: 画像ファイルが存在しない場合
+    """
+    path = Path(__file__).parent / "assets" / "test_image.png"
+    if not path.exists():
+        raise FileNotFoundError(f"Test image not found: {path}")
+    return path
+
+
+@pytest.fixture
+def env_credentials() -> tuple[str, str]:
+    """環境変数から認証情報を取得。
+
+    NOTE_USERNAME と NOTE_PASSWORD 環境変数から
+    認証情報を取得する。未設定時はテストをスキップ。
+
+    Returns:
+        tuple[str, str]: (username, password)
+
+    Raises:
+        pytest.skip: 環境変数が設定されていない場合
+    """
+    username = os.environ.get("NOTE_USERNAME")
+    password = os.environ.get("NOTE_PASSWORD")
+    if not username or not password:
+        pytest.skip("NOTE_USERNAME and NOTE_PASSWORD required")
+    return username, password
