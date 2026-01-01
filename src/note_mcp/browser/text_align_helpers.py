@@ -38,6 +38,11 @@ _ALIGN_CENTER_TEXT = "中央寄せ"
 _ALIGN_RIGHT_TEXT = "右寄せ"
 _ALIGN_LEFT_TEXT = "指定なし"
 
+# Timing constants for browser automation
+_CLICK_WAIT_SECONDS = 0.2
+_KEYBOARD_WAIT_SECONDS = 0.1
+_ALIGNMENT_WAIT_SECONDS = 0.3
+
 
 async def has_alignment_placeholders(page: Page) -> bool:
     """Check if editor contains any alignment placeholders.
@@ -206,7 +211,7 @@ async def _select_placeholder_text(
             # Click in the paragraph - ProseMirror recognizes Playwright clicks
             # This is enough to apply alignment to the paragraph
             await p.click()
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(_CLICK_WAIT_SECONDS)
             return True
 
     logger.warning(f"Placeholder paragraph not found for {alignment_type}")
@@ -223,7 +228,7 @@ async def _click_alignment_button(page: Page, timeout: int) -> None:
     align_button = page.locator(_ALIGN_BUTTON_SELECTOR).first
     await align_button.wait_for(state="visible", timeout=timeout)
     await align_button.click()
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(_ALIGNMENT_WAIT_SECONDS)
 
 
 async def _select_alignment_option(
@@ -250,7 +255,7 @@ async def _select_alignment_option(
     menu_item = page.locator(f'button:has-text("{menu_text}")').first
     await menu_item.wait_for(state="visible", timeout=timeout)
     await menu_item.click()
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(_CLICK_WAIT_SECONDS)
 
 
 async def _remove_placeholder_markers(
@@ -291,12 +296,12 @@ async def _remove_placeholder_markers(
 
             # Triple-click to select entire paragraph
             await p.click(click_count=3)
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(_KEYBOARD_WAIT_SECONDS)
 
             # Type the clean text (replaces selection)
             # ProseMirror recognizes keyboard input
             await page.keyboard.type(clean_text)
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(_KEYBOARD_WAIT_SECONDS)
             return True
 
     # Placeholder not found - might have been handled differently
