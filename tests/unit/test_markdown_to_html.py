@@ -681,3 +681,40 @@ print(formula)
         assert result.count("text-align: center") == 1
         assert result.count("text-align: right") == 1
         assert result.count("text-align: left") == 1
+
+
+class TestStandaloneUrl:
+    """単独行URL処理のテスト
+
+    Note: note.comは一般的な外部URLの埋め込みをサポートしていません。
+    URLは通常のリンクとして処理されます。
+    対応しているのはYouTube、Twitter、note.com記事のみです。
+    """
+
+    def test_standalone_url_becomes_link(self) -> None:
+        """単独行のURLはリンクテキストになる（埋め込みにはならない）"""
+        markdown = "https://example.com/article"
+        result = markdown_to_html(markdown)
+
+        # 埋め込み属性がないことを確認
+        assert "data-embed-service" not in result
+        assert "embedded-service" not in result
+        # URLはテキストとして含まれる
+        assert "https://example.com/article" in result
+
+    def test_url_in_text_preserved(self) -> None:
+        """文中のURLは保持される"""
+        markdown = "詳しくは https://example.com/article を参照"
+        result = markdown_to_html(markdown)
+
+        assert "data-embed-service" not in result
+        assert "https://example.com/article" in result
+
+    def test_markdown_link_converted_to_anchor(self) -> None:
+        """Markdownリンク記法は<a>タグに変換される"""
+        markdown = "[記事を読む](https://example.com/article)"
+        result = markdown_to_html(markdown)
+
+        assert "data-embed-service" not in result
+        assert 'href="https://example.com/article"' in result
+        assert "記事を読む" in result
