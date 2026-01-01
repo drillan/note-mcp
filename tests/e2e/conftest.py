@@ -1,0 +1,219 @@
+"""E2E test fixtures for note-mcp.
+
+Provides real session and article management fixtures.
+Requires valid session (via login) for authentication.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from collections.abc import AsyncGenerator, Generator
+from typing import TYPE_CHECKING
+
+import pytest
+import pytest_asyncio
+from playwright.async_api import Error as PlaywrightError
+
+from note_mcp.api.articles import create_draft
+from note_mcp.auth.browser import login_with_browser
+from note_mcp.auth.session import SessionManager
+from note_mcp.models import Article, ArticleInput, Session
+
+if TYPE_CHECKING:
+    from playwright._impl._api_structures import SetCookieParam
+    from playwright.async_api import Page
+
+
+# Test article prefix for identification and cleanup
+E2E_TEST_PREFIX = "[E2E-TEST-"
+
+# note.com URLs
+NOTE_EDITOR_URL = "https://editor.note.com/notes"
+
+# Timeouts (milliseconds)
+DEFAULT_NAVIGATION_TIMEOUT_MS = 30000
+DEFAULT_ELEMENT_WAIT_TIMEOUT_MS = 15000
+LOGIN_TIMEOUT_SECONDS = 300
+
+
+def _generate_test_article_title() -> str:
+    """Generate a unique test article title with timestamp."""
+    timestamp = int(time.time())
+    return f"{E2E_TEST_PREFIX}{timestamp}]"
+
+
+@pytest.fixture(scope="session")
+def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
+    """Create an event loop for the session."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def real_session() -> AsyncGenerator[Session, None]:
+    """Get a real authenticated session.
+
+    Uses existing session from SessionManager if valid.
+    Otherwise, opens browser for manual login.
+
+    Environment variables:
+        USE_FILE_SESSION: Set to "1" to use file-based session storage
+
+    Yields:
+        Authenticated Session object
+
+    Raises:
+        pytest.skip: If no valid session available and login fails
+    """
+    # Try to load existing session
+    session_manager = SessionManager()
+    session = session_manager.load()
+
+    if session and not session.is_expired():
+        yield session
+        return
+
+    # No valid session - need to login
+    # login_with_browser opens a browser for manual login
+    try:
+        session = await login_with_browser(timeout=LOGIN_TIMEOUT_SECONDS)
+        session_manager.save(session)
+        yield session
+    except (PlaywrightError, TimeoutError) as e:
+        pytest.skip(
+            f"E2E tests require valid note.com session. Login failed: {e}. "
+            "Run `uv run python -c 'from note_mcp.auth.browser import login_with_browser; "
+            "import asyncio; asyncio.run(login_with_browser())'` to authenticate first."
+        )
+
+
+@pytest_asyncio.fixture
+async def draft_article(
+    real_session: Session,
+) -> AsyncGenerator[Article, None]:
+    """Create a test draft article with automatic cleanup.
+
+    Creates a draft with the [E2E-TEST-{timestamp}] prefix for identification.
+    Attempts cleanup after test completion (best-effort).
+
+    Args:
+        real_session: Authenticated session fixture
+
+    Yields:
+        Created Article object
+    """
+    # Create test article
+    title = _generate_test_article_title()
+    article_input = ArticleInput(
+        title=title,
+        body="# Test Article\n\nThis is a test article created by E2E tests.",
+        tags=["e2e-test"],
+    )
+
+    article = await create_draft(real_session, article_input)
+
+    yield article
+
+    # Cleanup: Best-effort deletion
+    # Note: Delete API may not exist - articles with [E2E-TEST-] prefix can be manually cleaned
+    # TODO: Implement deletion if API exists (after mitmproxy investigation)
+
+
+async def _inject_session_cookies(page: Page, session: Session) -> None:
+    """Inject session cookies into browser context.
+
+    Args:
+        page: Playwright Page instance
+        session: Session with cookies to inject
+    """
+    playwright_cookies: list[SetCookieParam] = [
+        {
+            "name": name,
+            "value": value,
+            "domain": ".note.com",
+            "path": "/",
+        }
+        for name, value in session.cookies.items()
+    ]
+    await page.context.add_cookies(playwright_cookies)
+
+
+async def _open_preview_and_get_page(page: Page, article_key: str) -> Page:
+    """Navigate to editor and open preview, returning the preview page.
+
+    Args:
+        page: Playwright Page instance with session cookies
+        article_key: Article key (e.g., "n1234567890ab")
+
+    Returns:
+        Playwright Page for the preview tab
+    """
+    # Navigate to editor page
+    editor_url = f"{NOTE_EDITOR_URL}/{article_key}/edit/"
+    await page.goto(
+        editor_url,
+        wait_until="domcontentloaded",
+        timeout=DEFAULT_NAVIGATION_TIMEOUT_MS,
+    )
+    await page.wait_for_load_state("domcontentloaded", timeout=DEFAULT_NAVIGATION_TIMEOUT_MS)
+
+    # Find and click the menu button (3-dot icon) to open header popover
+    menu_button = page.locator('button[aria-label="その他"]')
+    await menu_button.wait_for(state="visible", timeout=DEFAULT_ELEMENT_WAIT_TIMEOUT_MS)
+    await menu_button.click()
+
+    # Wait for popover and click "プレビュー" button
+    preview_button = page.locator("#header-popover button", has_text="プレビュー")
+    await preview_button.wait_for(state="visible", timeout=10000)
+
+    # Capture new page (tab) when clicking preview
+    async with page.context.expect_page(timeout=DEFAULT_NAVIGATION_TIMEOUT_MS) as new_page_info:
+        await preview_button.click()
+
+    # Get the new page (preview tab)
+    new_page = await new_page_info.value
+    await new_page.wait_for_load_state("domcontentloaded", timeout=DEFAULT_NAVIGATION_TIMEOUT_MS)
+
+    return new_page
+
+
+@pytest_asyncio.fixture
+async def preview_page(
+    real_session: Session,
+    draft_article: Article,
+) -> AsyncGenerator[Page, None]:
+    """Get a browser page with the draft article preview loaded.
+
+    Creates a fresh browser context for each test to ensure clean state.
+
+    Args:
+        real_session: Authenticated session fixture
+        draft_article: Draft article to preview
+
+    Yields:
+        Playwright Page with preview loaded
+    """
+    from playwright.async_api import async_playwright
+
+    # Create fresh browser context for each test to avoid state pollution
+    playwright = await async_playwright().start()
+    browser = await playwright.chromium.launch(headless=False)
+    context = await browser.new_context()
+    page = await context.new_page()
+
+    try:
+        # Inject session cookies
+        await _inject_session_cookies(page, real_session)
+
+        # Open preview and get the preview page
+        preview = await _open_preview_and_get_page(page, draft_article.key)
+
+        yield preview
+
+    finally:
+        # Clean up all browser resources
+        await context.close()
+        await browser.close()
+        await playwright.stop()
