@@ -125,6 +125,24 @@ Markdown入力: [TOC]
 1. `has_toc_placeholder()` - エディタ内のプレースホルダを検出
 2. `insert_toc_at_placeholder()` - note.comの[+]ボタン→[目次]でTOC挿入
 
+#### 埋め込み（Embed）機能
+
+単独行のURLはnote.comの埋め込みウィジェットに変換されます。
+
+```
+Markdown入力: https://example.com/article
+    ↓
+URL検出: 行がURLのみかを判定
+    ↓
+HTML変換: note.com埋め込み形式のfigure要素を生成
+```
+
+`markdown_to_html.py`の`_convert_external_urls_to_embeds()`関数が変換を担当します：
+
+1. 単独行のURLパターンを検出
+2. `data-embed-service="external-article"`属性を持つfigure要素を生成
+3. リンク先のOGP情報は表示時にnote.comが取得
+
 ### Investigatorモード
 
 `INVESTIGATOR_MODE=1`で有効になるAPI調査機能です。
