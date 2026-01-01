@@ -230,6 +230,8 @@ docker compose up --build
 - **Documentation**: Sphinx >= 8.2.3, MyST-Parser >= 4.0.1
 
 ## Active Technologies
+- Python 3.11+ (pyproject.toml: requires-python = ">=3.11") (001-e2e-native-html-validation)
+- N/A (テストコードのみ) (001-e2e-native-html-validation)
 
 - Python 3.11+ (001-note-mcp)
 
