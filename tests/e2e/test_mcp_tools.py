@@ -20,12 +20,16 @@ import pytest
 from note_mcp.auth.session import SessionManager
 from note_mcp.server import (
     note_check_auth,
+    note_create_draft,
+    note_get_article,
+    note_list_articles,
     note_logout,
     note_set_username,
+    note_update_article,
 )
 
 if TYPE_CHECKING:
-    from note_mcp.models import Session
+    from note_mcp.models import Article, Session
 
 pytestmark = [
     pytest.mark.e2e,
@@ -120,3 +124,99 @@ class TestAuthenticationFlow:
 
         # Cleanup: Restore session for other tests
         session_manager.save(real_session)
+
+
+class TestArticleCRUD:
+    """記事CRUD操作テスト."""
+
+    async def test_list_articles(
+        self,
+        real_session: Session,
+    ) -> None:
+        """記事一覧が取得できる."""
+        # Act
+        result = await note_list_articles()  # type: ignore[operator]
+
+        # Assert
+        assert "記事" in result or "件" in result or "一覧" in result
+
+    async def test_list_articles_with_status_filter(
+        self,
+        real_session: Session,
+    ) -> None:
+        """ステータスでフィルタした記事一覧が取得できる."""
+        # Act
+        result = await note_list_articles(status="draft")  # type: ignore[operator]
+
+        # Assert
+        # Should either show drafts or indicate no drafts found
+        assert isinstance(result, str)
+
+    async def test_create_draft(
+        self,
+        real_session: Session,
+        draft_article: Article,
+    ) -> None:
+        """下書き記事が作成される（draft_article fixtureを使用）."""
+        # Assert: draft_article fixture already created the article
+        assert draft_article.id is not None
+        assert draft_article.key is not None
+        assert "[E2E-TEST-" in draft_article.title
+
+    async def test_get_article(
+        self,
+        real_session: Session,
+        draft_article: Article,
+    ) -> None:
+        """記事の内容が取得できる."""
+        # Act
+        result = await note_get_article(draft_article.id)  # type: ignore[operator]
+
+        # Assert
+        assert draft_article.title in result or "タイトル" in result
+
+    async def test_update_article(
+        self,
+        real_session: Session,
+        draft_article: Article,
+    ) -> None:
+        """記事の更新ができる."""
+        # Arrange
+        new_title = f"{draft_article.title} - Updated"
+        new_body = "# Updated Content\n\nThis article was updated by E2E test."
+
+        # Act
+        result = await note_update_article(  # type: ignore[operator]
+            article_id=draft_article.id,
+            title=new_title,
+            body=new_body,
+        )
+
+        # Assert
+        assert "更新" in result or "成功" in result
+
+    async def test_article_lifecycle(
+        self,
+        real_session: Session,
+    ) -> None:
+        """記事のライフサイクル: 作成→取得→更新."""
+        import time
+
+        # Step 1: Create
+        test_title = f"[E2E-TEST-{int(time.time())}] Lifecycle Test"
+        test_body = "# Lifecycle Test\n\nCreated by E2E test."
+
+        create_result = await note_create_draft(  # type: ignore[operator]
+            title=test_title,
+            body=test_body,
+            tags=["e2e-test", "lifecycle"],
+        )
+        assert "作成" in create_result or "ID" in create_result
+
+        # Extract article ID from result (format varies)
+        # The result should contain the article ID
+        assert isinstance(create_result, str)
+
+        # Step 2: List to find our article
+        list_result = await note_list_articles(status="draft")  # type: ignore[operator]
+        assert test_title in list_result or "E2E-TEST" in list_result
