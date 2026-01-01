@@ -223,6 +223,22 @@ MCPツールテストは以下の順序で実行する必要があります：
 TEST_IMAGE_PATH = Path("tests/fixtures/sample.png")  # 100x100 PNG画像
 ```
 
+### 技術詳細
+
+#### FunctionToolオブジェクトについて
+
+`@mcp.tool()`デコレータは関数を`FunctionTool`オブジェクトにラップします。テストでMCPツール関数を直接呼び出す場合は、`.fn`属性経由で元の関数にアクセスする必要があります：
+
+```python
+# ❌ 動作しない（FunctionToolは直接呼び出せない）
+result = await note_check_auth()
+
+# ✅ 正しい呼び出し方法
+result = await note_check_auth.fn()
+```
+
+詳細は`tests/e2e/test_mcp_tools.py`のdocstringを参照してください。
+
 ### トラブルシューティング
 
 #### 認証エラー
