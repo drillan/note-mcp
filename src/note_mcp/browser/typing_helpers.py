@@ -2,7 +2,7 @@
 
 Provides functions to type Markdown content into ProseMirror editors
 with proper handling for lists, blockquotes, citations, code blocks, strikethrough,
-and text alignment.
+text alignment, and embeds.
 """
 
 from __future__ import annotations
@@ -55,6 +55,34 @@ _ALIGN_CENTER_PLACEHOLDER = "§§ALIGN_CENTER§§"
 _ALIGN_RIGHT_PLACEHOLDER = "§§ALIGN_RIGHT§§"
 _ALIGN_LEFT_PLACEHOLDER = "§§ALIGN_LEFT§§"
 _ALIGN_END_PLACEHOLDER = "§§/ALIGN§§"
+
+# Embed URL patterns (must match insert_embed.py)
+# Supported services: YouTube, Twitter/X, note.com articles
+_EMBED_YOUTUBE_PATTERN = re.compile(r"^https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w-]+$")
+_EMBED_TWITTER_PATTERN = re.compile(r"^https?://(?:www\.)?(?:twitter\.com|x\.com)/\w+/status/\d+$")
+_EMBED_NOTE_PATTERN = re.compile(r"^https?://note\.com/\w+/n/\w+$")
+
+# Embed placeholder format: §§EMBED:url§§
+_EMBED_PLACEHOLDER_START = "§§EMBED:"
+_EMBED_PLACEHOLDER_END = "§§"
+
+
+def _is_embed_url(url: str) -> bool:
+    """Check if URL should be embedded (YouTube, Twitter, note.com).
+
+    Args:
+        url: URL string to check.
+
+    Returns:
+        True if URL matches a supported embed service.
+    """
+    is_youtube = bool(_EMBED_YOUTUBE_PATTERN.match(url))
+    is_twitter = bool(_EMBED_TWITTER_PATTERN.match(url))
+    is_note = bool(_EMBED_NOTE_PATTERN.match(url))
+    is_embed = is_youtube or is_twitter or is_note
+    if is_embed:
+        logger.info(f"_is_embed_url: {url} -> youtube={is_youtube}, twitter={is_twitter}, note={is_note}")
+    return is_embed
 
 
 async def _type_with_strikethrough(page: Any, text: str) -> None:
@@ -282,6 +310,19 @@ async def type_markdown_content(page: Any, content: str) -> None:
             # Left alignment: <-text
             content = align_left_match.group(1)
             placeholder = f"{_ALIGN_LEFT_PLACEHOLDER}{content}{_ALIGN_END_PLACEHOLDER}"
+            await page.keyboard.type(placeholder)
+            if i < len(lines) - 1:
+                await page.keyboard.press("Enter")
+            in_unordered_list = False
+            in_ordered_list = False
+            in_blockquote = False
+            continue
+
+        # Check for standalone embed URL (YouTube, Twitter, note.com articles)
+        # These get converted to embed placeholders for later browser insertion
+        if _is_embed_url(stripped_line):
+            placeholder = f"{_EMBED_PLACEHOLDER_START}{stripped_line}{_EMBED_PLACEHOLDER_END}"
+            logger.info(f"Typing embed placeholder: {placeholder}")
             await page.keyboard.type(placeholder)
             if i < len(lines) - 1:
                 await page.keyboard.press("Enter")

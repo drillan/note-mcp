@@ -27,7 +27,7 @@ from note_mcp.browser.preview import show_preview
 from note_mcp.browser.update_article import update_article_via_browser
 from note_mcp.investigator import register_investigator_tools
 from note_mcp.models import ArticleInput, ArticleStatus, NoteAPIError
-from note_mcp.utils.markdown_to_html import _has_toc_placeholder
+from note_mcp.utils.markdown_to_html import _has_toc_placeholder, has_embed_url
 
 # Create MCP server instance
 mcp = FastMCP("note-mcp")
@@ -168,10 +168,13 @@ async def note_create_draft(
         tags=tags or [],
     )
 
-    # Use browser-based creation for articles with [TOC] marker
-    # TOC insertion requires browser automation (clicking UI elements)
+    # Use browser-based creation for articles with [TOC] marker or embed URLs
+    # TOC insertion and embed insertion require browser automation (clicking UI elements)
     toc_info = ""
-    if _has_toc_placeholder(body):
+    embed_info = ""
+    use_browser = _has_toc_placeholder(body) or has_embed_url(body)
+
+    if use_browser:
         result = await create_draft_via_browser(session, article_input)
         article = result.article
         # Add TOC status to response
@@ -181,13 +184,21 @@ async def note_create_draft(
             toc_info = f"、目次: 挿入失敗（{result.toc_error}）"
         elif result.toc_inserted is None:
             pass  # TOC not attempted (no placeholder found after typing)
+        # Add embed status to response
+        if result.embeds_inserted is not None and result.embeds_inserted > 0:
+            embed_info = f"、埋め込み: {result.embeds_inserted}件"
+        elif result.embed_error:
+            embed_info = f"、埋め込み: 失敗（{result.embed_error}）"
+        # Add debug info if present
+        debug_info = f"、DEBUG: {result.debug_info}" if result.debug_info else ""
     else:
         article = await create_draft(session, article_input)
         # Show preview in browser (browser-based creation already shows editor)
         await show_preview(session, article.key)
+        debug_info = ""
 
     tag_info = f"、タグ: {', '.join(article.tags)}" if article.tags else ""
-    return f"下書きを作成しました。ID: {article.id}、キー: {article.key}{tag_info}{toc_info}"
+    return f"下書きを作成しました。ID: {article.id}、キー: {article.key}{tag_info}{toc_info}{embed_info}{debug_info}"
 
 
 @mcp.tool()
@@ -264,9 +275,12 @@ async def note_update_article(
         tags=tags or [],
     )
 
-    # Use browser-based update for articles with [TOC] marker
+    # Use browser-based update for articles with [TOC] marker or embed URLs
     toc_info = ""
-    if _has_toc_placeholder(body):
+    embed_info = ""
+    use_browser = _has_toc_placeholder(body) or has_embed_url(body)
+
+    if use_browser:
         result = await update_article_via_browser(session, article_id, article_input)
         article = result.article
         # Add TOC status to response
@@ -274,11 +288,16 @@ async def note_update_article(
             toc_info = "、目次: 挿入済み"
         elif result.toc_error:
             toc_info = f"、目次: 挿入失敗（{result.toc_error}）"
+        # Add embed status to response
+        if result.embeds_inserted is not None and result.embeds_inserted > 0:
+            embed_info = f"、埋め込み: {result.embeds_inserted}件"
+        elif result.embed_error:
+            embed_info = f"、埋め込み: 失敗（{result.embed_error}）"
     else:
         article = await update_article(session, article_id, article_input)
 
     tag_info = f"、タグ: {', '.join(article.tags)}" if article.tags else ""
-    return f"記事を更新しました。ID: {article.id}{tag_info}{toc_info}"
+    return f"記事を更新しました。ID: {article.id}{tag_info}{toc_info}{embed_info}"
 
 
 @mcp.tool()

@@ -127,21 +127,40 @@ Markdown入力: [TOC]
 
 #### 埋め込み（Embed）機能
 
-単独行のURLはnote.comの埋め込みウィジェットに変換されます。
+対応サービスのURLは、ブラウザ自動化でnote.comの埋め込みウィジェットに変換されます。
+
+**対応サービス:**
+- YouTube（youtube.com, youtu.be）
+- Twitter/X（twitter.com, x.com）
+- note.com記事
 
 ```
-Markdown入力: https://example.com/article
+Markdown入力: https://www.youtube.com/watch?v=abc123
     ↓
-URL検出: 行がURLのみかを判定
+URL検出: _is_embed_url()で対応サービスかを判定
     ↓
-HTML変換: note.com埋め込み形式のfigure要素を生成
+プレースホルダ挿入: §§EMBED:url§§ 形式でエディタに入力
+    ↓
+ブラウザ自動化: insert_embed.pyで[+]ボタン→[埋め込み]→URL入力
+    ↓
+埋め込みウィジェット: note.comが自動変換
 ```
 
-`markdown_to_html.py`の`_convert_external_urls_to_embeds()`関数が変換を担当します：
+**モジュール構成:**
 
-1. 単独行のURLパターンを検出
-2. `data-embed-service="external-article"`属性を持つfigure要素を生成
-3. リンク先のOGP情報は表示時にnote.comが取得
+- `typing_helpers.py` - URL検出とプレースホルダ挿入
+  - `_is_embed_url()` - 対応サービスURLかを判定
+  - `_EMBED_YOUTUBE_PATTERN`, `_EMBED_TWITTER_PATTERN`, `_EMBED_NOTE_PATTERN`
+
+- `embed_helpers.py` - プレースホルダ検出と埋め込み適用
+  - `has_embed_placeholders()` - エディタ内のプレースホルダを検出
+  - `apply_embeds()` - 全プレースホルダを埋め込みに変換
+
+- `insert_embed.py` - ブラウザ自動化で実際に埋め込み挿入
+  - `insert_embed_at_cursor()` - カーソル位置に埋め込み挿入
+  - note.comの「+」→「埋め込み」メニューを操作
+
+> **注意**: 非対応サービスのURLは通常のリンクとして表示されます。埋め込みカードにはなりません。
 
 ### Investigatorモード
 
