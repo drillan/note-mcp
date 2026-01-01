@@ -465,12 +465,17 @@ uv sync --group dev
 # Run tests
 uv run pytest
 
+# Run E2E tests
+uv run pytest tests/e2e/ -v
+
 # Run linter
 uv run ruff check .
 
 # Run type checker
 uv run mypy .
 ```
+
+E2Eテストの詳細は[テストガイド](docs/development/testing.md)を参照してください。
 
 ## License
 
