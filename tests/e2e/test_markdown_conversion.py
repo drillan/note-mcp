@@ -147,7 +147,7 @@ class TestCodeBlockConversion:
 
         # Act: Validate code block
         validator = PreviewValidator(preview_page)
-        result = await validator.validate_code_block(code_content, "python")
+        result = await validator.validate_code_block(code_content)
 
         # Assert
         assert result.success, f"Code block conversion failed: {result.message}"

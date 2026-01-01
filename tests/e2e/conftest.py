@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 import pytest_asyncio
+from playwright.async_api import Error as PlaywrightError
 
 from note_mcp.api.articles import create_draft
 from note_mcp.auth.browser import login_with_browser
@@ -20,6 +21,7 @@ from note_mcp.auth.session import SessionManager
 from note_mcp.models import Article, ArticleInput, Session
 
 if TYPE_CHECKING:
+    from playwright._impl._api_structures import SetCookieParam
     from playwright.async_api import Page
 
 
@@ -28,6 +30,11 @@ E2E_TEST_PREFIX = "[E2E-TEST-"
 
 # note.com URLs
 NOTE_EDITOR_URL = "https://editor.note.com/notes"
+
+# Timeouts (milliseconds)
+DEFAULT_NAVIGATION_TIMEOUT_MS = 30000
+DEFAULT_ELEMENT_WAIT_TIMEOUT_MS = 15000
+LOGIN_TIMEOUT_SECONDS = 300
 
 
 def _generate_test_article_title() -> str:
@@ -71,10 +78,10 @@ async def real_session() -> AsyncGenerator[Session, None]:
     # No valid session - need to login
     # login_with_browser opens a browser for manual login
     try:
-        session = await login_with_browser(timeout=300)
+        session = await login_with_browser(timeout=LOGIN_TIMEOUT_SECONDS)
         session_manager.save(session)
         yield session
-    except Exception as e:
+    except (PlaywrightError, TimeoutError) as e:
         pytest.skip(
             f"E2E tests require valid note.com session. Login failed: {e}. "
             "Run `uv run python -c 'from note_mcp.auth.browser import login_with_browser; "
@@ -121,17 +128,16 @@ async def _inject_session_cookies(page: Page, session: Session) -> None:
         page: Playwright Page instance
         session: Session with cookies to inject
     """
-    playwright_cookies: list[dict[str, str]] = []
-    for name, value in session.cookies.items():
-        playwright_cookies.append(
-            {
-                "name": name,
-                "value": value,
-                "domain": ".note.com",
-                "path": "/",
-            }
-        )
-    await page.context.add_cookies(playwright_cookies)  # type: ignore[arg-type]
+    playwright_cookies: list[SetCookieParam] = [
+        {
+            "name": name,
+            "value": value,
+            "domain": ".note.com",
+            "path": "/",
+        }
+        for name, value in session.cookies.items()
+    ]
+    await page.context.add_cookies(playwright_cookies)
 
 
 async def _open_preview_and_get_page(page: Page, article_key: str) -> Page:
@@ -146,12 +152,16 @@ async def _open_preview_and_get_page(page: Page, article_key: str) -> Page:
     """
     # Navigate to editor page
     editor_url = f"{NOTE_EDITOR_URL}/{article_key}/edit/"
-    await page.goto(editor_url, wait_until="domcontentloaded", timeout=30000)
-    await page.wait_for_load_state("domcontentloaded", timeout=30000)
+    await page.goto(
+        editor_url,
+        wait_until="domcontentloaded",
+        timeout=DEFAULT_NAVIGATION_TIMEOUT_MS,
+    )
+    await page.wait_for_load_state("domcontentloaded", timeout=DEFAULT_NAVIGATION_TIMEOUT_MS)
 
     # Find and click the menu button (3-dot icon) to open header popover
     menu_button = page.locator('button[aria-label="その他"]')
-    await menu_button.wait_for(state="visible", timeout=15000)
+    await menu_button.wait_for(state="visible", timeout=DEFAULT_ELEMENT_WAIT_TIMEOUT_MS)
     await menu_button.click()
 
     # Wait for popover and click "プレビュー" button
@@ -159,12 +169,12 @@ async def _open_preview_and_get_page(page: Page, article_key: str) -> Page:
     await preview_button.wait_for(state="visible", timeout=10000)
 
     # Capture new page (tab) when clicking preview
-    async with page.context.expect_page(timeout=30000) as new_page_info:
+    async with page.context.expect_page(timeout=DEFAULT_NAVIGATION_TIMEOUT_MS) as new_page_info:
         await preview_button.click()
 
     # Get the new page (preview tab)
     new_page = await new_page_info.value
-    await new_page.wait_for_load_state("domcontentloaded", timeout=30000)
+    await new_page.wait_for_load_state("domcontentloaded", timeout=DEFAULT_NAVIGATION_TIMEOUT_MS)
 
     return new_page
 

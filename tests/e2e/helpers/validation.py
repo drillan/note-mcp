@@ -9,8 +9,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from playwright.async_api import Error as PlaywrightError
+
 if TYPE_CHECKING:
-    from playwright.async_api import Page
+    from playwright.async_api import Locator, Page
 
 
 @dataclass
@@ -49,6 +51,51 @@ class PreviewValidator:
         """
         self.page = page
 
+    async def _validate_element(
+        self,
+        locator: Locator,
+        expected_description: str,
+        *,
+        truncate_length: int | None = None,
+    ) -> ValidationResult:
+        """共通のバリデーションロジック。
+
+        Args:
+            locator: 検証対象のPlaywright Locator
+            expected_description: 期待される要素の説明（エラーメッセージ用）
+            truncate_length: 実際のテキストを切り詰める長さ（Noneで切り詰めなし）
+
+        Returns:
+            ValidationResult with success=True if element is found
+        """
+        try:
+            count = await locator.count()
+            if count > 0:
+                actual_text = await locator.first.inner_text()
+                display_text = actual_text
+                if truncate_length and len(actual_text) > truncate_length:
+                    display_text = actual_text[:truncate_length] + "..."
+                return ValidationResult(
+                    success=True,
+                    expected=expected_description,
+                    actual=actual_text,
+                    message=f"Found: {display_text}",
+                )
+            else:
+                return ValidationResult(
+                    success=False,
+                    expected=expected_description,
+                    actual=None,
+                    message=f"No element found matching: {expected_description}",
+                )
+        except PlaywrightError as e:
+            return ValidationResult(
+                success=False,
+                expected=expected_description,
+                actual=None,
+                message=f"Playwright error: {e}",
+            )
+
     async def validate_heading(self, level: int, text: str) -> ValidationResult:
         """見出しが正しく変換されているか検証。
 
@@ -61,31 +108,7 @@ class PreviewValidator:
         """
         selector = f"h{level}"
         locator = self.page.locator(selector).filter(has_text=text)
-
-        try:
-            count = await locator.count()
-            if count > 0:
-                actual_text = await locator.first.inner_text()
-                return ValidationResult(
-                    success=True,
-                    expected=f"<h{level}> containing '{text}'",
-                    actual=actual_text,
-                    message=f"Found h{level} with text: {actual_text}",
-                )
-            else:
-                return ValidationResult(
-                    success=False,
-                    expected=f"<h{level}> containing '{text}'",
-                    actual=None,
-                    message=f"No h{level} element found containing '{text}'",
-                )
-        except Exception as e:
-            return ValidationResult(
-                success=False,
-                expected=f"<h{level}> containing '{text}'",
-                actual=None,
-                message=f"Error during validation: {e}",
-            )
+        return await self._validate_element(locator, f"<h{level}> containing '{text}'")
 
     async def validate_strikethrough(self, text: str) -> ValidationResult:
         """打消し線が正しく変換されているか検証。
@@ -97,70 +120,20 @@ class PreviewValidator:
             ValidationResult with success=True if <s> contains text
         """
         locator = self.page.locator("s").filter(has_text=text)
+        return await self._validate_element(locator, f"<s> containing '{text}'")
 
-        try:
-            count = await locator.count()
-            if count > 0:
-                actual_text = await locator.first.inner_text()
-                return ValidationResult(
-                    success=True,
-                    expected=f"<s> containing '{text}'",
-                    actual=actual_text,
-                    message=f"Found strikethrough: {actual_text}",
-                )
-            else:
-                return ValidationResult(
-                    success=False,
-                    expected=f"<s> containing '{text}'",
-                    actual=None,
-                    message=f"No <s> element found containing '{text}'",
-                )
-        except Exception as e:
-            return ValidationResult(
-                success=False,
-                expected=f"<s> containing '{text}'",
-                actual=None,
-                message=f"Error during validation: {e}",
-            )
-
-    async def validate_code_block(self, code: str, language: str | None = None) -> ValidationResult:
+    async def validate_code_block(self, code: str) -> ValidationResult:
         """コードブロックが正しく変換されているか検証。
 
         Args:
             code: コード内容
-            language: 言語指定（オプション）
 
         Returns:
             ValidationResult with success=True if <pre><code> contains code
         """
         # note.comのコードブロック構造: <pre><code>...</code></pre>
         locator = self.page.locator("pre code").filter(has_text=code)
-
-        try:
-            count = await locator.count()
-            if count > 0:
-                actual_text = await locator.first.inner_text()
-                truncated = actual_text[:50] + "..." if len(actual_text) > 50 else actual_text
-                return ValidationResult(
-                    success=True,
-                    expected=f"<pre><code> containing '{code}'",
-                    actual=actual_text,
-                    message=f"Found code block: {truncated}",
-                )
-            else:
-                return ValidationResult(
-                    success=False,
-                    expected=f"<pre><code> containing '{code}'",
-                    actual=None,
-                    message=f"No code block found containing '{code}'",
-                )
-        except Exception as e:
-            return ValidationResult(
-                success=False,
-                expected=f"<pre><code> containing '{code}'",
-                actual=None,
-                message=f"Error during validation: {e}",
-            )
+        return await self._validate_element(locator, f"<pre><code> containing '{code}'", truncate_length=50)
 
     async def validate_alignment(self, text: str, alignment: str) -> ValidationResult:
         """テキスト配置が正しく適用されているか検証。
@@ -175,28 +148,4 @@ class PreviewValidator:
         # text-align: {alignment} スタイルを持つ要素を検索
         selector = f"[style*='text-align: {alignment}']"
         locator = self.page.locator(selector).filter(has_text=text)
-
-        try:
-            count = await locator.count()
-            if count > 0:
-                actual_text = await locator.first.inner_text()
-                return ValidationResult(
-                    success=True,
-                    expected=f"Element with text-align: {alignment} containing '{text}'",
-                    actual=actual_text,
-                    message=f"Found aligned text: {actual_text}",
-                )
-            else:
-                return ValidationResult(
-                    success=False,
-                    expected=f"Element with text-align: {alignment} containing '{text}'",
-                    actual=None,
-                    message=f"No element with text-align: {alignment} found containing '{text}'",
-                )
-        except Exception as e:
-            return ValidationResult(
-                success=False,
-                expected=f"Element with text-align: {alignment} containing '{text}'",
-                actual=None,
-                message=f"Error during validation: {e}",
-            )
+        return await self._validate_element(locator, f"Element with text-align: {alignment} containing '{text}'")

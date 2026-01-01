@@ -159,9 +159,12 @@ docker compose run --rm test-headed
 # VNC環境起動
 docker compose up -d test-vnc
 
-# noVNCでアクセス
-# http://localhost:6080/vnc.html
+# VNCクライアントでアクセス
+vncviewer localhost:5900
 ```
+
+> **Note**: `test-vnc`サービスはVNCポート(5900)のみ公開しています。
+> noVNC (http://localhost:6080) を使用する場合は`dev`サービスを利用してください。
 
 詳細は[README.md](../../README.md#docker)を参照してください。
 
