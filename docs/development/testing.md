@@ -154,6 +154,75 @@ uv run pytest tests/e2e/test_native_html_validation.py -v
 | 中央揃え | P2 | `->text<-` | `text-align: center` |
 | 右揃え | P2 | `->text` | `text-align: right` |
 
+## MCPツールテスト
+
+MCPツールテストは、note-mcpが提供する11個のMCPツールの動作を検証するE2Eテストです。
+
+### 対象ツール
+
+| カテゴリ | ツール | 説明 |
+|----------|--------|------|
+| 認証フロー | `note_login` | ブラウザでnote.comにログイン |
+| | `note_check_auth` | 認証状態を確認 |
+| | `note_logout` | セッションをクリア |
+| | `note_set_username` | ユーザー名を設定 |
+| 記事CRUD | `note_create_draft` | 下書き記事を作成 |
+| | `note_get_article` | 記事の内容を取得 |
+| | `note_update_article` | 記事を更新 |
+| | `note_list_articles` | 記事一覧を取得 |
+| 画像操作 | `note_upload_eyecatch` | アイキャッチ画像をアップロード |
+| | `note_upload_body_image` | 本文用画像をアップロード |
+| プレビュー | `note_show_preview` | 記事のプレビューを表示 |
+
+> **Note**: `note_insert_body_image`はProseMirror状態への複雑な依存があるため、[別issue #53](https://github.com/drillan/note-mcp/issues/53)で対応しています。
+
+### MCPツールテストの実行
+
+```bash
+# すべてのMCPツールテストを実行
+uv run pytest tests/e2e/test_mcp_tools.py -v
+
+# 認証フローテストのみ
+uv run pytest tests/e2e/test_mcp_tools.py::TestAuthenticationFlow -v
+
+# 記事CRUDテストのみ
+uv run pytest tests/e2e/test_mcp_tools.py::TestArticleCRUD -v
+
+# 画像操作テストのみ
+uv run pytest tests/e2e/test_mcp_tools.py::TestImageOperations -v
+
+# プレビューテストのみ
+uv run pytest tests/e2e/test_mcp_tools.py::TestPreviewOperations -v
+```
+
+### テストの依存関係
+
+MCPツールテストは以下の順序で実行する必要があります：
+
+1. **認証フロー** (`TestAuthenticationFlow`)
+   - 他のすべてのテストの前提条件
+   - `note_login` → `note_check_auth` → `note_logout` の順で検証
+
+2. **記事CRUD** (`TestArticleCRUD`)
+   - 認証済み状態が必要
+   - `note_create_draft` → `note_get_article` → `note_update_article` → `note_list_articles`
+
+3. **画像操作** (`TestImageOperations`)
+   - 認証済み状態と下書き記事が必要
+   - テスト用画像ファイルが必要
+
+4. **プレビュー** (`TestPreviewOperations`)
+   - 認証済み状態と下書き記事が必要
+
+### テストデータ
+
+テストで使用するサンプルデータ：
+
+```python
+# tests/e2e/conftest.py で定義
+TEST_IMAGE_PATH = Path("tests/fixtures/sample.png")  # 100x100 PNG画像
+```
+
 ### トラブルシューティング
 
 #### 認証エラー
