@@ -217,3 +217,53 @@ async def preview_page(
         await context.close()
         await browser.close()
         await playwright.stop()
+
+
+@pytest_asyncio.fixture
+async def editor_page(
+    real_session: Session,
+    draft_article: Article,
+) -> AsyncGenerator[Page, None]:
+    """エディタページを開いた状態のブラウザページ。
+
+    既存の下書き記事をエディタで開き、ProseMirrorが表示された状態を提供。
+    ネイティブHTML変換テスト用にエディタへの直接入力を可能にする。
+
+    Args:
+        real_session: 認証済みセッション
+        draft_article: テスト用下書き記事
+
+    Yields:
+        Page: ProseMirrorエディタが表示されたページ
+    """
+    from playwright.async_api import async_playwright
+
+    playwright = await async_playwright().start()
+    browser = await playwright.chromium.launch(headless=False)
+    context = await browser.new_context()
+    page = await context.new_page()
+
+    try:
+        # セッションCookie注入
+        await _inject_session_cookies(page, real_session)
+
+        # エディタページへ移動
+        editor_url = f"{NOTE_EDITOR_URL}/{draft_article.key}/edit/"
+        await page.goto(
+            editor_url,
+            wait_until="domcontentloaded",
+            timeout=DEFAULT_NAVIGATION_TIMEOUT_MS,
+        )
+
+        # ProseMirrorエディタ要素を待機
+        await page.locator(".ProseMirror").wait_for(
+            state="visible",
+            timeout=DEFAULT_ELEMENT_WAIT_TIMEOUT_MS,
+        )
+
+        yield page
+
+    finally:
+        await context.close()
+        await browser.close()
+        await playwright.stop()
