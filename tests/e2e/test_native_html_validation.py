@@ -19,7 +19,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.e2e.helpers import PreviewValidator, save_and_open_preview, type_markdown_pattern
+from tests.e2e.helpers import (
+    PreviewValidator,
+    save_and_open_preview,
+    type_code_block,
+    type_markdown_pattern,
+)
 
 if TYPE_CHECKING:
     from playwright.async_api import Page
@@ -105,3 +110,100 @@ class TestNativeStrikethroughConversion:
         result = await validator.validate_strikethrough(test_text)
 
         assert result.success, f"Native strikethrough conversion failed: {result.message}"
+
+
+class TestNativeCodeBlockConversion:
+    """Tests for native code block conversion via ProseMirror."""
+
+    async def test_code_block_native_conversion(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """```code``` → <pre><code>code</code></pre> (native conversion)."""
+        # Arrange
+        test_code = "console.log('test')"
+
+        # Act: Type code block into editor (triggers ProseMirror conversion)
+        await type_code_block(editor_page, test_code)
+
+        # Save and open preview
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert: Validate on preview page (native HTML)
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_code_block(test_code)
+
+        assert result.success, f"Native code block conversion failed: {result.message}"
+
+    async def test_code_block_with_language(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """```javascript code``` → <pre><code>code</code></pre> with language hint."""
+        # Arrange
+        test_code = "function hello() { return 'world'; }"
+        language = "javascript"
+
+        # Act: Type code block with language hint
+        await type_code_block(editor_page, test_code, language=language)
+
+        # Save and open preview
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert: Validate code content is preserved
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_code_block(test_code)
+
+        assert result.success, f"Native code block with language failed: {result.message}"
+
+
+class TestNativeAlignmentConversion:
+    """Tests for native text alignment conversion via ProseMirror."""
+
+    async def test_center_alignment_native_conversion(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """->text<- → text-align: center (native conversion)."""
+        # Arrange
+        test_text = "中央揃えテキスト"
+
+        # Act: Type center alignment pattern
+        await type_markdown_pattern(editor_page, f"->{test_text}<-")
+
+        # Save and open preview
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert: Validate alignment style
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_alignment(test_text, "center")
+
+        assert result.success, f"Native center alignment conversion failed: {result.message}"
+
+    async def test_right_alignment_native_conversion(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """->text → text-align: right (native conversion)."""
+        # Arrange
+        test_text = "右揃えテキスト"
+
+        # Act: Type right alignment pattern
+        await type_markdown_pattern(editor_page, f"->{test_text}")
+
+        # Save and open preview
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert: Validate alignment style
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_alignment(test_text, "right")
+
+        assert result.success, f"Native right alignment conversion failed: {result.message}"
