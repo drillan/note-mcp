@@ -13,6 +13,7 @@ Run with: uv run pytest tests/e2e/test_mcp_tools.py -v
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -22,10 +23,14 @@ from note_mcp.server import (
     note_check_auth,
     note_create_draft,
     note_get_article,
+    note_insert_body_image,
     note_list_articles,
     note_logout,
     note_set_username,
+    note_show_preview,
     note_update_article,
+    note_upload_body_image,
+    note_upload_eyecatch,
 )
 
 if TYPE_CHECKING:
@@ -220,3 +225,85 @@ class TestArticleCRUD:
         # Step 2: List to find our article
         list_result = await note_list_articles(status="draft")  # type: ignore[operator]
         assert test_title in list_result or "E2E-TEST" in list_result
+
+
+class TestImageAndPreview:
+    """画像アップロード・プレビュー機能テスト."""
+
+    async def test_upload_eyecatch(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        test_image_path: Path,
+    ) -> None:
+        """アイキャッチ画像をアップロードできる."""
+        # Act
+        result = await note_upload_eyecatch(  # type: ignore[operator]
+            file_path=str(test_image_path),
+            note_id=draft_article.id,
+        )
+
+        # Assert
+        assert "アップロード" in result or "成功" in result or "URL" in result
+
+    async def test_upload_body_image(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        test_image_path: Path,
+    ) -> None:
+        """本文用画像をアップロードできる."""
+        # Act
+        result = await note_upload_body_image(  # type: ignore[operator]
+            file_path=str(test_image_path),
+            note_id=draft_article.id,
+        )
+
+        # Assert
+        assert "アップロード" in result or "成功" in result or "URL" in result
+
+    async def test_insert_body_image(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        test_image_path: Path,
+    ) -> None:
+        """本文に画像を挿入できる."""
+        # Act
+        result = await note_insert_body_image(  # type: ignore[operator]
+            file_path=str(test_image_path),
+            article_id=draft_article.id,
+            caption="E2E Test Image",
+        )
+
+        # Assert
+        assert "挿入" in result or "成功" in result or "追加" in result
+
+    async def test_show_preview(
+        self,
+        real_session: Session,
+        draft_article: Article,
+    ) -> None:
+        """記事のプレビューを表示できる."""
+        # Act
+        result = await note_show_preview(  # type: ignore[operator]
+            article_key=draft_article.key,
+        )
+
+        # Assert
+        assert "プレビュー" in result or "表示" in result or "URL" in result
+
+    async def test_upload_invalid_image_path(
+        self,
+        real_session: Session,
+        draft_article: Article,
+    ) -> None:
+        """存在しない画像パスでエラーになる."""
+        # Act
+        result = await note_upload_eyecatch(  # type: ignore[operator]
+            file_path="/nonexistent/path/image.png",
+            note_id=draft_article.id,
+        )
+
+        # Assert
+        assert "エラー" in result or "見つかり" in result or "存在" in result
