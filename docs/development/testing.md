@@ -220,7 +220,7 @@ MCPツールテストは以下の順序で実行する必要があります：
 
 ```python
 # tests/e2e/conftest.py で定義
-TEST_IMAGE_PATH = Path("tests/fixtures/sample.png")  # 100x100 PNG画像
+test_image_path = Path(__file__).parent / "assets" / "test_image.png"  # 100x100 PNG画像
 ```
 
 ### 技術詳細

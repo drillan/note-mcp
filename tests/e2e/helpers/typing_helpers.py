@@ -83,7 +83,7 @@ async def save_and_open_preview(
 
     # プレビューボタンをクリック
     preview_button = page.locator("#header-popover button", has_text="プレビュー")
-    await preview_button.wait_for(state="visible", timeout=10000)
+    await preview_button.wait_for(state="visible", timeout=DEFAULT_NAVIGATION_TIMEOUT_MS)
 
     # 新しいタブでプレビューを開く
     async with page.context.expect_page(timeout=timeout) as new_page_info:
