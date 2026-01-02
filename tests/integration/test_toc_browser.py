@@ -62,7 +62,7 @@ class TestTocInsertion:
 
         # Setup mocks
         def locator_side_effect(selector: str) -> MagicMock:
-            if "editorBody" in selector:
+            if "ProseMirror" in selector:
                 return editor
             elif "AddButton" in selector:
                 return add_button
@@ -102,7 +102,7 @@ class TestTocInsertion:
         text_content = f"Title {TOC_PLACEHOLDER} Section 1 Content 1 Section 2 Content 2 Subsection 2.1 Content 2.1"
 
         def locator_side_effect(selector: str) -> MagicMock:
-            if "editorBody" in selector:
+            if "ProseMirror" in selector:
                 return editor
             elif "AddButton" in selector:
                 return add_button
