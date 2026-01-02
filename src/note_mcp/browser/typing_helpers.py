@@ -532,11 +532,18 @@ async def type_markdown_content(page: Any, content: str) -> None:
                 await _input_citation_to_figcaption(page, pending_citation)
                 pending_citation = None
                 # After citation input, we need to move focus back to main editor
-                # Press Enter to continue with next content
                 await page.keyboard.press("Escape")
                 await asyncio.sleep(0.1)
-                # Click on the editor to refocus
-                await page.locator(".ProseMirror").first.click()
+                # Use ArrowDown multiple times to reliably exit blockquote structure
+                # ProseMirror blockquote with figcaption requires multiple presses
+                # to move past the block (same pattern as code block exit)
+                for _ in range(3):
+                    await page.keyboard.press("ArrowDown")
+                    await asyncio.sleep(0.05)
+                await asyncio.sleep(0.1)
+                # Create a new paragraph to ensure cursor is at start of a new line
+                # This is required for heading conversion (## ) to work properly
+                await page.keyboard.press("Enter")
                 await asyncio.sleep(0.1)
 
         # Check for heading pattern (## h2, ### h3, etc.)
