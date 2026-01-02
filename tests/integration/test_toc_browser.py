@@ -62,7 +62,7 @@ class TestTocInsertion:
 
         # Setup mocks
         def locator_side_effect(selector: str) -> MagicMock:
-            if "ProseMirror" in selector:
+            if selector == ".ProseMirror":
                 return editor
             elif "AddButton" in selector:
                 return add_button
@@ -83,7 +83,7 @@ class TestTocInsertion:
         toc_button.click = AsyncMock()
         toc_element.first = toc_element
         toc_element.wait_for = AsyncMock()
-        page.evaluate = AsyncMock()
+        page.evaluate = AsyncMock(return_value={"success": True})
 
         result = await insert_toc_at_placeholder(page)
         assert result is True
@@ -102,7 +102,7 @@ class TestTocInsertion:
         text_content = f"Title {TOC_PLACEHOLDER} Section 1 Content 1 Section 2 Content 2 Subsection 2.1 Content 2.1"
 
         def locator_side_effect(selector: str) -> MagicMock:
-            if "ProseMirror" in selector:
+            if selector == ".ProseMirror":
                 return editor
             elif "AddButton" in selector:
                 return add_button
@@ -123,7 +123,7 @@ class TestTocInsertion:
         toc_button.click = AsyncMock()
         toc_element.first = toc_element
         toc_element.wait_for = AsyncMock()
-        page.evaluate = AsyncMock()
+        page.evaluate = AsyncMock(return_value={"success": True})
 
         result = await insert_toc_at_placeholder(page)
         assert result is True
