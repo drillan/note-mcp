@@ -16,10 +16,13 @@ from .prosemirror import ProseMirrorStabilizer
 from .typing_helpers import (
     insert_toc_placeholder,
     save_and_open_preview,
+    type_blockquote,
     type_code_block,
     type_horizontal_line,
     type_link,
     type_markdown_pattern,
+    type_ordered_list,
+    type_unordered_list,
 )
 from .validation import PreviewValidator, ValidationResult
 
@@ -32,8 +35,11 @@ __all__ = [
     "ProseMirrorStabilizer",
     "ValidationResult",
     "save_and_open_preview",
+    "type_blockquote",
     "type_code_block",
     "type_horizontal_line",
     "type_link",
     "type_markdown_pattern",
+    "type_ordered_list",
+    "type_unordered_list",
 ]
