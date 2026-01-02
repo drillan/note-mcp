@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # note.com editor selectors
-_EDITOR_SELECTOR = ".p-editorBody"
+_EDITOR_SELECTOR = ".ProseMirror"
 _ADD_BUTTON_SELECTOR = 'button[class*="AddButton"]'
 _TOC_MENU_ITEM_SELECTOR = 'button:has-text("目次")'
 _TOC_ELEMENT_SELECTOR = '[class*="TableOfContents"]'
@@ -103,7 +103,7 @@ async def _move_cursor_to_placeholder(page: Page) -> bool:
         f"""
         () => {{
             const placeholder = '{TOC_PLACEHOLDER}';
-            const editor = document.querySelector('.p-editorBody');
+            const editor = document.querySelector('{_EDITOR_SELECTOR}');
             if (!editor) {{
                 return {{ success: false, error: 'Editor element not found' }};
             }}
@@ -158,7 +158,7 @@ async def _remove_placeholder(page: Page) -> bool:
         f"""
         () => {{
             const placeholder = '{TOC_PLACEHOLDER}';
-            const editor = document.querySelector('.p-editorBody');
+            const editor = document.querySelector('{_EDITOR_SELECTOR}');
             if (!editor) {{
                 return {{ success: false, error: 'Editor element not found' }};
             }}
