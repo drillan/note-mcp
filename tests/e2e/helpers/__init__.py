@@ -17,6 +17,8 @@ from .typing_helpers import (
     insert_toc_placeholder,
     save_and_open_preview,
     type_code_block,
+    type_horizontal_line,
+    type_link,
     type_markdown_pattern,
 )
 from .validation import PreviewValidator, ValidationResult
@@ -31,5 +33,7 @@ __all__ = [
     "ValidationResult",
     "save_and_open_preview",
     "type_code_block",
+    "type_horizontal_line",
+    "type_link",
     "type_markdown_pattern",
 ]

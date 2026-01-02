@@ -161,3 +161,69 @@ async def insert_toc_placeholder(
     await page.keyboard.press("Enter")  # 次の行へ移動
 
     await asyncio.sleep(wait_time)
+
+
+async def type_link(
+    page: Page,
+    text: str,
+    url: str,
+    wait_time: float = DEFAULT_CONVERSION_WAIT_SECONDS,
+) -> None:
+    """リンクをエディタに入力しProseMirror変換をトリガー。
+
+    [text](url) + スペース → <a href="url">text</a>
+
+    Args:
+        page: Playwright Pageインスタンス
+        text: リンクテキスト
+        url: リンクURL
+        wait_time: 変換待機時間（秒）
+
+    Raises:
+        ValueError: textまたはurlが空の場合
+    """
+    if not text:
+        raise ValueError("text cannot be empty")
+    if not url:
+        raise ValueError("url cannot be empty")
+
+    # エディタにフォーカス
+    editor = page.locator(".ProseMirror").first
+    await editor.click()
+
+    # Markdownリンク記法を入力
+    await page.keyboard.type(f"[{text}]({url})")
+
+    # スペースで変換トリガー
+    await page.keyboard.type(" ")
+
+    # 変換完了を待機
+    await asyncio.sleep(wait_time)
+
+
+async def type_horizontal_line(
+    page: Page,
+    wait_time: float = DEFAULT_CONVERSION_WAIT_SECONDS,
+) -> None:
+    """水平線をエディタに入力しProseMirror変換をトリガー。
+
+    --- + Enter → <hr>
+
+    Note: 水平線はスペースではなくEnterで変換がトリガーされる。
+
+    Args:
+        page: Playwright Pageインスタンス
+        wait_time: 変換待機時間（秒）
+    """
+    # エディタにフォーカス
+    editor = page.locator(".ProseMirror").first
+    await editor.click()
+
+    # 水平線記法を入力
+    await page.keyboard.type("---")
+
+    # Enterで変換トリガー（水平線はスペースではなくEnterでトリガー）
+    await page.keyboard.press("Enter")
+
+    # 変換完了を待機
+    await asyncio.sleep(wait_time)

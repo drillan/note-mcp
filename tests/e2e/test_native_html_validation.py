@@ -26,6 +26,8 @@ from tests.e2e.helpers import (
     insert_toc_placeholder,
     save_and_open_preview,
     type_code_block,
+    type_horizontal_line,
+    type_link,
     type_markdown_pattern,
 )
 
@@ -283,3 +285,101 @@ class TestNativeTableOfContentsConversion:
 
         # TOCが生成されないことを確認
         assert not result.success, f"TOC should not be generated without headings, but found: {result.message}"
+
+
+class TestNativeLinkConversion:
+    """Tests for native link conversion via ProseMirror."""
+
+    async def test_link_native_conversion(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """[text](url) + space → <a href="url">text</a> (native conversion)."""
+        # Arrange
+        test_text = "テストリンク"
+        test_url = "https://example.com"
+
+        # Act: type_link を使用
+        await type_link(editor_page, test_text, test_url)
+
+        # Save and open preview
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_link(test_text, test_url)
+        assert result.success, f"Native link conversion failed: {result.message}"
+
+
+class TestNativeBoldConversion:
+    """Tests for native bold conversion via ProseMirror."""
+
+    async def test_bold_native_conversion(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """**text** + space → <strong>text</strong> (native conversion)."""
+        # Arrange
+        test_text = "太字テキスト"
+
+        # Act: type_markdown_pattern を直接使用
+        await type_markdown_pattern(editor_page, f"**{test_text}**")
+
+        # Save and open preview
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_bold(test_text)
+        assert result.success, f"Native bold conversion failed: {result.message}"
+
+
+class TestNativeItalicConversion:
+    """Tests for native italic conversion via ProseMirror."""
+
+    async def test_italic_native_conversion(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """*text* + space → <em>text</em> (native conversion)."""
+        # Arrange
+        test_text = "斜体テキスト"
+
+        # Act: type_markdown_pattern を直接使用
+        await type_markdown_pattern(editor_page, f"*{test_text}*")
+
+        # Save and open preview
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_italic(test_text)
+        assert result.success, f"Native italic conversion failed: {result.message}"
+
+
+class TestNativeHorizontalLineConversion:
+    """Tests for native horizontal line conversion via ProseMirror."""
+
+    async def test_horizontal_line_native_conversion(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """--- + Enter → <hr> (native conversion)."""
+        # Act: type_horizontal_line を使用
+        await type_horizontal_line(editor_page)
+
+        # Save and open preview
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_horizontal_line()
+        assert result.success, f"Native horizontal line conversion failed: {result.message}"
