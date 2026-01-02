@@ -226,8 +226,12 @@ class PreviewValidator:
             return await self._validate_element(strong_locator, f"<strong> containing '{text}'")
 
         # フォールバック: bタグを検索
+        # note.comのHTML出力が変更された場合に検知するため、フォールバック発生を明示
         b_locator = self.page.locator("b").filter(has_text=text)
-        return await self._validate_element(b_locator, f"<b> containing '{text}'")
+        result = await self._validate_element(b_locator, f"<b> containing '{text}'")
+        if result.success:
+            result.message = f"[FALLBACK] Found <b> instead of <strong>: {result.message}"
+        return result
 
     async def validate_italic(self, text: str) -> ValidationResult:
         """斜体が正しく変換されているか検証。
@@ -245,11 +249,20 @@ class PreviewValidator:
             return await self._validate_element(em_locator, f"<em> containing '{text}'")
 
         # フォールバック: iタグを検索
+        # note.comのHTML出力が変更された場合に検知するため、フォールバック発生を明示
         i_locator = self.page.locator("i").filter(has_text=text)
-        return await self._validate_element(i_locator, f"<i> containing '{text}'")
+        result = await self._validate_element(i_locator, f"<i> containing '{text}'")
+        if result.success:
+            result.message = f"[FALLBACK] Found <i> instead of <em>: {result.message}"
+        return result
 
     async def validate_horizontal_line(self) -> ValidationResult:
         """水平線が正しく変換されているか検証。
+
+        Note:
+            このメソッドは_validate_element()を使用しません。
+            理由: <hr>は空要素のためinner_text()が取得できず、
+            代わりに要素数をカウントして検証します。
 
         Returns:
             ValidationResult with success=True if <hr> element exists
