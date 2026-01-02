@@ -1,7 +1,17 @@
 """Typing helpers for E2E native HTML validation tests.
 
-Provides utilities for typing Markdown patterns into ProseMirror
-and navigating to preview pages.
+Provides thin wrapper functions around production typing helpers
+(note_mcp.browser.typing_helpers) for E2E test compatibility.
+
+Most functions delegate to type_markdown_content() while maintaining
+backward-compatible function signatures with legacy parameters.
+
+Note:
+    - trigger/wait_time パラメータは後方互換性のため維持されているが、
+      実際の変換タイミングは本番コードが制御する
+    - insert_toc_placeholder() のみ直接ProseMirrorを操作する
+      （本番コードの type_markdown_content() は [TOC] を検出して
+      自動的にプレースホルダーに変換するため、テスト用に独自実装）
 """
 
 from __future__ import annotations
@@ -36,8 +46,8 @@ async def type_markdown_pattern(
     Args:
         page: Playwright Pageインスタンス
         pattern: 入力するMarkdownパターン（例: "## 見出し", "~~打消し~~"）
-        trigger: 変換トリガー（デフォルトはスペース）（未使用）
-        wait_time: 変換待機時間（秒）（未使用）
+        trigger: 変換トリガー（後方互換性のため維持、本番コードが制御）
+        wait_time: 変換待機時間（後方互換性のため維持、本番コードが制御）
 
     Raises:
         ValueError: patternが空の場合
@@ -106,7 +116,7 @@ async def type_code_block(
         page: Playwright Pageインスタンス
         code: コードブロック内のコード
         language: 言語指定（オプション）
-        wait_time: 変換待機時間（秒）（未使用）
+        wait_time: 変換待機時間（後方互換性のため維持、本番コードが制御）
 
     Raises:
         ValueError: codeが空の場合
@@ -131,6 +141,14 @@ async def insert_toc_placeholder(
     note.comのTOC挿入機能をテストするためのプレースホルダーを入力する。
     プレースホルダーは後続の保存処理でTOC要素に置換される。
 
+    Note:
+        この関数は本番コード type_markdown_content() に委譲せず、
+        直接ProseMirrorを操作する。理由:
+        - 本番の type_markdown_content() は [TOC] を検出して
+          自動的にプレースホルダーに変換する
+        - テストでは変換前のプレースホルダー状態を検証する必要がある
+        - そのため、テスト固有の操作として独自実装を維持
+
     Args:
         page: Playwright Pageインスタンス
         wait_time: 入力後の待機時間（秒）
@@ -154,13 +172,18 @@ async def type_link(
     """リンクをエディタに入力しProseMirror変換をトリガー。
 
     Note: 内部実装は本番コード type_markdown_content() に委譲。
-    ⚠️ 本番コードにリンク処理が未実装のため、テストは失敗が期待される（#75）
+
+    Warning:
+        本番コードにリンク処理が未実装。
+        type_markdown_content() は [text](url) 形式のMarkdown構文を
+        プレーンテキストとして出力する。
+        追跡issue: #75
 
     Args:
         page: Playwright Pageインスタンス
         text: リンクテキスト
         url: リンクURL
-        wait_time: 変換待機時間（秒）（未使用）
+        wait_time: 変換待機時間（後方互換性のため維持、本番コードが制御）
 
     Raises:
         ValueError: textまたはurlが空の場合
@@ -185,11 +208,16 @@ async def type_horizontal_line(
     """水平線をエディタに入力しProseMirror変換をトリガー。
 
     Note: 内部実装は本番コード type_markdown_content() に委譲。
-    ⚠️ 本番コードに水平線処理が未実装のため、テストは失敗が期待される（#75）
+
+    Warning:
+        本番コードに水平線処理が未実装。
+        type_markdown_content() は --- 形式のMarkdown構文を
+        プレーンテキストとして出力する。
+        追跡issue: #75
 
     Args:
         page: Playwright Pageインスタンス
-        wait_time: 変換待機時間（秒）（未使用）
+        wait_time: 変換待機時間（後方互換性のため維持、本番コードが制御）
     """
     # 未使用パラメータの警告を抑制
     _ = wait_time
@@ -210,7 +238,7 @@ async def type_blockquote(
     Args:
         page: Playwright Pageインスタンス
         text: 引用テキスト
-        wait_time: 変換待機時間（秒）（未使用）
+        wait_time: 変換待機時間（後方互換性のため維持、本番コードが制御）
 
     Raises:
         ValueError: textが空の場合
@@ -238,7 +266,7 @@ async def type_unordered_list(
     Args:
         page: Playwright Pageインスタンス
         items: リスト項目のリスト
-        wait_time: 変換待機時間（秒）（未使用）
+        wait_time: 変換待機時間（後方互換性のため維持、本番コードが制御）
 
     Raises:
         ValueError: itemsが空の場合
@@ -266,7 +294,7 @@ async def type_ordered_list(
     Args:
         page: Playwright Pageインスタンス
         items: リスト項目のリスト
-        wait_time: 変換待機時間（秒）（未使用）
+        wait_time: 変換待機時間（後方互換性のため維持、本番コードが制御）
 
     Raises:
         ValueError: itemsが空の場合
