@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -140,33 +141,38 @@ async def _type_with_strikethrough(page: Any, text: str) -> None:
                 await page.keyboard.press("Backspace")
 
 
-async def _type_with_link(page: Any, text: str) -> str:
-    """Process link patterns and type with proper trigger.
+async def _type_with_inline_pattern(
+    page: Any,
+    text: str,
+    pattern: re.Pattern[str],
+    formatter: Callable[[re.Match[str]], str],
+) -> str:
+    """Generic inline pattern handler for ProseMirror.
 
-    Returns remaining text after first link is processed.
-    If no link found, returns empty string and types entire text.
+    Processes the first match of a pattern in text, types it with proper trigger,
+    and returns the remaining text for further processing.
 
     Args:
         page: Playwright page object
-        text: Text that may contain [text](url) patterns
+        text: Text that may contain the pattern
+        pattern: Compiled regex pattern to search for
+        formatter: Function that takes a match and returns the formatted string to type
 
     Returns:
-        Remaining text after first link is processed, or empty string.
+        Remaining text after first pattern is processed, or empty string if no match.
     """
-    match = _LINK_PATTERN.search(text)
+    match = pattern.search(text)
     if not match:
         await page.keyboard.type(text)
         return ""
 
-    # Type text before link
+    # Type text before pattern
     before = text[: match.start()]
     if before:
         await page.keyboard.type(before)
 
-    # Type link pattern with space trigger
-    link_text = match.group(1)
-    link_url = match.group(2)
-    await page.keyboard.type(f"[{link_text}]({link_url})")
+    # Type formatted pattern with space trigger
+    await page.keyboard.type(formatter(match))
     await page.keyboard.type(" ")
     await asyncio.sleep(0.1)
 
@@ -176,117 +182,46 @@ async def _type_with_link(page: Any, text: str) -> str:
         await page.keyboard.press("Backspace")
 
     return remaining
+
+
+async def _type_with_link(page: Any, text: str) -> str:
+    """Process link patterns [text](url) and type with proper trigger."""
+    return await _type_with_inline_pattern(
+        page,
+        text,
+        _LINK_PATTERN,
+        lambda m: f"[{m.group(1)}]({m.group(2)})",
+    )
 
 
 async def _type_with_bold(page: Any, text: str) -> str:
-    """Process bold patterns and type with proper trigger.
-
-    Returns remaining text after first bold is processed.
-    If no bold found, returns empty string and types entire text.
-
-    Args:
-        page: Playwright page object
-        text: Text that may contain **bold** patterns
-
-    Returns:
-        Remaining text after first bold is processed, or empty string.
-    """
-    match = _BOLD_PATTERN.search(text)
-    if not match:
-        await page.keyboard.type(text)
-        return ""
-
-    # Type text before bold
-    before = text[: match.start()]
-    if before:
-        await page.keyboard.type(before)
-
-    # Type bold pattern with space trigger
-    bold_content = match.group(1)
-    await page.keyboard.type(f"**{bold_content}**")
-    await page.keyboard.type(" ")
-    await asyncio.sleep(0.1)
-
-    # Return remaining text (remove trigger space if needed)
-    remaining = text[match.end() :]
-    if remaining and not remaining.startswith(" "):
-        await page.keyboard.press("Backspace")
-
-    return remaining
+    """Process bold patterns **text** and type with proper trigger."""
+    return await _type_with_inline_pattern(
+        page,
+        text,
+        _BOLD_PATTERN,
+        lambda m: f"**{m.group(1)}**",
+    )
 
 
 async def _type_with_italic(page: Any, text: str) -> str:
-    """Process italic patterns and type with proper trigger.
-
-    Returns remaining text after first italic is processed.
-    If no italic found, returns empty string and types entire text.
-
-    Args:
-        page: Playwright page object
-        text: Text that may contain *italic* patterns
-
-    Returns:
-        Remaining text after first italic is processed, or empty string.
-    """
-    match = _ITALIC_PATTERN.search(text)
-    if not match:
-        await page.keyboard.type(text)
-        return ""
-
-    # Type text before italic
-    before = text[: match.start()]
-    if before:
-        await page.keyboard.type(before)
-
-    # Type italic pattern with space trigger
-    italic_content = match.group(1)
-    await page.keyboard.type(f"*{italic_content}*")
-    await page.keyboard.type(" ")
-    await asyncio.sleep(0.1)
-
-    # Return remaining text (remove trigger space if needed)
-    remaining = text[match.end() :]
-    if remaining and not remaining.startswith(" "):
-        await page.keyboard.press("Backspace")
-
-    return remaining
+    """Process italic patterns *text* and type with proper trigger."""
+    return await _type_with_inline_pattern(
+        page,
+        text,
+        _ITALIC_PATTERN,
+        lambda m: f"*{m.group(1)}*",
+    )
 
 
 async def _type_with_inline_code(page: Any, text: str) -> str:
-    """Process inline code patterns and type with proper trigger.
-
-    Returns remaining text after first inline code is processed.
-    If no inline code found, returns empty string and types entire text.
-
-    Args:
-        page: Playwright page object
-        text: Text that may contain `code` patterns
-
-    Returns:
-        Remaining text after first inline code is processed, or empty string.
-    """
-    match = _INLINE_CODE_PATTERN.search(text)
-    if not match:
-        await page.keyboard.type(text)
-        return ""
-
-    # Type text before code
-    before = text[: match.start()]
-    if before:
-        await page.keyboard.type(before)
-
-    # Type inline code pattern with space trigger
-    code_content = match.group(1)
-    await page.keyboard.type(f"`{code_content}`")
-    await page.keyboard.type(" ")
-    await asyncio.sleep(0.1)
-
-    # Return remaining text (remove trigger space if needed)
-    remaining = text[match.end() :]
-    if remaining and not remaining.startswith(" "):
-        await page.keyboard.press("Backspace")
-
-    return remaining
+    """Process inline code patterns `code` and type with proper trigger."""
+    return await _type_with_inline_pattern(
+        page,
+        text,
+        _INLINE_CODE_PATTERN,
+        lambda m: f"`{m.group(1)}`",
+    )
 
 
 async def _type_with_inline_formatting(page: Any, text: str) -> None:
