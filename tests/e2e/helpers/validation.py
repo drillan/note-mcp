@@ -149,3 +149,49 @@ class PreviewValidator:
         selector = f"[style*='text-align: {alignment}']"
         locator = self.page.locator(selector).filter(has_text=text)
         return await self._validate_element(locator, f"Element with text-align: {alignment} containing '{text}'")
+
+    async def validate_toc(self, timeout_ms: int = 5000) -> ValidationResult:
+        """目次（TOC）がプレビューに表示されているか検証。
+
+        note.comのTOC要素は以下のいずれかで検出:
+        1. nav要素（記事本文内）
+        2. TableOfContentsを含むクラス名を持つ要素
+
+        プレビューページのロード完了を待機してから検証を行う。
+
+        Args:
+            timeout_ms: 要素出現待機のタイムアウト（ミリ秒）
+
+        Returns:
+            ValidationResult with success=True if TOC element exists
+        """
+        # まず記事本文がロードされるのを待機
+        article_body = self.page.locator(".note-common-styles__textnote-body, .p-noteBody")
+        try:
+            await article_body.first.wait_for(state="visible", timeout=timeout_ms)
+        except PlaywrightError:
+            return ValidationResult(
+                success=False,
+                expected="Article body container",
+                actual=None,
+                message="Article body not found on preview page",
+            )
+
+        # nav要素を検索（記事本文内のTOC）
+        nav_locator = article_body.locator("nav")
+        try:
+            # nav要素の出現を待機（TOCが存在する場合）
+            await nav_locator.first.wait_for(state="visible", timeout=timeout_ms)
+            return await self._validate_element(
+                nav_locator,
+                "TOC nav element in article body",
+            )
+        except PlaywrightError:
+            pass
+
+        # フォールバック: TableOfContentsクラスを検索
+        toc_class_locator = self.page.locator("[class*='TableOfContents']")
+        return await self._validate_element(
+            toc_class_locator,
+            "TOC element with class containing 'TableOfContents'",
+        )

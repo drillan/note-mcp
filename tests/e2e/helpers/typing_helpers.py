@@ -9,6 +9,8 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from note_mcp.browser.toc_helpers import TOC_PLACEHOLDER
+
 if TYPE_CHECKING:
     from playwright.async_api import Page
 
@@ -134,5 +136,28 @@ async def type_code_block(
     # 終了フェンス
     await page.keyboard.type("```")
     await page.keyboard.type(" ")  # 変換トリガー
+
+    await asyncio.sleep(wait_time)
+
+
+async def insert_toc_placeholder(
+    page: Page,
+    wait_time: float = DEFAULT_CONVERSION_WAIT_SECONDS,
+) -> None:
+    """TOCプレースホルダー（§§TOC§§）をエディタに入力。
+
+    note.comのTOC挿入機能をテストするためのプレースホルダーを入力する。
+    プレースホルダーは後続の保存処理でTOC要素に置換される。
+
+    Args:
+        page: Playwright Pageインスタンス
+        wait_time: 入力後の待機時間（秒）
+    """
+    editor = page.locator(".ProseMirror").first
+    await editor.click()
+
+    # プレースホルダーを入力
+    await page.keyboard.type(TOC_PLACEHOLDER)
+    await page.keyboard.press("Enter")  # 次の行へ移動
 
     await asyncio.sleep(wait_time)

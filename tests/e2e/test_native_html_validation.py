@@ -15,12 +15,15 @@ Run with: uv run pytest tests/e2e/test_native_html_validation.py -v
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
 
+from note_mcp.browser.toc_helpers import insert_toc_at_placeholder
 from tests.e2e.helpers import (
     PreviewValidator,
+    insert_toc_placeholder,
     save_and_open_preview,
     type_code_block,
     type_markdown_pattern,
@@ -207,3 +210,76 @@ class TestNativeAlignmentConversion:
         result = await validator.validate_alignment(test_text, "right")
 
         assert result.success, f"Native right alignment conversion failed: {result.message}"
+
+
+class TestNativeTableOfContentsConversion:
+    """Tests for native TOC (Table of Contents) conversion."""
+
+    async def test_toc_native_conversion(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """§§TOC§§ + 見出し → UIからTOC挿入 → プレビューでTOC表示.
+
+        TOCが生成されるには見出し（H2/H3）が必要。
+        note.comのUIメニューからTOCを挿入する。
+        """
+        # Arrange: TOCプレースホルダーを先に入力（既存テストと同じ順序）
+        await insert_toc_placeholder(editor_page)
+
+        # 見出しを追加（TOC生成に必須）
+        await type_markdown_pattern(editor_page, "## TOCテスト見出し1")
+        await asyncio.sleep(0.2)
+        await editor_page.keyboard.press("Enter")
+        await editor_page.keyboard.type("本文テキスト")
+        await editor_page.keyboard.press("Enter")
+        await asyncio.sleep(0.3)
+
+        await type_markdown_pattern(editor_page, "## TOCテスト見出し2")
+        await asyncio.sleep(0.2)
+        await editor_page.keyboard.press("Enter")
+        await asyncio.sleep(0.5)
+
+        # Act: UIメニューからTOCを挿入
+        toc_inserted = await insert_toc_at_placeholder(editor_page)
+        assert toc_inserted, "Failed to insert TOC via UI menu"
+
+        # エディタ内でTOCが挿入されたことを確認
+        toc_in_editor = editor_page.locator(".ProseMirror nav")
+        toc_count = await toc_in_editor.count()
+        assert toc_count >= 1, "TOC should exist in editor before saving"
+
+        # 保存してプレビューを開く
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert: プレビューでTOC要素を検証
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_toc()
+
+        assert result.success, f"Native TOC conversion failed: {result.message}"
+
+    async def test_toc_without_headings_not_generated(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """§§TOC§§のみ（見出しなし）→ TOC未生成を確認.
+
+        見出しがない場合、TOCは生成されない。
+        """
+        # Arrange: TOCプレースホルダーのみ（見出しなし）
+        await insert_toc_placeholder(editor_page)
+        await editor_page.keyboard.type("本文テキストのみ")
+
+        # Act: 保存してプレビューを開く
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert: TOC要素が存在しないことを確認
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_toc()
+
+        # TOCが生成されないことを確認
+        assert not result.success, f"TOC should not be generated without headings, but found: {result.message}"
