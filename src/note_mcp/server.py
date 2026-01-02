@@ -27,6 +27,7 @@ from note_mcp.browser.preview import show_preview
 from note_mcp.browser.update_article import update_article_via_browser
 from note_mcp.investigator import register_investigator_tools
 from note_mcp.models import ArticleInput, ArticleStatus, NoteAPIError
+from note_mcp.utils.file_parser import parse_markdown_file
 from note_mcp.utils.markdown_to_html import _has_toc_placeholder, has_embed_url
 
 # Create MCP server instance
@@ -517,6 +518,115 @@ async def note_list_articles(
         lines.append(f"  （続きはpage={result.page + 1}で取得できます）")
 
     return "\n".join(lines)
+
+
+@mcp.tool()
+async def note_create_from_file(
+    file_path: Annotated[str, "Markdownファイルのパス"],
+    upload_images: Annotated[bool, "ローカル画像をアップロードするかどうか"] = True,
+) -> str:
+    """Markdownファイルから下書き記事を作成します。
+
+    ファイルからタイトル、本文、タグ、ローカル画像を抽出し、
+    note.comに下書きを作成します。
+
+    YAMLフロントマターがある場合:
+    - titleフィールドからタイトルを取得
+    - tagsフィールドからタグを取得
+
+    フロントマターがない場合:
+    - 最初のH1見出しをタイトルとして使用（本文から削除）
+    - H1がなければH2を使用
+
+    ローカル画像（./images/example.pngなど）は自動的にアップロードされ、
+    本文内のパスがnote.comのURLに置換されます。
+
+    Args:
+        file_path: Markdownファイルのパス
+        upload_images: ローカル画像をアップロードするかどうか（デフォルト: True）
+
+    Returns:
+        作成結果のメッセージ（記事IDを含む）
+    """
+    session = _session_manager.load()
+    if session is None:
+        return "ログインが必要です。note_loginを実行してください。"
+
+    from pathlib import Path
+
+    try:
+        parsed = parse_markdown_file(Path(file_path))
+    except FileNotFoundError:
+        return f"ファイルが見つかりません: {file_path}"
+    except ValueError as e:
+        return f"ファイル解析エラー: {e}"
+
+    article_input = ArticleInput(
+        title=parsed.title,
+        body=parsed.body,
+        tags=parsed.tags,
+    )
+
+    needs_browser = _has_toc_placeholder(parsed.body) or has_embed_url(parsed.body)
+
+    try:
+        if needs_browser:
+            browser_result = await create_draft_via_browser(session, article_input)
+            article = browser_result.article
+        else:
+            article = await create_draft(session, article_input)
+
+        uploaded_count = 0
+        failed_images: list[str] = []
+
+        if upload_images and parsed.local_images:
+            updated_body = parsed.body
+
+            for img in parsed.local_images:
+                if img.absolute_path.exists():
+                    try:
+                        upload_result = await upload_body_image(
+                            session,
+                            str(img.absolute_path),
+                            article.id,
+                        )
+                        updated_body = updated_body.replace(
+                            f"({img.markdown_path})",
+                            f"({upload_result.url})",
+                        )
+                        uploaded_count += 1
+                    except NoteAPIError as e:
+                        failed_images.append(f"{img.markdown_path}: {e}")
+                else:
+                    failed_images.append(f"{img.markdown_path}: ファイルが見つかりません")
+
+            if uploaded_count > 0:
+                updated_input = ArticleInput(
+                    title=parsed.title,
+                    body=updated_body,
+                    tags=parsed.tags,
+                )
+                await update_article(session, article.id, updated_input)
+
+        result_lines = [
+            "✅ 下書きを作成しました",
+            f"   タイトル: {article.title}",
+            f"   記事ID: {article.id}",
+            f"   記事キー: {article.key}",
+        ]
+
+        if uploaded_count > 0:
+            result_lines.append(f"   アップロードした画像: {uploaded_count}件")
+
+        if failed_images:
+            result_lines.append(f"   ⚠️ 画像アップロード失敗: {len(failed_images)}件")
+            for msg in failed_images:
+                result_lines.append(f"      - {msg}")
+
+        return "\n".join(result_lines)
+
+    except NoteAPIError as e:
+        return f"記事作成エラー: {e}"
 
 
 # Register investigator tools if in investigator mode

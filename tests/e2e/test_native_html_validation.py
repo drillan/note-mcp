@@ -25,10 +25,13 @@ from tests.e2e.helpers import (
     PreviewValidator,
     insert_toc_placeholder,
     save_and_open_preview,
+    type_blockquote,
     type_code_block,
     type_horizontal_line,
     type_link,
     type_markdown_pattern,
+    type_ordered_list,
+    type_unordered_list,
 )
 
 if TYPE_CHECKING:
@@ -383,3 +386,120 @@ class TestNativeHorizontalLineConversion:
         validator = PreviewValidator(preview_page)
         result = await validator.validate_horizontal_line()
         assert result.success, f"Native horizontal line conversion failed: {result.message}"
+
+
+class TestNativeBlockquoteConversion:
+    """Tests for native blockquote conversion via ProseMirror."""
+
+    async def test_blockquote_native_conversion(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """> text + space → <blockquote>text</blockquote> (native conversion)."""
+        # Arrange
+        test_text = "これは引用テキストです"
+
+        # Act: type_blockquote を使用
+        await type_blockquote(editor_page, test_text)
+
+        # Save and open preview
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_blockquote(test_text)
+        assert result.success, f"Native blockquote conversion failed: {result.message}"
+
+
+class TestNativeUnorderedListConversion:
+    """Tests for native unordered list conversion via ProseMirror."""
+
+    async def test_unordered_list_single_item(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """- item + Enter → <ul><li>item</li></ul> (native conversion)."""
+        # Arrange
+        test_items = ["単一項目"]
+
+        # Act: type_unordered_list を使用
+        await type_unordered_list(editor_page, test_items)
+
+        # Save and open preview
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_unordered_list(test_items)
+        assert result.success, f"Native unordered list conversion failed: {result.message}"
+
+    async def test_unordered_list_multiple_items(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """Multiple - items → <ul><li>...</li><li>...</li></ul> (native conversion)."""
+        # Arrange
+        test_items = ["項目1", "項目2", "項目3"]
+
+        # Act: type_unordered_list を使用
+        await type_unordered_list(editor_page, test_items)
+
+        # Save and open preview
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_unordered_list(test_items)
+        assert result.success, f"Native unordered list conversion failed: {result.message}"
+
+
+class TestNativeOrderedListConversion:
+    """Tests for native ordered list conversion via ProseMirror."""
+
+    async def test_ordered_list_single_item(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """1. item + Enter → <ol><li>item</li></ol> (native conversion)."""
+        # Arrange
+        test_items = ["番号付き単一項目"]
+
+        # Act: type_ordered_list を使用
+        await type_ordered_list(editor_page, test_items)
+
+        # Save and open preview
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_ordered_list(test_items)
+        assert result.success, f"Native ordered list conversion failed: {result.message}"
+
+    async def test_ordered_list_multiple_items(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        editor_page: Page,
+    ) -> None:
+        """Multiple numbered items → <ol><li>...</li><li>...</li></ol> (native conversion)."""
+        # Arrange
+        test_items = ["最初の項目", "2番目の項目", "3番目の項目"]
+
+        # Act: type_ordered_list を使用
+        await type_ordered_list(editor_page, test_items)
+
+        # Save and open preview
+        preview_page = await save_and_open_preview(editor_page)
+
+        # Assert
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_ordered_list(test_items)
+        assert result.success, f"Native ordered list conversion failed: {result.message}"

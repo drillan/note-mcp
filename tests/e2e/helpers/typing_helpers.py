@@ -227,3 +227,133 @@ async def type_horizontal_line(
 
     # 変換完了を待機
     await asyncio.sleep(wait_time)
+
+
+async def type_blockquote(
+    page: Page,
+    text: str,
+    wait_time: float = DEFAULT_CONVERSION_WAIT_SECONDS,
+) -> None:
+    """引用ブロックをエディタに入力しProseMirror変換をトリガー。
+
+    "> " + text + space → <blockquote><p>text</p></blockquote>
+
+    Note:
+        この関数は行頭でのみ機能します。ProseMirrorは "> " の入力時点で
+        引用ブロックを開始し、テキスト入力後のスペースで変換を完了します。
+
+    Args:
+        page: Playwright Pageインスタンス
+        text: 引用テキスト
+        wait_time: 変換待機時間（秒）
+
+    Raises:
+        ValueError: textが空の場合
+    """
+    if not text:
+        raise ValueError("text cannot be empty")
+
+    # エディタにフォーカス
+    editor = page.locator(".ProseMirror").first
+    await editor.click()
+
+    # 引用記法を入力
+    await page.keyboard.type(f"> {text}")
+
+    # スペースで変換トリガー
+    await page.keyboard.type(" ")
+
+    # 変換完了を待機
+    await asyncio.sleep(wait_time)
+
+
+async def _type_list(
+    page: Page,
+    items: list[str],
+    first_prefix: str,
+    wait_time: float = DEFAULT_CONVERSION_WAIT_SECONDS,
+) -> None:
+    """リスト入力の共通ロジック。
+
+    Note:
+        この関数は行頭でのみ機能します。ProseMirrorは最初のプレフィックス入力時点で
+        リストを開始し、以降の項目は自動でプレフィックスが追加されます。
+
+    Args:
+        page: Playwright Pageインスタンス
+        items: リスト項目のリスト
+        first_prefix: 最初の項目のプレフィックス（"- " または "1. "）
+        wait_time: 変換待機時間（秒）
+
+    Raises:
+        ValueError: itemsが空の場合
+    """
+    if not items:
+        raise ValueError("items cannot be empty")
+
+    # エディタにフォーカス
+    editor = page.locator(".ProseMirror").first
+    await editor.click()
+
+    # 最初の項目: プレフィックスで開始
+    await page.keyboard.type(f"{first_prefix}{items[0]}")
+    await page.keyboard.press("Enter")
+    await asyncio.sleep(wait_time)
+
+    # 以降の項目: ProseMirrorが自動でプレフィックスを追加するためテキストのみ入力
+    for item in items[1:]:
+        await page.keyboard.type(item)
+        await page.keyboard.press("Enter")
+        await asyncio.sleep(wait_time)
+
+
+async def type_unordered_list(
+    page: Page,
+    items: list[str],
+    wait_time: float = DEFAULT_CONVERSION_WAIT_SECONDS,
+) -> None:
+    """箇条書きリストをエディタに入力しProseMirror変換をトリガー。
+
+    "- " + item1 + Enter → <ul><li>item1</li></ul>
+    item2 + Enter → <ul><li>item1</li><li>item2</li></ul>
+    （ProseMirrorが自動で "- " を追加）
+
+    Note:
+        この関数は行頭でのみ機能します。ProseMirrorは "- " の入力時点で
+        箇条書きリストを開始します。
+
+    Args:
+        page: Playwright Pageインスタンス
+        items: リスト項目のリスト
+        wait_time: 変換待機時間（秒）
+
+    Raises:
+        ValueError: itemsが空の場合
+    """
+    await _type_list(page, items, "- ", wait_time)
+
+
+async def type_ordered_list(
+    page: Page,
+    items: list[str],
+    wait_time: float = DEFAULT_CONVERSION_WAIT_SECONDS,
+) -> None:
+    """番号付きリストをエディタに入力しProseMirror変換をトリガー。
+
+    "1. " + item1 + Enter → <ol><li>item1</li></ol>
+    item2 + Enter → <ol><li>item1</li><li>item2</li></ol>
+    （ProseMirrorが自動で番号をインクリメント）
+
+    Note:
+        この関数は行頭でのみ機能します。ProseMirrorは "1. " の入力時点で
+        番号付きリストを開始します。
+
+    Args:
+        page: Playwright Pageインスタンス
+        items: リスト項目のリスト
+        wait_time: 変換待機時間（秒）
+
+    Raises:
+        ValueError: itemsが空の場合
+    """
+    await _type_list(page, items, "1. ", wait_time)

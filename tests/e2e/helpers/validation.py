@@ -291,3 +291,101 @@ class PreviewValidator:
                 actual=None,
                 message=f"Playwright error: {e}",
             )
+
+    async def validate_blockquote(self, text: str) -> ValidationResult:
+        """引用ブロックが正しく変換されているか検証。
+
+        Args:
+            text: 引用テキスト
+
+        Returns:
+            ValidationResult with success=True if <blockquote> contains text
+        """
+        locator = self.page.locator("blockquote").filter(has_text=text)
+        return await self._validate_element(locator, f"<blockquote> containing '{text}'")
+
+    async def _validate_list(
+        self,
+        items: list[str],
+        list_tag: str,
+    ) -> ValidationResult:
+        """リスト検証の共通ロジック。
+
+        Args:
+            items: 期待されるリスト項目
+            list_tag: リストのHTMLタグ名（"ul" または "ol"）
+
+        Returns:
+            ValidationResult with success=True if <{list_tag}><li> contains all items
+        """
+        if not items:
+            return ValidationResult(
+                success=False,
+                expected=f"<{list_tag}> with items",
+                actual=None,
+                message="No items provided for validation",
+            )
+
+        try:
+            # リスト要素の存在確認
+            list_locator = self.page.locator(list_tag)
+            list_count = await list_locator.count()
+            if list_count == 0:
+                return ValidationResult(
+                    success=False,
+                    expected=f"<{list_tag}> with {len(items)} item(s)",
+                    actual=None,
+                    message=f"No <{list_tag}> element found",
+                )
+
+            # 各項目が<{list_tag}> > <li>内に存在するか確認
+            missing_items: list[str] = []
+            for item in items:
+                li_locator = self.page.locator(f"{list_tag} > li").filter(has_text=item)
+                li_count = await li_locator.count()
+                if li_count == 0:
+                    missing_items.append(item)
+
+            if missing_items:
+                return ValidationResult(
+                    success=False,
+                    expected=f"<{list_tag}> with items: {items}",
+                    actual=f"Missing: {missing_items}",
+                    message=f"Missing {len(missing_items)} item(s) in <{list_tag}>: {missing_items}",
+                )
+
+            return ValidationResult(
+                success=True,
+                expected=f"<{list_tag}> with {len(items)} item(s)",
+                actual=f"Found all {len(items)} item(s)",
+                message=f"Found all items in <{list_tag}>: {items}",
+            )
+        except PlaywrightError as e:
+            return ValidationResult(
+                success=False,
+                expected=f"<{list_tag}> with items: {items}",
+                actual=None,
+                message=f"Playwright error: {e}",
+            )
+
+    async def validate_unordered_list(self, items: list[str]) -> ValidationResult:
+        """箇条書きリストが正しく変換されているか検証。
+
+        Args:
+            items: 期待されるリスト項目
+
+        Returns:
+            ValidationResult with success=True if <ul><li> contains all items
+        """
+        return await self._validate_list(items, "ul")
+
+    async def validate_ordered_list(self, items: list[str]) -> ValidationResult:
+        """番号付きリストが正しく変換されているか検証。
+
+        Args:
+            items: 期待されるリスト項目
+
+        Returns:
+            ValidationResult with success=True if <ol><li> contains all items
+        """
+        return await self._validate_list(items, "ol")
