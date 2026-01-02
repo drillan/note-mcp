@@ -17,9 +17,12 @@ logger = logging.getLogger(__name__)
 
 # note.com editor selectors
 _EDITOR_SELECTOR = ".ProseMirror"
-_ADD_BUTTON_SELECTOR = 'button[class*="AddButton"]'
+# Changed from 'button[class*="AddButton"]' which no longer exists (issue #58)
+# The "メニューを開く" button opens the insert menu containing TOC option
+_MENU_BUTTON_SELECTOR = 'button[aria-label="メニューを開く"]'
 _TOC_MENU_ITEM_SELECTOR = 'button:has-text("目次")'
-_TOC_ELEMENT_SELECTOR = '[class*="TableOfContents"]'
+# TOC element is a nav tag within the editor (uses Tailwind classes, no specific class name)
+_TOC_ELEMENT_SELECTOR = ".ProseMirror nav"
 
 # Placeholder marker (text marker, not HTML comment)
 # Must match _TOC_PLACEHOLDER in typing_helpers.py
@@ -75,8 +78,8 @@ async def insert_toc_at_placeholder(page: Page, timeout: int = 10000) -> bool:
         logger.error("Failed to remove TOC placeholder")
         return False
 
-    # 3. Click [+] button to open menu
-    await _click_add_button(page, timeout)
+    # 3. Click menu button to open insert menu
+    await _click_menu_button(page, timeout)
 
     # 4. Click [目次] menu item
     await _click_toc_menu_item(page, timeout)
@@ -197,8 +200,11 @@ async def _remove_placeholder(page: Page) -> bool:
     return True
 
 
-async def _click_add_button(page: Page, timeout: int) -> None:
-    """Click the [+] add button to open insert menu.
+async def _click_menu_button(page: Page, timeout: int) -> None:
+    """Click the menu button to open insert menu.
+
+    The menu button (aria-label="メニューを開く") opens the insert menu
+    containing the TOC option. This replaced the old AddButton approach.
 
     Args:
         page: Playwright page with note.com editor.
@@ -209,10 +215,10 @@ async def _click_add_button(page: Page, timeout: int) -> None:
     await editor.click()
     await asyncio.sleep(0.2)
 
-    # Find and click [+] button
-    add_button = page.locator(_ADD_BUTTON_SELECTOR).first
-    await add_button.wait_for(state="visible", timeout=timeout)
-    await add_button.click()
+    # Find and click menu button
+    menu_button = page.locator(_MENU_BUTTON_SELECTOR).first
+    await menu_button.wait_for(state="visible", timeout=timeout)
+    await menu_button.click()
     await asyncio.sleep(0.3)
 
 
