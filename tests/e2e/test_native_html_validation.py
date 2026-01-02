@@ -25,6 +25,7 @@ from tests.e2e.helpers import (
     PreviewValidator,
     insert_toc_placeholder,
     save_and_open_preview,
+    type_alignment,
     type_blockquote,
     type_code_block,
     type_horizontal_line,
@@ -182,8 +183,8 @@ class TestNativeAlignmentConversion:
         # Arrange
         test_text = "中央揃えテキスト"
 
-        # Act: Type center alignment pattern
-        await type_markdown_pattern(editor_page, f"->{test_text}<-")
+        # Act: Type center alignment pattern and apply via UI
+        await type_alignment(editor_page, test_text, "center")
 
         # Save and open preview
         preview_page = await save_and_open_preview(editor_page)
@@ -204,8 +205,8 @@ class TestNativeAlignmentConversion:
         # Arrange
         test_text = "右揃えテキスト"
 
-        # Act: Type right alignment pattern
-        await type_markdown_pattern(editor_page, f"->{test_text}")
+        # Act: Type right alignment pattern and apply via UI
+        await type_alignment(editor_page, test_text, "right")
 
         # Save and open preview
         preview_page = await save_and_open_preview(editor_page)

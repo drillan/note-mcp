@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from note_mcp.browser.text_align_helpers import apply_text_alignments
 from note_mcp.browser.toc_helpers import TOC_PLACEHOLDER
 from note_mcp.browser.typing_helpers import type_markdown_content
 
@@ -296,3 +297,42 @@ async def type_ordered_list(
     # Markdown形式に変換して本番コードに委譲
     markdown = "\n".join(f"{i + 1}. {item}" for i, item in enumerate(items))
     await type_markdown_content(page, markdown)
+
+
+async def type_alignment(
+    page: Page,
+    text: str,
+    align: str,
+) -> None:
+    """アラインメントパターンを入力し、UI経由で適用する。
+
+    TOCパターンと同様に、プレースホルダーを入力してから
+    ブラウザUIを使って実際のアラインメントを適用する。
+
+    Args:
+        page: Playwright Pageインスタンス
+        text: 揃えるテキスト
+        align: 'center', 'right', または 'left'
+
+    Raises:
+        ValueError: textが空、またはalignが無効な場合
+    """
+    if not text:
+        raise ValueError("text cannot be empty")
+
+    valid_aligns = ("center", "right", "left")
+    if align not in valid_aligns:
+        raise ValueError(f"align must be one of {valid_aligns}, got: {align}")
+
+    # 1. Markdownパターンを入力
+    if align == "center":
+        pattern = f"->{text}<-"
+    elif align == "right":
+        pattern = f"->{text}"
+    else:  # left
+        pattern = f"<-{text}"
+
+    await type_markdown_content(page, pattern)
+
+    # 2. UI経由でアラインメントを適用
+    await apply_text_alignments(page)

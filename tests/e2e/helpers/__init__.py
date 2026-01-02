@@ -16,6 +16,7 @@ from .prosemirror import ProseMirrorStabilizer
 from .typing_helpers import (
     insert_toc_placeholder,
     save_and_open_preview,
+    type_alignment,
     type_blockquote,
     type_code_block,
     type_horizontal_line,
@@ -35,6 +36,7 @@ __all__ = [
     "ProseMirrorStabilizer",
     "ValidationResult",
     "save_and_open_preview",
+    "type_alignment",
     "type_blockquote",
     "type_code_block",
     "type_horizontal_line",
