@@ -37,7 +37,7 @@ class TestHasTocPlaceholder:
         result = await has_toc_placeholder(mock_page)
 
         assert result is True
-        mock_page.locator.assert_called_once_with(".p-editorBody")
+        mock_page.locator.assert_called_once_with(".ProseMirror")
 
     @pytest.mark.asyncio
     async def test_returns_false_when_no_placeholder(self) -> None:
