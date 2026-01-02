@@ -56,28 +56,28 @@ class TestTocInsertion:
         """TOC is inserted when placeholder exists."""
         page = MagicMock()
         editor = MagicMock()
-        add_button = MagicMock()
+        menu_button = MagicMock()
         toc_button = MagicMock()
         toc_element = MagicMock()
 
-        # Setup mocks
+        # Setup mocks for new selector pattern (issue #58 fix)
         def locator_side_effect(selector: str) -> MagicMock:
             if selector == ".ProseMirror":
                 return editor
-            elif "AddButton" in selector:
-                return add_button
+            elif "メニューを開く" in selector:
+                return menu_button
             elif "目次" in selector:
                 return toc_button
-            elif "TableOfContents" in selector:
+            elif "nav" in selector:
                 return toc_element
             return MagicMock()
 
         page.locator.side_effect = locator_side_effect
         editor.text_content = AsyncMock(return_value=f"Content {TOC_PLACEHOLDER} More")
         editor.click = AsyncMock()
-        add_button.first = add_button
-        add_button.wait_for = AsyncMock()
-        add_button.click = AsyncMock()
+        menu_button.first = menu_button
+        menu_button.wait_for = AsyncMock()
+        menu_button.click = AsyncMock()
         toc_button.first = toc_button
         toc_button.wait_for = AsyncMock()
         toc_button.click = AsyncMock()
@@ -87,7 +87,7 @@ class TestTocInsertion:
 
         result = await insert_toc_at_placeholder(page)
         assert result is True
-        add_button.click.assert_called_once()
+        menu_button.click.assert_called_once()
         toc_button.click.assert_called_once()
 
     @pytest.mark.asyncio
@@ -95,29 +95,30 @@ class TestTocInsertion:
         """TOC is inserted when editor has multiple headings."""
         page = MagicMock()
         editor = MagicMock()
-        add_button = MagicMock()
+        menu_button = MagicMock()
         toc_button = MagicMock()
         toc_element = MagicMock()
 
         text_content = f"Title {TOC_PLACEHOLDER} Section 1 Content 1 Section 2 Content 2 Subsection 2.1 Content 2.1"
 
+        # Setup mocks for new selector pattern (issue #58 fix)
         def locator_side_effect(selector: str) -> MagicMock:
             if selector == ".ProseMirror":
                 return editor
-            elif "AddButton" in selector:
-                return add_button
+            elif "メニューを開く" in selector:
+                return menu_button
             elif "目次" in selector:
                 return toc_button
-            elif "TableOfContents" in selector:
+            elif "nav" in selector:
                 return toc_element
             return MagicMock()
 
         page.locator.side_effect = locator_side_effect
         editor.text_content = AsyncMock(return_value=text_content)
         editor.click = AsyncMock()
-        add_button.first = add_button
-        add_button.wait_for = AsyncMock()
-        add_button.click = AsyncMock()
+        menu_button.first = menu_button
+        menu_button.wait_for = AsyncMock()
+        menu_button.click = AsyncMock()
         toc_button.first = toc_button
         toc_button.wait_for = AsyncMock()
         toc_button.click = AsyncMock()
