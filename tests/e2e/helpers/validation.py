@@ -195,3 +195,86 @@ class PreviewValidator:
             toc_class_locator,
             "TOC element with class containing 'TableOfContents'",
         )
+
+    async def validate_link(self, text: str, url: str) -> ValidationResult:
+        """リンクが正しく変換されているか検証。
+
+        Args:
+            text: リンクテキスト
+            url: 期待されるhref値
+
+        Returns:
+            ValidationResult with success=True if <a href="{url}">{text}</a> exists
+        """
+        # href属性でリンクを検索し、テキストでフィルタ
+        locator = self.page.locator(f'a[href="{url}"]').filter(has_text=text)
+        return await self._validate_element(locator, f"<a href='{url}'> containing '{text}'")
+
+    async def validate_bold(self, text: str) -> ValidationResult:
+        """太字が正しく変換されているか検証。
+
+        Args:
+            text: 太字で囲まれるテキスト
+
+        Returns:
+            ValidationResult with success=True if <strong> or <b> contains text
+        """
+        # strongまたはbタグを検索
+        strong_locator = self.page.locator("strong").filter(has_text=text)
+        strong_count = await strong_locator.count()
+        if strong_count > 0:
+            return await self._validate_element(strong_locator, f"<strong> containing '{text}'")
+
+        # フォールバック: bタグを検索
+        b_locator = self.page.locator("b").filter(has_text=text)
+        return await self._validate_element(b_locator, f"<b> containing '{text}'")
+
+    async def validate_italic(self, text: str) -> ValidationResult:
+        """斜体が正しく変換されているか検証。
+
+        Args:
+            text: 斜体で囲まれるテキスト
+
+        Returns:
+            ValidationResult with success=True if <em> or <i> contains text
+        """
+        # emまたはiタグを検索
+        em_locator = self.page.locator("em").filter(has_text=text)
+        em_count = await em_locator.count()
+        if em_count > 0:
+            return await self._validate_element(em_locator, f"<em> containing '{text}'")
+
+        # フォールバック: iタグを検索
+        i_locator = self.page.locator("i").filter(has_text=text)
+        return await self._validate_element(i_locator, f"<i> containing '{text}'")
+
+    async def validate_horizontal_line(self) -> ValidationResult:
+        """水平線が正しく変換されているか検証。
+
+        Returns:
+            ValidationResult with success=True if <hr> element exists
+        """
+        locator = self.page.locator("hr")
+        try:
+            count = await locator.count()
+            if count > 0:
+                return ValidationResult(
+                    success=True,
+                    expected="<hr> element",
+                    actual="<hr>",
+                    message=f"Found {count} <hr> element(s)",
+                )
+            else:
+                return ValidationResult(
+                    success=False,
+                    expected="<hr> element",
+                    actual=None,
+                    message="No <hr> element found",
+                )
+        except PlaywrightError as e:
+            return ValidationResult(
+                success=False,
+                expected="<hr> element",
+                actual=None,
+                message=f"Playwright error: {e}",
+            )
