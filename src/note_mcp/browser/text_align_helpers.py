@@ -285,49 +285,56 @@ async def _remove_placeholder_markers(
     end_marker = ALIGN_END
 
     # Use JavaScript to remove markers while preserving paragraph styling
-    removed: bool = await page.evaluate(
-        """
-        ([editorSelector, startMarker, endMarker]) => {
-            const editor = document.querySelector(editorSelector);
-            if (!editor) return false;
-
-            // Find all paragraphs
-            const paragraphs = editor.querySelectorAll('p');
-            for (const p of paragraphs) {
-                const text = p.textContent || '';
-                if (text.includes(startMarker) && text.includes(endMarker)) {
-                    // Found the paragraph with markers
-                    // Walk through text nodes and remove markers
-                    const walker = document.createTreeWalker(
-                        p,
-                        NodeFilter.SHOW_TEXT,
-                        null,
-                        false
-                    );
-
-                    let node;
-                    while ((node = walker.nextNode())) {
-                        if (node.textContent.includes(startMarker)) {
-                            node.textContent = node.textContent.replace(startMarker, '');
-                        }
-                        if (node.textContent.includes(endMarker)) {
-                            node.textContent = node.textContent.replace(endMarker, '');
-                        }
-                    }
-
-                    // Trigger input event to sync ProseMirror state
-                    p.dispatchEvent(new InputEvent('input', { bubbles: true }));
-                    return true;
+    try:
+        removed: bool = await page.evaluate(
+            """
+            ([editorSelector, startMarker, endMarker]) => {
+                const editor = document.querySelector(editorSelector);
+                if (!editor) {
+                    console.warn('Editor not found with selector:', editorSelector);
+                    return false;
                 }
+
+                // Find all paragraphs
+                const paragraphs = editor.querySelectorAll('p');
+                for (const p of paragraphs) {
+                    const text = p.textContent || '';
+                    if (text.includes(startMarker) && text.includes(endMarker)) {
+                        // Found the paragraph with markers
+                        // Walk through text nodes and remove markers
+                        const walker = document.createTreeWalker(
+                            p,
+                            NodeFilter.SHOW_TEXT,
+                            null,
+                            false
+                        );
+
+                        let node;
+                        while ((node = walker.nextNode())) {
+                            if (node.textContent.includes(startMarker)) {
+                                node.textContent = node.textContent.replace(startMarker, '');
+                            }
+                            if (node.textContent.includes(endMarker)) {
+                                node.textContent = node.textContent.replace(endMarker, '');
+                            }
+                        }
+
+                        // Trigger input event to sync ProseMirror state
+                        p.dispatchEvent(new InputEvent('input', { bubbles: true }));
+                        return true;
+                    }
+                }
+                return false;
             }
-            return false;
-        }
-        """,
-        [_EDITOR_SELECTOR, start_marker, end_marker],
-    )
+            """,
+            [_EDITOR_SELECTOR, start_marker, end_marker],
+        )
+    except Exception as e:
+        logger.error(f"JavaScript evaluation failed while removing markers: {e}")
+        return False
 
     if not removed:
-        logger.warning(
+        logger.error(
             f"Failed to remove placeholder markers for: {text_content[:30]}... "
             "Alignment markers may remain in published article."
         )

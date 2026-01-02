@@ -335,4 +335,6 @@ async def type_alignment(
     await type_markdown_content(page, pattern)
 
     # 2. UI経由でアラインメントを適用
-    await apply_text_alignments(page)
+    applied_count = await apply_text_alignments(page)
+    if applied_count == 0:
+        raise RuntimeError(f"Failed to apply {align} alignment")
