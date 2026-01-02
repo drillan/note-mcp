@@ -30,6 +30,16 @@ _CITATION_PATTERN = re.compile(r"^—\s+(.+)$")
 _CITATION_URL_PATTERN = re.compile(r"^(.+?)\s+\((\S+)\)\s*$")
 # Strikethrough pattern: ~~text~~
 _STRIKETHROUGH_PATTERN = re.compile(r"~~(.+?)~~")
+# Link pattern: [text](url)
+_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+# Bold pattern: **text**
+_BOLD_PATTERN = re.compile(r"\*\*(.+?)\*\*")
+# Italic pattern: *text* (not **text**)
+_ITALIC_PATTERN = re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)")
+# Inline code pattern: `code`
+_INLINE_CODE_PATTERN = re.compile(r"`([^`]+)`")
+# Horizontal line pattern: --- (must be standalone line)
+_HR_PATTERN = re.compile(r"^---$")
 # Ruby notation pattern: ｜漢字《かんじ》 or |漢字《かんじ》 or 漢字《かんじ》
 # Vertical bar can be full-width (｜) or half-width (|) or omitted for kanji/kana
 _RUBY_PATTERN = re.compile(r"[｜|]?([一-龯ぁ-んァ-ヶー]+)《([^》]+)》")
@@ -128,6 +138,212 @@ async def _type_with_strikethrough(page: Any, text: str) -> None:
             if has_more_content and not parts[i + 1].startswith(" "):
                 # Remove the space if next content doesn't start with space
                 await page.keyboard.press("Backspace")
+
+
+async def _type_with_link(page: Any, text: str) -> str:
+    """Process link patterns and type with proper trigger.
+
+    Returns remaining text after first link is processed.
+    If no link found, returns empty string and types entire text.
+
+    Args:
+        page: Playwright page object
+        text: Text that may contain [text](url) patterns
+
+    Returns:
+        Remaining text after first link is processed, or empty string.
+    """
+    match = _LINK_PATTERN.search(text)
+    if not match:
+        await page.keyboard.type(text)
+        return ""
+
+    # Type text before link
+    before = text[: match.start()]
+    if before:
+        await page.keyboard.type(before)
+
+    # Type link pattern with space trigger
+    link_text = match.group(1)
+    link_url = match.group(2)
+    await page.keyboard.type(f"[{link_text}]({link_url})")
+    await page.keyboard.type(" ")
+    await asyncio.sleep(0.1)
+
+    # Return remaining text (remove trigger space if needed)
+    remaining = text[match.end() :]
+    if remaining and not remaining.startswith(" "):
+        await page.keyboard.press("Backspace")
+
+    return remaining
+
+
+async def _type_with_bold(page: Any, text: str) -> str:
+    """Process bold patterns and type with proper trigger.
+
+    Returns remaining text after first bold is processed.
+    If no bold found, returns empty string and types entire text.
+
+    Args:
+        page: Playwright page object
+        text: Text that may contain **bold** patterns
+
+    Returns:
+        Remaining text after first bold is processed, or empty string.
+    """
+    match = _BOLD_PATTERN.search(text)
+    if not match:
+        await page.keyboard.type(text)
+        return ""
+
+    # Type text before bold
+    before = text[: match.start()]
+    if before:
+        await page.keyboard.type(before)
+
+    # Type bold pattern with space trigger
+    bold_content = match.group(1)
+    await page.keyboard.type(f"**{bold_content}**")
+    await page.keyboard.type(" ")
+    await asyncio.sleep(0.1)
+
+    # Return remaining text (remove trigger space if needed)
+    remaining = text[match.end() :]
+    if remaining and not remaining.startswith(" "):
+        await page.keyboard.press("Backspace")
+
+    return remaining
+
+
+async def _type_with_italic(page: Any, text: str) -> str:
+    """Process italic patterns and type with proper trigger.
+
+    Returns remaining text after first italic is processed.
+    If no italic found, returns empty string and types entire text.
+
+    Args:
+        page: Playwright page object
+        text: Text that may contain *italic* patterns
+
+    Returns:
+        Remaining text after first italic is processed, or empty string.
+    """
+    match = _ITALIC_PATTERN.search(text)
+    if not match:
+        await page.keyboard.type(text)
+        return ""
+
+    # Type text before italic
+    before = text[: match.start()]
+    if before:
+        await page.keyboard.type(before)
+
+    # Type italic pattern with space trigger
+    italic_content = match.group(1)
+    await page.keyboard.type(f"*{italic_content}*")
+    await page.keyboard.type(" ")
+    await asyncio.sleep(0.1)
+
+    # Return remaining text (remove trigger space if needed)
+    remaining = text[match.end() :]
+    if remaining and not remaining.startswith(" "):
+        await page.keyboard.press("Backspace")
+
+    return remaining
+
+
+async def _type_with_inline_code(page: Any, text: str) -> str:
+    """Process inline code patterns and type with proper trigger.
+
+    Returns remaining text after first inline code is processed.
+    If no inline code found, returns empty string and types entire text.
+
+    Args:
+        page: Playwright page object
+        text: Text that may contain `code` patterns
+
+    Returns:
+        Remaining text after first inline code is processed, or empty string.
+    """
+    match = _INLINE_CODE_PATTERN.search(text)
+    if not match:
+        await page.keyboard.type(text)
+        return ""
+
+    # Type text before code
+    before = text[: match.start()]
+    if before:
+        await page.keyboard.type(before)
+
+    # Type inline code pattern with space trigger
+    code_content = match.group(1)
+    await page.keyboard.type(f"`{code_content}`")
+    await page.keyboard.type(" ")
+    await asyncio.sleep(0.1)
+
+    # Return remaining text (remove trigger space if needed)
+    remaining = text[match.end() :]
+    if remaining and not remaining.startswith(" "):
+        await page.keyboard.press("Backspace")
+
+    return remaining
+
+
+async def _type_with_inline_formatting(page: Any, text: str) -> None:
+    """Process all inline formatting patterns in correct order.
+
+    Processing order (most specific to least specific):
+    1. Links [text](url) - bracket/parenthesis delimited
+    2. Bold **text** - double asterisk (before italic to avoid conflict)
+    3. Italic *text* - single asterisk (after bold)
+    4. Inline code `code` - backtick delimited
+    5. Strikethrough ~~text~~ - double tilde
+
+    This function processes one pattern at a time, recursively handling
+    remaining text until all patterns are processed.
+
+    Args:
+        page: Playwright page object
+        text: Text that may contain inline formatting patterns
+    """
+    if not text:
+        return
+
+    # Check for link pattern first (most specific)
+    if _LINK_PATTERN.search(text):
+        remaining = await _type_with_link(page, text)
+        if remaining:
+            await _type_with_inline_formatting(page, remaining)
+        return
+
+    # Check for bold pattern (before italic to avoid ** vs * conflict)
+    if _BOLD_PATTERN.search(text):
+        remaining = await _type_with_bold(page, text)
+        if remaining:
+            await _type_with_inline_formatting(page, remaining)
+        return
+
+    # Check for italic pattern (after bold)
+    if _ITALIC_PATTERN.search(text):
+        remaining = await _type_with_italic(page, text)
+        if remaining:
+            await _type_with_inline_formatting(page, remaining)
+        return
+
+    # Check for inline code pattern
+    if _INLINE_CODE_PATTERN.search(text):
+        remaining = await _type_with_inline_code(page, text)
+        if remaining:
+            await _type_with_inline_formatting(page, remaining)
+        return
+
+    # Check for strikethrough pattern (existing)
+    if "~~" in text:
+        await _type_with_strikethrough(page, text)
+        return
+
+    # No inline formatting, type as plain text
+    await page.keyboard.type(text)
 
 
 async def _input_citation_to_figcaption(page: Any, citation: str) -> None:
@@ -278,6 +494,18 @@ async def type_markdown_content(page: Any, content: str) -> None:
             in_blockquote = False
             continue
 
+        # Check for horizontal line pattern (---)
+        if _HR_PATTERN.match(stripped_line):
+            await page.keyboard.type("---")
+            await page.keyboard.type(" ")  # Trigger conversion
+            await asyncio.sleep(0.1)
+            if i < len(lines) - 1:
+                await page.keyboard.press("Enter")
+            in_unordered_list = False
+            in_ordered_list = False
+            in_blockquote = False
+            continue
+
         # Check for text alignment patterns
         # Order matters: check center first (->text<-), then right (->text), then left (<-text)
         align_center_match = _ALIGN_CENTER_PATTERN.match(stripped_line)
@@ -348,11 +576,11 @@ async def type_markdown_content(page: Any, content: str) -> None:
                 # Already in blockquote, use Shift+Enter for soft break (creates <br>)
                 await page.keyboard.press("Shift+Enter")
                 if bq_content:
-                    await _type_with_strikethrough(page, bq_content)
+                    await _type_with_inline_formatting(page, bq_content)
             else:
                 # Start new blockquote, type with prefix to trigger blockquote mode
                 await page.keyboard.type("> ")
-                await _type_with_strikethrough(page, bq_content)
+                await _type_with_inline_formatting(page, bq_content)
                 in_blockquote = True
             in_unordered_list = False
             in_ordered_list = False
@@ -389,7 +617,7 @@ async def type_markdown_content(page: Any, content: str) -> None:
 
             # Type the heading content
             if heading_content:
-                await _type_with_strikethrough(page, heading_content)
+                await _type_with_inline_formatting(page, heading_content)
 
             # Reset list/blockquote states
             in_unordered_list = False
@@ -406,31 +634,31 @@ async def type_markdown_content(page: Any, content: str) -> None:
         if ul_match:
             if in_unordered_list:
                 # Already in list, just type content without prefix
-                await _type_with_strikethrough(page, ul_match.group(1))
+                await _type_with_inline_formatting(page, ul_match.group(1))
             else:
                 # Start new list, type prefix then content
                 prefix_match = re.match(r"^([-*+]\s+)", line)
                 prefix = prefix_match.group(1) if prefix_match else "- "
                 await page.keyboard.type(prefix)
-                await _type_with_strikethrough(page, ul_match.group(1))
+                await _type_with_inline_formatting(page, ul_match.group(1))
                 in_unordered_list = True
             in_ordered_list = False
         # Check for ordered list item
         elif ol_match := _ORDERED_LIST_PATTERN.match(line):
             if in_ordered_list:
                 # Already in list, just type content without prefix
-                await _type_with_strikethrough(page, ol_match.group(2))
+                await _type_with_inline_formatting(page, ol_match.group(2))
             else:
                 # Start new list, type prefix then content
                 prefix = f"{ol_match.group(1)}. "
                 await page.keyboard.type(prefix)
-                await _type_with_strikethrough(page, ol_match.group(2))
+                await _type_with_inline_formatting(page, ol_match.group(2))
                 in_ordered_list = True
             in_unordered_list = False
         else:
             # Not a list item
             if line:
-                await _type_with_strikethrough(page, line)
+                await _type_with_inline_formatting(page, line)
             in_unordered_list = False
             in_ordered_list = False
 

@@ -173,12 +173,6 @@ async def type_link(
 
     Note: 内部実装は本番コード type_markdown_content() に委譲。
 
-    Warning:
-        本番コードにリンク処理が未実装。
-        type_markdown_content() は [text](url) 形式のMarkdown構文を
-        プレーンテキストとして出力する。
-        追跡issue: #75
-
     Args:
         page: Playwright Pageインスタンス
         text: リンクテキスト
@@ -208,12 +202,6 @@ async def type_horizontal_line(
     """水平線をエディタに入力しProseMirror変換をトリガー。
 
     Note: 内部実装は本番コード type_markdown_content() に委譲。
-
-    Warning:
-        本番コードに水平線処理が未実装。
-        type_markdown_content() は --- 形式のMarkdown構文を
-        プレーンテキストとして出力する。
-        追跡issue: #75
 
     Args:
         page: Playwright Pageインスタンス
