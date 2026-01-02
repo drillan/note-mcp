@@ -194,99 +194,83 @@ class TestSelectPlaceholderText:
 
 
 class TestRemovePlaceholderMarkers:
-    """Tests for _remove_placeholder_markers function using Playwright operations."""
+    """Tests for _remove_placeholder_markers function using JavaScript page.evaluate()."""
 
     @pytest.mark.asyncio
     async def test_returns_true_when_markers_removed(self) -> None:
-        """Returns True when placeholder markers are successfully removed."""
+        """Returns True when JavaScript successfully removes markers."""
         mock_page = MagicMock()
-        mock_paragraphs = MagicMock()
-        mock_page.locator.return_value = mock_paragraphs
-        mock_paragraphs.count = AsyncMock(return_value=1)
-
-        mock_p = MagicMock()
-        mock_paragraphs.nth.return_value = mock_p
-        full_placeholder = f"{ALIGN_CENTER_START}aligned text{ALIGN_END}"
-        mock_p.text_content = AsyncMock(return_value=full_placeholder)
-        mock_p.click = AsyncMock()
-
-        mock_keyboard = MagicMock()
-        mock_page.keyboard = mock_keyboard
-        mock_keyboard.type = AsyncMock()
+        # Mock page.evaluate to return True (markers removed)
+        mock_page.evaluate = AsyncMock(return_value=True)
 
         result = await _remove_placeholder_markers(mock_page, "center", "aligned text")
 
         assert result is True
-        mock_p.click.assert_called_once_with(click_count=3)
-        mock_keyboard.type.assert_called_once_with("aligned text")
+        mock_page.evaluate.assert_called_once()
+        # Verify evaluate was called with correct arguments
+        call_args = mock_page.evaluate.call_args
+        args_list = call_args[0][1]  # [editorSelector, startMarker, endMarker]
+        assert ".ProseMirror" in args_list[0]  # editor selector
+        assert "§§ALIGN_CENTER§§" in args_list[1]  # start_marker
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_no_paragraphs(self) -> None:
-        """Returns False when editor has no paragraphs."""
+    async def test_returns_false_when_markers_not_found(self) -> None:
+        """Returns False when JavaScript cannot find markers."""
         mock_page = MagicMock()
-        mock_paragraphs = MagicMock()
-        mock_page.locator.return_value = mock_paragraphs
-        mock_paragraphs.count = AsyncMock(return_value=0)
+        # Mock page.evaluate to return False (markers not found)
+        mock_page.evaluate = AsyncMock(return_value=False)
 
         result = await _remove_placeholder_markers(mock_page, "center", "test text")
 
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_placeholder_not_found(self) -> None:
-        """Returns False when placeholder is not found in paragraphs."""
+    async def test_returns_false_on_javascript_exception(self) -> None:
+        """Returns False when JavaScript evaluation raises exception."""
         mock_page = MagicMock()
-        mock_paragraphs = MagicMock()
-        mock_page.locator.return_value = mock_paragraphs
-        mock_paragraphs.count = AsyncMock(return_value=1)
+        # Mock page.evaluate to raise an exception
+        mock_page.evaluate = AsyncMock(side_effect=Exception("Browser context closed"))
 
-        mock_p = MagicMock()
-        mock_paragraphs.nth.return_value = mock_p
-        mock_p.text_content = AsyncMock(return_value="Different content")
-
-        result = await _remove_placeholder_markers(mock_page, "left", "missing text")
+        result = await _remove_placeholder_markers(mock_page, "center", "test text")
 
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_uses_correct_selector_constant(self) -> None:
-        """Uses _EDITOR_SELECTOR constant when locating paragraphs."""
-        mock_page = MagicMock()
-        mock_paragraphs = MagicMock()
-        mock_page.locator.return_value = mock_paragraphs
-        mock_paragraphs.count = AsyncMock(return_value=1)
-
-        mock_p = MagicMock()
-        mock_paragraphs.nth.return_value = mock_p
-        full_placeholder = f"{ALIGN_CENTER_START}test{ALIGN_END}"
-        mock_p.text_content = AsyncMock(return_value=full_placeholder)
-        mock_p.click = AsyncMock()
-
-        mock_keyboard = MagicMock()
-        mock_page.keyboard = mock_keyboard
-        mock_keyboard.type = AsyncMock()
-
-        await _remove_placeholder_markers(mock_page, "center", "test")
-
-        # Should use .ProseMirror selector (from _EDITOR_SELECTOR constant)
-        mock_page.locator.assert_called_once_with(".ProseMirror p")
-
-    @pytest.mark.asyncio
-    async def test_logs_warning_on_failure(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Logs warning when marker removal fails."""
+    async def test_logs_error_on_exception(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Logs error when JavaScript evaluation fails."""
         import logging
 
         mock_page = MagicMock()
-        mock_paragraphs = MagicMock()
-        mock_page.locator.return_value = mock_paragraphs
-        mock_paragraphs.count = AsyncMock(return_value=1)
+        mock_page.evaluate = AsyncMock(side_effect=Exception("Timeout"))
 
-        mock_p = MagicMock()
-        mock_paragraphs.nth.return_value = mock_p
-        mock_p.text_content = AsyncMock(return_value="Different content - placeholder not found")
+        with caplog.at_level(logging.ERROR):
+            await _remove_placeholder_markers(mock_page, "center", "test content")
 
-        with caplog.at_level(logging.WARNING):
+        assert "JavaScript evaluation failed while removing markers" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_logs_error_when_markers_not_removed(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Logs error when marker removal fails (returns False)."""
+        import logging
+
+        mock_page = MagicMock()
+        mock_page.evaluate = AsyncMock(return_value=False)
+
+        with caplog.at_level(logging.ERROR):
             await _remove_placeholder_markers(mock_page, "center", "test content")
 
         assert "Failed to remove placeholder markers" in caplog.text
         assert "Alignment markers may remain in published article" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_uses_correct_alignment_marker(self) -> None:
+        """Uses correct alignment marker based on alignment_type."""
+        mock_page = MagicMock()
+        mock_page.evaluate = AsyncMock(return_value=True)
+
+        await _remove_placeholder_markers(mock_page, "right", "test")
+
+        call_args = mock_page.evaluate.call_args
+        args_list = call_args[0][1]  # [editorSelector, startMarker, endMarker]
+        assert "§§ALIGN_RIGHT§§" in args_list[1]  # start_marker
+        assert "§§/ALIGN§§" in args_list[2]  # end_marker
