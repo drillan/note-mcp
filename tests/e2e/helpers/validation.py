@@ -154,8 +154,9 @@ class PreviewValidator:
         """目次（TOC）がプレビューに表示されているか検証。
 
         note.comのTOC要素は以下のいずれかで検出:
-        1. nav要素（記事本文内）
-        2. TableOfContentsを含むクラス名を持つ要素
+        1. <table-of-contents> カスタム要素（note.com固有）
+        2. nav要素（記事本文内）
+        3. TableOfContentsを含むクラス名を持つ要素
 
         プレビューページのロード完了を待機してから検証を行う。
 
@@ -175,6 +176,17 @@ class PreviewValidator:
                 expected="Article body container",
                 actual=None,
                 message="Article body not found on preview page",
+            )
+
+        # note.com固有: <table-of-contents> カスタム要素を検索
+        toc_custom_locator = article_body.locator("table-of-contents")
+        toc_custom_count = await toc_custom_locator.count()
+        if toc_custom_count > 0:
+            return ValidationResult(
+                success=True,
+                expected="<table-of-contents> custom element",
+                actual=f"Found {toc_custom_count} table-of-contents element(s)",
+                message=f"Found {toc_custom_count} <table-of-contents> element(s) in article body",
             )
 
         # nav要素を検索（記事本文内のTOC）
