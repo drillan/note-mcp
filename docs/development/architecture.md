@@ -170,9 +170,9 @@ Markdown記法 `[text](url)` はProseMirrorエディタで自動変換されま�
 ```
 Markdown入力: [テキスト](https://example.com)
     ↓
-パターン検出: type_link()でリンク記法を識別
+パターン検出: _type_with_link()でリンク記法を識別
     ↓
-ブラウザ自動化: insert_link.pyでUI操作
+ブラウザ自動化: insert_link_at_cursor()でUI操作
     ↓
 リンク挿入: エディタにリンクmark付きテキストが挿入
 ```

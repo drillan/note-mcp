@@ -6,7 +6,7 @@ UI自動化でリンク挿入を実現する。
 
 UI操作フロー:
     1. テキストを入力
-    2. テキストを選択（Ctrl+Shift+Left）
+    2. テキストを選択（Shift+Left × 文字数）
     3. リンクダイアログを開く（Ctrl+K）
     4. URL入力フィールドを待機
     5. URLを入力
@@ -61,7 +61,7 @@ async def insert_link_at_cursor(
 
     この関数はnote.comエディタのリンクダイアログを使用する:
     1. テキストを入力
-    2. テキストを選択（Ctrl+Shift+Left）
+    2. テキストを選択（Shift+Left × 文字数）
     3. リンクダイアログを開く（Ctrl+K）
     4. URL入力フィールドにURLを入力
     5. Enterで適用
@@ -94,49 +94,55 @@ async def insert_link_at_cursor(
 
     # Step 1: Click editor to ensure focus
     logger.info("Step 1: Ensuring editor focus...")
-    if not await _ensure_editor_focus(page):
-        logger.error("Step 1 FAILED: Could not focus editor")
-        debug_steps.append("S1:FAIL")
+    success, reason = await _ensure_editor_focus(page)
+    if not success:
+        logger.error(f"Step 1 FAILED: Could not focus editor ({reason})")
+        debug_steps.append(f"S1:FAIL:{reason}")
         return LinkResult.TIMEOUT, "|".join(debug_steps)
     debug_steps.append("S1:OK")
 
     # Step 2: Type the link text
     logger.info(f"Step 2: Typing text: {text}")
-    if not await _type_text(page, text):
-        logger.error("Step 2 FAILED: Could not type text")
-        debug_steps.append("S2:FAIL")
+    success, reason = await _type_text(page, text)
+    if not success:
+        logger.error(f"Step 2 FAILED: Could not type text ({reason})")
+        debug_steps.append(f"S2:FAIL:{reason}")
         return LinkResult.TIMEOUT, "|".join(debug_steps)
     debug_steps.append("S2:OK")
 
     # Step 3: Select the typed text
     logger.info("Step 3: Selecting text...")
-    if not await _select_text(page, text):
-        logger.error("Step 3 FAILED: Could not select text")
-        debug_steps.append("S3:FAIL")
+    success, reason = await _select_text(page, text)
+    if not success:
+        logger.error(f"Step 3 FAILED: Could not select text ({reason})")
+        debug_steps.append(f"S3:FAIL:{reason}")
         return LinkResult.TIMEOUT, "|".join(debug_steps)
     debug_steps.append("S3:OK")
 
     # Step 4: Open link dialog with Ctrl+K
     logger.info("Step 4: Opening link dialog...")
-    if not await _open_link_dialog(page, timeout):
-        logger.error("Step 4 FAILED: Could not open link dialog")
-        debug_steps.append("S4:FAIL")
+    success, reason = await _open_link_dialog(page, timeout)
+    if not success:
+        logger.error(f"Step 4 FAILED: Could not open link dialog ({reason})")
+        debug_steps.append(f"S4:FAIL:{reason}")
         return LinkResult.TIMEOUT, "|".join(debug_steps)
     debug_steps.append("S4:OK")
 
     # Step 5: Enter URL
     logger.info(f"Step 5: Entering URL: {url}")
-    if not await _enter_url(page, url):
-        logger.error("Step 5 FAILED: Could not enter URL")
-        debug_steps.append("S5:FAIL")
+    success, reason = await _enter_url(page, url)
+    if not success:
+        logger.error(f"Step 5 FAILED: Could not enter URL ({reason})")
+        debug_steps.append(f"S5:FAIL:{reason}")
         return LinkResult.TIMEOUT, "|".join(debug_steps)
     debug_steps.append("S5:OK")
 
     # Step 6: Apply link (press Enter)
     logger.info("Step 6: Applying link...")
-    if not await _apply_link(page):
-        logger.error("Step 6 FAILED: Could not apply link")
-        debug_steps.append("S6:FAIL")
+    success, reason = await _apply_link(page)
+    if not success:
+        logger.error(f"Step 6 FAILED: Could not apply link ({reason})")
+        debug_steps.append(f"S6:FAIL:{reason}")
         return LinkResult.TIMEOUT, "|".join(debug_steps)
     debug_steps.append("S6:OK")
 
@@ -153,14 +159,14 @@ async def insert_link_at_cursor(
     return result, "|".join(debug_steps)
 
 
-async def _ensure_editor_focus(page: Page) -> bool:
+async def _ensure_editor_focus(page: Page) -> tuple[bool, str]:
     """エディタにフォーカスを確保する。
 
     Args:
         page: Playwright page with note.com editor.
 
     Returns:
-        True if editor was focused successfully.
+        Tuple of (success, reason) where reason explains failure.
     """
     try:
         editor = page.locator(_EDITOR_SELECTOR).first
@@ -168,17 +174,22 @@ async def _ensure_editor_focus(page: Page) -> bool:
             await editor.click()
             await asyncio.sleep(_CLICK_WAIT_SECONDS)
             logger.debug("Clicked editor to focus")
-            return True
+            return True, ""
 
         logger.warning("Editor not found")
-        return False
+        return False, "editor_not_found"
 
+    except asyncio.CancelledError:
+        raise
+    except PlaywrightError as e:
+        logger.warning(f"Playwright error focusing editor: {type(e).__name__}: {e}")
+        return False, f"playwright_error:{type(e).__name__}"
     except Exception as e:
         logger.warning(f"Error focusing editor: {type(e).__name__}: {e}")
-        return False
+        return False, f"unexpected_error:{type(e).__name__}"
 
 
-async def _type_text(page: Page, text: str) -> bool:
+async def _type_text(page: Page, text: str) -> tuple[bool, str]:
     """テキストを入力する。
 
     Args:
@@ -186,33 +197,38 @@ async def _type_text(page: Page, text: str) -> bool:
         text: 入力するテキスト.
 
     Returns:
-        True if text was typed successfully.
+        Tuple of (success, reason) where reason explains failure.
     """
     try:
         await page.keyboard.type(text)
         await asyncio.sleep(_INPUT_WAIT_SECONDS)
         logger.debug(f"Typed text: {text}")
-        return True
+        return True, ""
 
+    except asyncio.CancelledError:
+        raise
+    except PlaywrightError as e:
+        logger.warning(f"Playwright error typing text: {type(e).__name__}: {e}")
+        return False, f"playwright_error:{type(e).__name__}"
     except Exception as e:
         logger.warning(f"Error typing text: {type(e).__name__}: {e}")
-        return False
+        return False, f"unexpected_error:{type(e).__name__}"
 
 
-async def _select_text(page: Page, text: str) -> bool:
+async def _select_text(page: Page, text: str) -> tuple[bool, str]:
     """入力したテキストを選択する。
 
-    Ctrl+Shift+Leftを繰り返してテキストを選択する。
+    Shift+Leftを文字数分繰り返してテキストを選択する。
 
     Args:
         page: Playwright page with note.com editor.
         text: 選択するテキスト（文字数計算用）.
 
     Returns:
-        True if text was selected successfully.
+        Tuple of (success, reason) where reason explains failure.
     """
     try:
-        # 日本語文字の場合、文字数分だけCtrl+Shift+Leftを実行
+        # 日本語文字の場合、文字数分だけShift+Leftを実行
         # 英語の場合は単語単位で選択されるが、日本語は文字単位
         char_count = len(text)
         for _ in range(char_count):
@@ -221,14 +237,19 @@ async def _select_text(page: Page, text: str) -> bool:
 
         await asyncio.sleep(_INPUT_WAIT_SECONDS)
         logger.debug(f"Selected text ({char_count} chars)")
-        return True
+        return True, ""
 
+    except asyncio.CancelledError:
+        raise
+    except PlaywrightError as e:
+        logger.warning(f"Playwright error selecting text: {type(e).__name__}: {e}")
+        return False, f"playwright_error:{type(e).__name__}"
     except Exception as e:
         logger.warning(f"Error selecting text: {type(e).__name__}: {e}")
-        return False
+        return False, f"unexpected_error:{type(e).__name__}"
 
 
-async def _open_link_dialog(page: Page, timeout: int) -> bool:
+async def _open_link_dialog(page: Page, timeout: int) -> tuple[bool, str]:
     """リンクダイアログを開く（Ctrl+K）。
 
     Args:
@@ -236,7 +257,7 @@ async def _open_link_dialog(page: Page, timeout: int) -> bool:
         timeout: タイムアウト（ミリ秒）.
 
     Returns:
-        True if dialog was opened successfully.
+        Tuple of (success, reason) where reason explains failure.
     """
     try:
         # Press Ctrl+K to open link dialog
@@ -248,17 +269,19 @@ async def _open_link_dialog(page: Page, timeout: int) -> bool:
         await url_input.wait_for(state="visible", timeout=timeout)
 
         logger.debug("Link dialog opened")
-        return True
+        return True, ""
 
+    except asyncio.CancelledError:
+        raise
     except PlaywrightError as e:
         logger.warning(f"Timeout waiting for link dialog: {type(e).__name__}: {e}")
-        return False
+        return False, f"dialog_timeout:{type(e).__name__}"
     except Exception as e:
         logger.warning(f"Error opening link dialog: {type(e).__name__}: {e}")
-        return False
+        return False, f"unexpected_error:{type(e).__name__}"
 
 
-async def _enter_url(page: Page, url: str) -> bool:
+async def _enter_url(page: Page, url: str) -> tuple[bool, str]:
     """URL入力フィールドにURLを入力する。
 
     Args:
@@ -266,7 +289,7 @@ async def _enter_url(page: Page, url: str) -> bool:
         url: 入力するURL.
 
     Returns:
-        True if URL was entered successfully.
+        Tuple of (success, reason) where reason explains failure.
     """
     try:
         url_input = page.locator(_LINK_URL_INPUT_SELECTOR).first
@@ -274,34 +297,44 @@ async def _enter_url(page: Page, url: str) -> bool:
             await url_input.fill(url)
             await asyncio.sleep(_INPUT_WAIT_SECONDS)
             logger.debug(f"Entered URL: {url}")
-            return True
+            return True, ""
 
         logger.warning("URL input field not found")
-        return False
+        return False, "url_input_not_found"
 
+    except asyncio.CancelledError:
+        raise
+    except PlaywrightError as e:
+        logger.warning(f"Playwright error entering URL: {type(e).__name__}: {e}")
+        return False, f"playwright_error:{type(e).__name__}"
     except Exception as e:
         logger.warning(f"Error entering URL: {type(e).__name__}: {e}")
-        return False
+        return False, f"unexpected_error:{type(e).__name__}"
 
 
-async def _apply_link(page: Page) -> bool:
+async def _apply_link(page: Page) -> tuple[bool, str]:
     """リンクを適用する（Enterキー）。
 
     Args:
         page: Playwright page with note.com editor.
 
     Returns:
-        True if link was applied successfully.
+        Tuple of (success, reason) where reason explains failure.
     """
     try:
         await page.keyboard.press("Enter")
         await asyncio.sleep(_CLICK_WAIT_SECONDS)
         logger.debug("Applied link with Enter key")
-        return True
+        return True, ""
 
+    except asyncio.CancelledError:
+        raise
+    except PlaywrightError as e:
+        logger.warning(f"Playwright error applying link: {type(e).__name__}: {e}")
+        return False, f"playwright_error:{type(e).__name__}"
     except Exception as e:
         logger.warning(f"Error applying link: {type(e).__name__}: {e}")
-        return False
+        return False, f"unexpected_error:{type(e).__name__}"
 
 
 async def _verify_link_insertion(

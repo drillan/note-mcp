@@ -231,7 +231,10 @@ async def _type_with_link(page: Any, text: str) -> str:
     # Insert link via UI automation (Ctrl+K dialog)
     result, debug = await insert_link_at_cursor(page, link_text, link_url)
     if result != LinkResult.SUCCESS:
-        logger.warning(f"Link insertion failed for [{link_text}]({link_url}): {debug}")
+        logger.error(
+            f"Link insertion FAILED for [{link_text}]({link_url}): {debug}. "
+            "Falling back to plain text (link will NOT be clickable)."
+        )
         # Fallback: type as plain text
         await page.keyboard.type(f"[{link_text}]({link_url})")
 
