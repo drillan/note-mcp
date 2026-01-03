@@ -11,6 +11,7 @@ from note_mcp.browser.insert_embed import (
     NOTE_PATTERN,
     TWITTER_PATTERN,
     YOUTUBE_PATTERN,
+    EmbedResult,
     get_embed_service,
     is_supported_embed_url,
 )
@@ -184,3 +185,28 @@ class TestGetEmbedService:
     def test_returns_none_for_unsupported_urls(self, url: str) -> None:
         """Should return None for unsupported URLs."""
         assert get_embed_service(url) is None
+
+
+class TestEmbedResult:
+    """Tests for EmbedResult enum."""
+
+    def test_success_value(self) -> None:
+        """SUCCESS should have value 'success'."""
+        assert EmbedResult.SUCCESS.value == "success"
+
+    def test_link_inserted_value(self) -> None:
+        """LINK_INSERTED should have value 'link'."""
+        assert EmbedResult.LINK_INSERTED.value == "link"
+
+    def test_timeout_value(self) -> None:
+        """TIMEOUT should have value 'timeout'."""
+        assert EmbedResult.TIMEOUT.value == "timeout"
+
+    def test_enum_members(self) -> None:
+        """EmbedResult should have exactly 3 members."""
+        assert len(EmbedResult) == 3
+
+    def test_all_members_present(self) -> None:
+        """All expected members should be present."""
+        members = {member.name for member in EmbedResult}
+        assert members == {"SUCCESS", "LINK_INSERTED", "TIMEOUT"}

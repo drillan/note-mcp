@@ -16,12 +16,28 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from playwright.async_api import Page
 
 logger = logging.getLogger(__name__)
+
+
+class EmbedResult(Enum):
+    """埋め込み挿入の結果タイプ。
+
+    埋め込みを挿入しようとした場合、以下の3つの結果があり得る:
+    - SUCCESS: 埋め込みカードが正常に挿入された
+    - LINK_INSERTED: URLが無効（削除済み、非公開等）でリンクとして挿入された
+    - TIMEOUT: タイムアウト（予期しない失敗）
+    """
+
+    SUCCESS = "success"  # 埋め込みカード挿入成功
+    LINK_INSERTED = "link"  # リンクとして挿入（URL無効等）
+    TIMEOUT = "timeout"  # タイムアウト（予期しない失敗）
+
 
 # Supported embed services and their URL patterns
 YOUTUBE_PATTERN = re.compile(r"^https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w-]+")
@@ -76,7 +92,7 @@ async def insert_embed_at_cursor(
     page: Page,
     url: str,
     timeout: int = _EMBED_WAIT_TIMEOUT_MS,
-) -> tuple[bool, str]:
+) -> tuple[EmbedResult, str]:
     """Insert an embed at the current cursor position in the editor.
 
     This function uses the note.com editor's embed dialog:
@@ -84,7 +100,7 @@ async def insert_embed_at_cursor(
     2. Click "埋め込み" (embed) menu item
     3. Enter URL in the textarea
     4. Click "適用" (apply) button
-    5. Wait for the embed figure to appear
+    5. Wait for the embed figure or link to appear
 
     Args:
         page: Playwright page with note.com editor.
@@ -92,7 +108,10 @@ async def insert_embed_at_cursor(
         timeout: Maximum wait time in milliseconds for embed to appear.
 
     Returns:
-        Tuple of (True if embed was successfully inserted, debug info string).
+        Tuple of (EmbedResult indicating what happened, debug info string).
+        - EmbedResult.SUCCESS: Embed card was inserted
+        - EmbedResult.LINK_INSERTED: URL was inserted as link (URL may be invalid)
+        - EmbedResult.TIMEOUT: Neither detected within timeout
 
     Raises:
         ValueError: If URL is not from a supported service.
@@ -117,7 +136,7 @@ async def insert_embed_at_cursor(
     if not await _click_add_button(page):
         logger.error("Step 1 FAILED: Could not click add button")
         debug_steps.append("S1:FAIL")
-        return False, "|".join(debug_steps)
+        return EmbedResult.TIMEOUT, "|".join(debug_steps)
     debug_steps.append("S1:OK")
 
     # Step 2: Click "埋め込み" menu item
@@ -125,7 +144,7 @@ async def insert_embed_at_cursor(
     if not await _click_embed_menu_item(page):
         logger.error("Step 2 FAILED: Could not click embed menu item")
         debug_steps.append("S2:FAIL")
-        return False, "|".join(debug_steps)
+        return EmbedResult.TIMEOUT, "|".join(debug_steps)
     debug_steps.append("S2:OK")
 
     # Step 3: Enter URL in textarea
@@ -133,7 +152,7 @@ async def insert_embed_at_cursor(
     if not await _enter_embed_url(page, url):
         logger.error("Step 3 FAILED: Could not enter embed URL")
         debug_steps.append("S3:FAIL")
-        return False, "|".join(debug_steps)
+        return EmbedResult.TIMEOUT, "|".join(debug_steps)
     debug_steps.append("S3:OK")
 
     # Step 4: Click "適用" button
@@ -141,19 +160,22 @@ async def insert_embed_at_cursor(
     if not await _click_apply_button(page):
         logger.error("Step 4 FAILED: Could not click apply button")
         debug_steps.append("S4:FAIL")
-        return False, "|".join(debug_steps)
+        return EmbedResult.TIMEOUT, "|".join(debug_steps)
     debug_steps.append("S4:OK")
 
-    # Step 5: Wait for embed to appear
-    logger.info("Step 5: Waiting for embed figure to appear...")
-    if not await _wait_for_embed_insertion(page, initial_count, timeout):
-        logger.error("Step 5 FAILED: Embed figure not found within timeout")
-        debug_steps.append("S5:FAIL")
-        return False, "|".join(debug_steps)
-    debug_steps.append("S5:OK")
+    # Step 5: Wait for embed or link to appear
+    logger.info("Step 5: Waiting for embed figure or link to appear...")
+    result = await _wait_for_embed_insertion(page, initial_count, timeout, url)
+    debug_steps.append(f"S5:{result.value}")
 
-    logger.info(f"Successfully inserted {service} embed")
-    return True, "|".join(debug_steps)
+    if result == EmbedResult.SUCCESS:
+        logger.info(f"Successfully inserted {service} embed")
+    elif result == EmbedResult.LINK_INSERTED:
+        logger.info(f"URL inserted as link (may be invalid): {url}")
+    else:
+        logger.error("Step 5 FAILED: Neither embed nor link detected within timeout")
+
+    return result, "|".join(debug_steps)
 
 
 async def _get_embed_count(page: Page) -> int:
@@ -372,47 +394,88 @@ async def _wait_for_embed_insertion(
     page: Page,
     initial_count: int,
     timeout: int,
-) -> bool:
-    """Wait for embed figure to appear in editor.
+    url: str,
+) -> EmbedResult:
+    """Wait for embed figure or link to appear in editor.
+
+    Monitors the editor for either:
+    1. Embed card insertion (SUCCESS)
+    2. Link insertion (LINK_INSERTED) - occurs when URL is invalid
+    3. Timeout (TIMEOUT) - neither detected within timeout
 
     Args:
         page: Playwright page with note.com editor.
         initial_count: Number of embeds before insertion.
         timeout: Maximum wait time in milliseconds.
+        url: URL being embedded (used for link detection).
 
     Returns:
-        True if embed was inserted.
+        EmbedResult indicating what happened.
     """
     try:
-        # Wait for embed count to increase
-        inserted = await page.evaluate(
+        # Wait for either embed card or link to appear
+        result = await page.evaluate(
             f"""
             async (args) => {{
-                const {{ initialCount, timeout }} = args;
+                const {{ initialCount, timeout, url }} = args;
                 const startTime = Date.now();
-                while (Date.now() - startTime < timeout) {{
-                    const editor = document.querySelector('{_EDITOR_SELECTOR}');
-                    if (editor) {{
-                        const embeds = editor.querySelectorAll('{_EMBED_FIGURE_SELECTOR}');
-                        if (embeds.length > initialCount) {{
+
+                // Get initial link count for this URL
+                const editor = document.querySelector('{_EDITOR_SELECTOR}');
+                if (!editor) {{
+                    return {{ type: 'timeout', reason: 'editor_not_found' }};
+                }}
+
+                const getEmbedCount = () => {{
+                    return editor.querySelectorAll('{_EMBED_FIGURE_SELECTOR}').length;
+                }};
+
+                const hasNewLink = () => {{
+                    // Check if a link with this URL exists in the editor
+                    const links = editor.querySelectorAll('a');
+                    for (const link of links) {{
+                        if (link.href === url || link.textContent === url) {{
                             return true;
                         }}
                     }}
-                    await new Promise(r => setTimeout(r, 500));
+                    return false;
+                }};
+
+                // Record initial state
+                const initialLinkExists = hasNewLink();
+
+                while (Date.now() - startTime < timeout) {{
+                    // Check for embed card first
+                    if (getEmbedCount() > initialCount) {{
+                        return {{ type: 'success' }};
+                    }}
+
+                    // Check for link (if it didn't exist before)
+                    if (!initialLinkExists && hasNewLink()) {{
+                        return {{ type: 'link_inserted' }};
+                    }}
+
+                    await new Promise(r => setTimeout(r, 200));
                 }}
-                return false;
+                return {{ type: 'timeout', reason: 'no_change_detected' }};
             }}
             """,
-            {"initialCount": initial_count, "timeout": timeout},
+            {"initialCount": initial_count, "timeout": timeout, "url": url},
         )
 
-        if inserted:
-            logger.debug("Embed inserted successfully")
-            return True
+        result_type = result.get("type", "timeout") if result else "timeout"
 
-        logger.warning("Embed not inserted within timeout")
-        return False
+        if result_type == "success":
+            logger.debug("Embed card inserted successfully")
+            return EmbedResult.SUCCESS
+        elif result_type == "link_inserted":
+            logger.info(f"Link inserted instead of embed card (URL may be invalid): {url}")
+            return EmbedResult.LINK_INSERTED
+        else:
+            reason = result.get("reason", "unknown") if result else "unknown"
+            logger.warning(f"Embed not inserted within timeout: {reason}")
+            return EmbedResult.TIMEOUT
 
     except Exception as e:
         logger.warning(f"Error waiting for embed insertion: {type(e).__name__}: {e}")
-        return False
+        return EmbedResult.TIMEOUT
