@@ -96,17 +96,21 @@ async def with_retry(
             if attempt < max_attempts:
                 delay = backoff_base * (2 ** (attempt - 1))
                 logger.warning(
-                    "Attempt %d failed: %s. Retrying in %.1fs...",
+                    "Attempt %d/%d failed: %s: %s. Retrying in %.1fs...",
                     attempt,
+                    max_attempts,
                     type(e).__name__,
+                    str(e),
                     delay,
                 )
                 await asyncio.sleep(delay)
             else:
                 logger.error(
-                    "Attempt %d failed: %s. No more retries.",
+                    "Attempt %d/%d failed: %s: %s. No more retries.",
                     attempt,
+                    max_attempts,
                     type(e).__name__,
+                    str(e),
                 )
 
     # Should not reach here, but type checker needs this
