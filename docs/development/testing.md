@@ -174,6 +174,76 @@ uv run pytest tests/e2e/test_native_html_validation.py -v
 | 中央揃え | P2 | `->text<-` | `text-align: center` |
 | 右揃え | P2 | `->text` | `text-align: right` |
 
+## ネットワークエラー時のリトライ
+
+E2Eテストは外部サービス（note.com）に依存するため、一時的なネットワークエラーでテストが失敗することがあります。`with_retry`ヘルパー関数を使用することで、一時的なエラーから自動的に回復できます。
+
+### 基本的な使い方
+
+```python
+from tests.e2e.helpers import with_retry
+
+# API呼び出しをリトライ対象にする
+article = await with_retry(lambda: create_draft(session, input))
+
+# タイムアウトエラーが発生しても最大3回まで自動リトライ
+result = await with_retry(lambda: update_article(session, article_id, data))
+```
+
+### パラメータ
+
+| パラメータ | 型 | デフォルト | 説明 |
+|-----------|-----|-----------|------|
+| `func` | `Callable[[], Awaitable[T]]` | (必須) | リトライ対象の非同期関数 |
+| `max_attempts` | `int` | `3` | 最大試行回数 |
+| `backoff_base` | `float` | `1.0` | バックオフ基準時間（秒） |
+| `retryable_exceptions` | `tuple[type[Exception], ...]` | `RETRYABLE_EXCEPTIONS` | リトライ対象の例外 |
+
+### 指数バックオフ
+
+リトライ間隔は指数バックオフで増加します（`max_attempts=3`の場合、最大2回のリトライ）：
+
+- 1回目の試行: 失敗 → 1秒待機してリトライ
+- 2回目の試行: 失敗 → 2秒待機してリトライ
+- 3回目の試行: 失敗 → 例外を発生
+
+これにより、一時的な障害からの回復時間を確保しつつ、永続的な障害に対しては迅速に失敗します。
+
+### リトライ対象の例外
+
+以下の例外は一時的なネットワークエラーとしてリトライされます：
+
+| 例外 | 説明 |
+|------|------|
+| `TimeoutError` | 一時的なタイムアウト |
+| `asyncio.TimeoutError` | 非同期タイムアウト |
+| `httpx.TimeoutException` | HTTPタイムアウト |
+| `httpx.NetworkError` | ネットワーク接続エラー |
+| `PlaywrightError`（タイムアウト系） | ブラウザ操作のタイムアウト |
+
+### いつ使うべきか
+
+**使うべき場面**：
+- API呼び出し（`create_draft`, `update_article`など）
+- ブラウザでの画像アップロード
+- プレビューページの取得
+
+**使わなくてよい場面**：
+- ローカルファイル操作
+- Markdown変換（純粋な変換処理）
+- テストのセットアップ/クリーンアップ
+
+### ログ出力
+
+リトライが発生すると、ログに記録されます：
+
+```
+WARNING - Attempt 1 failed: TimeoutError. Retrying in 1.0s...
+WARNING - Attempt 2 failed: TimeoutError. Retrying in 2.0s...
+```
+
+これにより、CI/CDログでフレイキーテストの原因を追跡できます。
+
 ## MCPツールテスト
 
 MCPツールテストは、note-mcpが提供する11個のMCPツールの動作を検証するE2Eテストです。

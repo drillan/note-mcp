@@ -13,6 +13,7 @@ Modules:
 
 from .image_utils import ImageValidationResult, ImageValidator, create_test_png
 from .prosemirror import ProseMirrorStabilizer
+from .retry import with_retry
 from .typing_helpers import (
     insert_toc_placeholder,
     save_and_open_preview,
@@ -44,4 +45,5 @@ __all__ = [
     "type_markdown_pattern",
     "type_ordered_list",
     "type_unordered_list",
+    "with_retry",
 ]
