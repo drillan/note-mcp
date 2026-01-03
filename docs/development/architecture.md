@@ -162,6 +162,30 @@ URL検出: _is_embed_url()で対応サービスかを判定
 
 > **注意**: 非対応サービスのURLは通常のリンクとして表示されます。埋め込みカードにはなりません。
 
+#### リンク（Link）機能
+
+Markdown記法 `[text](url)` はProseMirrorエディタで自動変換されません（InputRule未実装）。
+このため、ブラウザ自動化でUI経由のリンク挿入を行います。
+
+```
+Markdown入力: [テキスト](https://example.com)
+    ↓
+パターン検出: _type_with_link()でリンク記法を識別
+    ↓
+ブラウザ自動化: insert_link_at_cursor()でUI操作
+    ↓
+リンク挿入: エディタにリンクmark付きテキストが挿入
+```
+
+**モジュール構成:**
+
+- `insert_link.py` - ブラウザ自動化でリンク挿入
+  - `insert_link_at_cursor()` - カーソル位置にリンクを挿入
+  - `LinkResult` - 挿入結果（SUCCESS, TIMEOUT）
+
+> **注意**: 他のMarkdown書式（`**bold**`、`~~strikethrough~~`）は自動変換されますが、
+> リンクはUI経由での挿入が必要です。
+
 ### Investigatorモード
 
 `INVESTIGATOR_MODE=1`で有効になるAPI調査機能です。

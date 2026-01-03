@@ -1427,7 +1427,12 @@ class TestTypeWithInlinePattern:
 
 
 class TestTypeWithLink:
-    """Tests for _type_with_link function."""
+    """Tests for _type_with_link function.
+
+    Note: Links are inserted via UI automation (insert_link_at_cursor),
+    not by typing markdown syntax, because ProseMirror has no InputRule
+    for [text](url) conversion.
+    """
 
     @pytest.mark.asyncio
     async def test_no_link_types_directly(self) -> None:
@@ -1438,34 +1443,80 @@ class TestTypeWithLink:
         assert remaining == ""
 
     @pytest.mark.asyncio
-    async def test_link_pattern_types_with_trigger(self) -> None:
-        """Test that link pattern is typed with space trigger."""
-        mock_page = AsyncMock()
-        remaining = await _type_with_link(mock_page, "[example](https://example.com)")
+    async def test_link_pattern_uses_ui_automation(self) -> None:
+        """Test that link pattern uses insert_link_at_cursor via UI."""
+        from unittest.mock import patch
 
-        calls = mock_page.keyboard.type.call_args_list
-        assert calls[0][0][0] == "[example](https://example.com)"
-        assert calls[1][0][0] == " "
-        assert remaining == ""
+        from note_mcp.browser.insert_link import LinkResult
+
+        mock_page = AsyncMock()
+        with patch(
+            "note_mcp.browser.insert_link.insert_link_at_cursor",
+            new_callable=AsyncMock,
+        ) as mock_insert:
+            mock_insert.return_value = (LinkResult.SUCCESS, "S1:OK")
+            remaining = await _type_with_link(mock_page, "[example](https://example.com)")
+
+            # UI automation called with correct args
+            mock_insert.assert_called_once_with(mock_page, "example", "https://example.com")
+            assert remaining == ""
 
     @pytest.mark.asyncio
     async def test_link_with_text_before(self) -> None:
-        """Test link with text before it."""
-        mock_page = AsyncMock()
-        await _type_with_link(mock_page, "Visit [site](https://example.com)")
+        """Test link with text before it types text first, then inserts link."""
+        from unittest.mock import patch
 
-        calls = mock_page.keyboard.type.call_args_list
-        assert calls[0][0][0] == "Visit "
-        assert calls[1][0][0] == "[site](https://example.com)"
-        assert calls[2][0][0] == " "
+        from note_mcp.browser.insert_link import LinkResult
+
+        mock_page = AsyncMock()
+        with patch(
+            "note_mcp.browser.insert_link.insert_link_at_cursor",
+            new_callable=AsyncMock,
+        ) as mock_insert:
+            mock_insert.return_value = (LinkResult.SUCCESS, "S1:OK")
+            await _type_with_link(mock_page, "Visit [site](https://example.com)")
+
+            # Text before link is typed
+            mock_page.keyboard.type.assert_called_once_with("Visit ")
+            # Then link is inserted via UI
+            mock_insert.assert_called_once_with(mock_page, "site", "https://example.com")
 
     @pytest.mark.asyncio
     async def test_link_with_text_after(self) -> None:
         """Test link with text after returns remaining."""
-        mock_page = AsyncMock()
-        remaining = await _type_with_link(mock_page, "[link](url) and more")
+        from unittest.mock import patch
 
-        assert remaining == " and more"
+        from note_mcp.browser.insert_link import LinkResult
+
+        mock_page = AsyncMock()
+        with patch(
+            "note_mcp.browser.insert_link.insert_link_at_cursor",
+            new_callable=AsyncMock,
+        ) as mock_insert:
+            mock_insert.return_value = (LinkResult.SUCCESS, "S1:OK")
+            remaining = await _type_with_link(mock_page, "[link](url) and more")
+
+            assert remaining == " and more"
+
+    @pytest.mark.asyncio
+    async def test_link_insertion_failure_falls_back_to_plain_text(self) -> None:
+        """Test that failed link insertion falls back to typing plain text."""
+        from unittest.mock import patch
+
+        from note_mcp.browser.insert_link import LinkResult
+
+        mock_page = AsyncMock()
+        with patch(
+            "note_mcp.browser.insert_link.insert_link_at_cursor",
+            new_callable=AsyncMock,
+        ) as mock_insert:
+            mock_insert.return_value = (LinkResult.TIMEOUT, "S1:FAIL")
+            remaining = await _type_with_link(mock_page, "[link](url)")
+
+            # Falls back to typing plain markdown
+            calls = mock_page.keyboard.type.call_args_list
+            assert calls[0][0][0] == "[link](url)"
+            assert remaining == ""
 
 
 class TestTypeWithBold:
@@ -1528,13 +1579,21 @@ class TestTypeWithInlineFormatting:
 
     @pytest.mark.asyncio
     async def test_link_is_processed(self) -> None:
-        """Test that link patterns are processed."""
-        mock_page = AsyncMock()
-        await _type_with_inline_formatting(mock_page, "[link](url)")
+        """Test that link patterns are processed via UI automation."""
+        from unittest.mock import patch
 
-        calls = mock_page.keyboard.type.call_args_list
-        typed_texts = [call[0][0] for call in calls]
-        assert "[link](url)" in typed_texts
+        from note_mcp.browser.insert_link import LinkResult
+
+        mock_page = AsyncMock()
+        with patch(
+            "note_mcp.browser.insert_link.insert_link_at_cursor",
+            new_callable=AsyncMock,
+        ) as mock_insert:
+            mock_insert.return_value = (LinkResult.SUCCESS, "S1:OK")
+            await _type_with_inline_formatting(mock_page, "[link](url)")
+
+            # Link is inserted via UI, not typed as markdown
+            mock_insert.assert_called_once_with(mock_page, "link", "url")
 
     @pytest.mark.asyncio
     async def test_bold_is_processed(self) -> None:
@@ -1570,13 +1629,21 @@ class TestTypeWithInlineFormatting:
     @pytest.mark.asyncio
     async def test_link_processed_before_bold(self) -> None:
         """Test that links are processed before bold (priority order)."""
-        mock_page = AsyncMock()
-        await _type_with_inline_formatting(mock_page, "[**link**](url)")
+        from unittest.mock import patch
 
-        # The link pattern should be matched first, containing **link**
-        calls = mock_page.keyboard.type.call_args_list
-        typed_texts = [call[0][0] for call in calls]
-        assert "[**link**](url)" in typed_texts
+        from note_mcp.browser.insert_link import LinkResult
+
+        mock_page = AsyncMock()
+        with patch(
+            "note_mcp.browser.insert_link.insert_link_at_cursor",
+            new_callable=AsyncMock,
+        ) as mock_insert:
+            mock_insert.return_value = (LinkResult.SUCCESS, "S1:OK")
+            await _type_with_inline_formatting(mock_page, "[**link**](url)")
+
+            # The link pattern should be matched first, containing **link**
+            # Link text includes the ** markers (not processed as bold inside link)
+            mock_insert.assert_called_once_with(mock_page, "**link**", "url")
 
     @pytest.mark.asyncio
     async def test_japanese_text_with_formatting(self) -> None:

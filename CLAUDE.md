@@ -120,6 +120,27 @@ if has_more_content:
 
 **注意**: タイピング速度やdelay引数は変換に影響しません。スペースがトリガーです。
 
+### Link Insertion (UI Required)
+
+Markdown記法 `[text](url)` はProseMirrorで**自動変換されません**（InputRule未実装）。
+
+リンク挿入は `insert_link_at_cursor()` でUI経由で行います：
+
+```python
+from note_mcp.browser.insert_link import insert_link_at_cursor, LinkResult
+
+result, debug = await insert_link_at_cursor(page, text="リンクテキスト", url="https://example.com")
+if result == LinkResult.SUCCESS:
+    # リンク挿入成功
+```
+
+**UI操作フロー**:
+1. テキスト入力 → 選択
+2. リンクダイアログを開く（Ctrl+K）
+3. URL入力 → 適用
+
+詳細: `docs/features/link.md`
+
 ### Session Management
 
 - 認証状態はセッション管理で適切に維持すること

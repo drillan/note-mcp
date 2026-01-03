@@ -170,30 +170,30 @@ async def type_link(
     url: str,
     wait_time: float = DEFAULT_CONVERSION_WAIT_SECONDS,  # 互換性のため維持（未使用）
 ) -> None:
-    """リンクをエディタに入力しProseMirror変換をトリガー。
+    """UI経由でリンクを挿入する。
 
-    Note: 内部実装は本番コード type_markdown_content() に委譲。
+    Note: Markdown [text](url) はProseMirrorで自動変換されません。
+    この関数はUI自動化でリンクを正しく挿入します。
 
     Args:
         page: Playwright Pageインスタンス
         text: リンクテキスト
         url: リンクURL
-        wait_time: 変換待機時間（後方互換性のため維持、本番コードが制御）
+        wait_time: 挿入後の待機時間（後方互換性のため維持、未使用）
 
     Raises:
         ValueError: textまたはurlが空の場合
+        RuntimeError: リンク挿入に失敗した場合
     """
     # 未使用パラメータの警告を抑制
     _ = wait_time
 
-    if not text:
-        raise ValueError("text cannot be empty")
-    if not url:
-        raise ValueError("url cannot be empty")
+    # 入力検証はinsert_link_at_cursorで実行される
+    from note_mcp.browser.insert_link import LinkResult, insert_link_at_cursor
 
-    # Markdown形式に変換して本番コードに委譲
-    markdown = f"[{text}]({url})"
-    await type_markdown_content(page, markdown)
+    result, debug = await insert_link_at_cursor(page, text, url)
+    if result != LinkResult.SUCCESS:
+        raise RuntimeError(f"Failed to insert link: {text} -> {url}. Debug: {debug}")
 
 
 async def type_horizontal_line(
