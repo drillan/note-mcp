@@ -50,7 +50,8 @@ export NOTE_PASSWORD=your_password
 | `RECAPTCHA_DETECTED` | reCAPTCHAが検出された | 手動でログインしセッションを保存 |
 | `TWO_FACTOR_REQUIRED` | 二段階認証が要求された | 手動でログインしセッションを保存 |
 | `INVALID_CREDENTIALS` | 認証情報が無効 | ユーザー名とパスワードを確認 |
-| `LOGIN_TIMEOUT` | ログインがタイムアウト | ネットワーク状態を確認し再試行 |
+| `LOGIN_TIMEOUT` | ログインがタイムアウト | 認証情報を確認するか、手動でログイン |
+| `FORM_NOT_FOUND` | ログインフォームが見つからない | ページの読み込み状態を確認 |
 
 ```python
 from note_mcp.models import LoginError

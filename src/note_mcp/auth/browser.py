@@ -9,6 +9,8 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any
 
+from playwright.async_api import TimeoutError as PlaywrightTimeout
+
 from note_mcp.auth.session import SessionManager
 from note_mcp.browser.manager import BrowserManager
 from note_mcp.models import LoginError, Session
@@ -37,6 +39,11 @@ LOGIN_SUBMIT_SELECTOR = 'button[type="submit"]'
 # Obstacle detection selectors
 RECAPTCHA_SELECTOR = '[class*="recaptcha"], iframe[src*="recaptcha"]'
 TWO_FACTOR_SELECTOR = '[data-testid="two-factor"], input[name="otp"], input[placeholder*="認証コード"]'
+
+# Timeout constants (in milliseconds)
+EMAIL_INPUT_TIMEOUT_MS = 10000
+NETWORK_IDLE_TIMEOUT_MS = 15000
+REDIRECT_TIMEOUT_MS = 15000
 
 
 def extract_session_cookies(cookies: list[dict[str, Any]]) -> dict[str, str]:
@@ -275,7 +282,14 @@ async def _perform_auto_login(page: Page, username: str, password: str) -> None:
     """
     # ユーザー名入力
     email_input = page.locator(LOGIN_EMAIL_SELECTOR)
-    await email_input.wait_for(state="visible", timeout=10000)
+    try:
+        await email_input.wait_for(state="visible", timeout=EMAIL_INPUT_TIMEOUT_MS)
+    except PlaywrightTimeout as e:
+        raise LoginError(
+            code="FORM_NOT_FOUND",
+            message="ログインフォームが見つかりません",
+            resolution="note.comのログインページが正しく読み込まれていることを確認してください",
+        ) from e
     await email_input.fill(username)
 
     # パスワード入力
@@ -287,7 +301,7 @@ async def _perform_auto_login(page: Page, username: str, password: str) -> None:
     await submit_button.click()
 
     # ログイン結果を待機
-    await page.wait_for_load_state("networkidle", timeout=15000)
+    await page.wait_for_load_state("networkidle", timeout=NETWORK_IDLE_TIMEOUT_MS)
 
     # 障害検出
     await _check_login_obstacles(page)
@@ -398,10 +412,10 @@ async def login_with_browser(
             try:
                 await page.wait_for_url(
                     is_logged_in,
-                    timeout=15000,  # 15 seconds for redirect
+                    timeout=REDIRECT_TIMEOUT_MS,
                 )
                 logger.info("Login redirect detected!")
-            except Exception as e:
+            except PlaywrightTimeout as e:
                 raise LoginError(
                     code="LOGIN_TIMEOUT",
                     message="ログイン後のリダイレクトがタイムアウトしました",
