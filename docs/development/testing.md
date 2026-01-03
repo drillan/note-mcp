@@ -71,6 +71,26 @@ dotenvx encrypt
 dotenvx run -- uv run pytest tests/e2e/ -v
 ```
 
+### 自動ログイン動作
+
+E2Eテストの`real_session`フィクスチャは以下の優先順位でセッションを取得します：
+
+1. **保存済みセッション**: 有効期限内のセッションがあれば使用
+2. **自動ログイン**: 環境変数（`NOTE_USERNAME`, `NOTE_PASSWORD`）があれば自動ログイン
+3. **手動ログイン**: どちらもない場合は手動ログイン待機（300秒タイムアウト）
+
+CI/CD環境では環境変数を設定することで、完全自動でE2Eテストを実行できます。
+
+#### LoginError発生時の動作
+
+自動ログイン中にreCAPTCHAや2FAが検出されると、`LoginError`例外が発生し、テストはスキップされます：
+
+```
+SKIPPED: E2Eテスト用セッション取得失敗: reCAPTCHAが検出されました
+```
+
+この場合は、手動でログインしてセッションを保存してください。詳細は[認証ガイド](../guide/authentication.md#loginerror例外)を参照してください。
+
 ### E2Eテストの実行
 
 ```bash
