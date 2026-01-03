@@ -8,11 +8,11 @@ Supported inline formatting with native ProseMirror conversion:
 - Bold (**text** + space → <strong>text</strong>)
 - Strikethrough (~~text~~ + space → <s>text</s>)
 
-NOT supported for native conversion (parsed but NOT converted):
-- Links ([text](url)) - No InputRule exists; requires UI or paste detection
+NOT supported for native conversion (requires UI automation):
+- Links ([text](url)) - No InputRule exists; use insert_link_at_cursor() from insert_link.py
 
 Processing order (most specific pattern first):
-1. Links [text](url) - parsed first (for typing, NOT automatic conversion)
+1. Links [text](url) - parsed first, inserted via insert_link_at_cursor()
 2. Bold **text** - processed second (double asterisk)
 3. Strikethrough ~~text~~ - processed last (double tilde)
 
@@ -200,13 +200,43 @@ async def _type_with_inline_pattern(
 
 
 async def _type_with_link(page: Any, text: str) -> str:
-    """Process link patterns [text](url) and type with proper trigger."""
-    return await _type_with_inline_pattern(
-        page,
-        text,
-        _LINK_PATTERN,
-        lambda m: f"[{m.group(1)}]({m.group(2)})",
-    )
+    """Process link patterns [text](url) via UI automation.
+
+    ProseMirror has NO InputRule for [text](url) conversion.
+    This function uses insert_link_at_cursor() for proper link insertion.
+
+    Args:
+        page: Playwright page object
+        text: Text that may contain [text](url) patterns
+
+    Returns:
+        Remaining text after first link is processed, or empty string if no match.
+    """
+    from note_mcp.browser.insert_link import LinkResult, insert_link_at_cursor
+
+    match = _LINK_PATTERN.search(text)
+    if not match:
+        await page.keyboard.type(text)
+        return ""
+
+    # Type text before link
+    before = text[: match.start()]
+    if before:
+        await page.keyboard.type(before)
+
+    # Extract link text and URL
+    link_text = match.group(1)
+    link_url = match.group(2)
+
+    # Insert link via UI automation (Ctrl+K dialog)
+    result, debug = await insert_link_at_cursor(page, link_text, link_url)
+    if result != LinkResult.SUCCESS:
+        logger.warning(f"Link insertion failed for [{link_text}]({link_url}): {debug}")
+        # Fallback: type as plain text
+        await page.keyboard.type(f"[{link_text}]({link_url})")
+
+    # Return remaining text
+    return text[match.end() :]
 
 
 async def _type_with_bold(page: Any, text: str) -> str:
