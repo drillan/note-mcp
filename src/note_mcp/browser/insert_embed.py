@@ -19,6 +19,8 @@ import re
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from playwright.async_api import Error as PlaywrightError
+
 if TYPE_CHECKING:
     from playwright.async_api import Page
 
@@ -476,6 +478,9 @@ async def _wait_for_embed_insertion(
             logger.warning(f"Embed not inserted within timeout: {reason}")
             return EmbedResult.TIMEOUT
 
-    except Exception as e:
-        logger.warning(f"Error waiting for embed insertion: {type(e).__name__}: {e}")
+    except PlaywrightError as e:
+        logger.warning(f"Playwright error waiting for embed insertion: {type(e).__name__}: {e}")
         return EmbedResult.TIMEOUT
+    except Exception as e:
+        logger.error(f"Unexpected error waiting for embed insertion: {type(e).__name__}: {e}")
+        raise

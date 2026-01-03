@@ -193,7 +193,8 @@ async def _insert_single_embed(page: Page, url: str, timeout: int) -> tuple[Embe
         debug_steps.append(f"insert[{insert_debug}]")
         return result, "→".join(debug_steps)
     except Exception as e:
-        debug_steps.append(f"insert_error:{type(e).__name__}")
+        logger.error(f"Embed insertion failed for {url}: {type(e).__name__}: {e}")
+        debug_steps.append(f"insert_error:{type(e).__name__}:{str(e)[:50]}")
         return EmbedResult.TIMEOUT, "→".join(debug_steps)
 
 
