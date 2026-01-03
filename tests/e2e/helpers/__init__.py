@@ -5,13 +5,17 @@ conversion on note.com's preview pages, and for stable ProseMirror
 editor interactions.
 
 Modules:
+    article_helpers: Extract article metadata from MCP tool results
+    preview_helpers: Preview page navigation utilities
     validation: ValidationResult dataclass and PreviewValidator class
     prosemirror: ProseMirrorStabilizer for reliable editor interactions
     image_utils: Test image creation and image validation utilities
     typing_helpers: Keyboard input helpers for ProseMirror
 """
 
+from .article_helpers import extract_article_id, extract_article_key
 from .image_utils import ImageValidationResult, ImageValidator, create_test_png
+from .preview_helpers import open_preview_for_article_key
 from .prosemirror import ProseMirrorStabilizer
 from .retry import with_retry
 from .typing_helpers import (
@@ -30,9 +34,12 @@ from .validation import PreviewValidator, ValidationResult
 
 __all__ = [
     "create_test_png",
+    "extract_article_id",
+    "extract_article_key",
     "ImageValidationResult",
     "ImageValidator",
     "insert_toc_placeholder",
+    "open_preview_for_article_key",
     "PreviewValidator",
     "ProseMirrorStabilizer",
     "ValidationResult",

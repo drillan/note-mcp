@@ -122,6 +122,8 @@ HTMLの構造について...
 
 目次は他のMarkdown機能と組み合わせて使用できます。
 
+### 数式・ルビとの組み合わせ
+
 ```markdown
 # $${\LaTeX}$$ 入門
 
@@ -135,3 +137,38 @@ HTMLの構造について...
 ```
 
 数式やルビを含む見出しも、目次に正しく表示されます。
+
+### 画像との組み合わせ
+
+目次と画像を同一記事内で使用できます。`note_create_from_file`でローカル画像のアップロードと目次生成を同時に行う場合も正しく動作します。
+
+```markdown
+# チュートリアル
+
+[TOC]
+
+## セットアップ
+
+以下の画面でインストールを開始します。
+
+![セットアップ画面](./images/setup.png)
+
+## 設定
+
+設定画面の説明...
+```
+
+## E2E検証
+
+目次機能はE2Eテストでプレビューページの表示を検証しています。`PreviewValidator.validate_toc()`メソッドはnote.comの`<table-of-contents>`カスタム要素を検出します。
+
+```python
+# 目次のレンダリングを検証
+validator = PreviewValidator(preview_page)
+result = await validator.validate_toc()
+assert result.success, "TOC not rendered"
+```
+
+TOC + 画像の組み合わせテスト（`test_create_from_toc_and_image_file`）では、目次と画像の両方が正しく表示されることを検証しています。
+
+詳細は[テストドキュメント](../development/testing.md#ファイルベース記事作成テスト)を参照してください。

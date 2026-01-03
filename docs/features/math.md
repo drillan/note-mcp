@@ -64,6 +64,23 @@ $$
 | `$${\int_{a}^{b}}$$` | ∫ | 積分 |
 | `$${\alpha, \beta, \gamma}$$` | α, β, γ | ギリシャ文字 |
 
+## E2E検証
+
+数式機能はE2Eテストでプレビューページのレンダリングを検証しています。`PreviewValidator.validate_math()`メソッドはKaTeXがレンダリングした`.katex`クラス要素を検出します。
+
+```python
+# 数式のKaTeXレンダリングを検証
+validator = PreviewValidator(preview_page)
+result = await validator.validate_math()
+assert result.success, "KaTeX rendering not found"
+
+# 特定の数式テキストを検証
+result = await validator.validate_math("E = mc")
+assert result.success, "Specific formula not found"
+```
+
+詳細は[テストドキュメント](../development/testing.md#数式検証katex)を参照してください。
+
 ## 制限事項
 
 - **KaTeX準拠**: note.comはKaTeXを使用して数式をレンダリングします。KaTeXでサポートされていないTeX記法は使用できません

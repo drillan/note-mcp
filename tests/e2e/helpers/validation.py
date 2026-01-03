@@ -208,6 +208,81 @@ class PreviewValidator:
             "TOC element with class containing 'TableOfContents'",
         )
 
+    async def validate_math(
+        self,
+        formula_text: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> ValidationResult:
+        """数式がKaTeXでレンダリングされているか検証。
+
+        note.comはKaTeXを使用して数式をレンダリングする。
+        レンダリング後の要素は `.katex` クラスを持つ。
+
+        Args:
+            formula_text: 期待される数式テキスト（部分一致）。
+                Noneの場合は数式要素の存在のみ確認。
+            timeout_ms: 要素出現待機のタイムアウト（ミリ秒）
+
+        Returns:
+            ValidationResult with success=True if KaTeX element exists
+        """
+        # 記事本文がロードされるのを待機
+        article_body = self.page.locator(".note-common-styles__textnote-body, .p-noteBody")
+        try:
+            await article_body.first.wait_for(state="visible", timeout=timeout_ms)
+        except PlaywrightError:
+            return ValidationResult(
+                success=False,
+                expected="Article body container",
+                actual=None,
+                message="Article body not found on preview page",
+            )
+
+        # KaTeX要素を検索
+        katex_locator = article_body.locator(".katex")
+
+        try:
+            count = await katex_locator.count()
+            if count == 0:
+                return ValidationResult(
+                    success=False,
+                    expected=".katex element" + (f" containing '{formula_text}'" if formula_text else ""),
+                    actual=None,
+                    message="No KaTeX-rendered math elements found",
+                )
+
+            if formula_text:
+                # 指定テキストを含む数式要素を検索
+                matching_locator = katex_locator.filter(has_text=formula_text)
+                matching_count = await matching_locator.count()
+                if matching_count > 0:
+                    return ValidationResult(
+                        success=True,
+                        expected=f".katex containing '{formula_text}'",
+                        actual=f"Found {matching_count} matching element(s)",
+                        message=f"Found KaTeX math containing '{formula_text}'",
+                    )
+                return ValidationResult(
+                    success=False,
+                    expected=f".katex containing '{formula_text}'",
+                    actual=f"Found {count} .katex element(s), none containing '{formula_text}'",
+                    message=f"KaTeX elements found but none contain '{formula_text}'",
+                )
+
+            return ValidationResult(
+                success=True,
+                expected=".katex element",
+                actual=f"Found {count} element(s)",
+                message=f"Found {count} KaTeX-rendered math element(s)",
+            )
+        except PlaywrightError as e:
+            return ValidationResult(
+                success=False,
+                expected=".katex element",
+                actual=None,
+                message=f"Playwright error: {e}",
+            )
+
     async def validate_link(self, text: str, url: str) -> ValidationResult:
         """リンクが正しく変換されているか検証。
 
