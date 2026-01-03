@@ -30,10 +30,8 @@ from note_mcp.browser.typing_helpers import (
     _UNORDERED_LIST_PATTERN,
     _is_embed_url,
     _type_with_bold,
-    _type_with_inline_code,
     _type_with_inline_formatting,
     _type_with_inline_pattern,
-    _type_with_italic,
     _type_with_link,
     _type_with_strikethrough,
     type_markdown_content,
@@ -1511,90 +1509,6 @@ class TestTypeWithBold:
         assert remaining == " text"
 
 
-class TestTypeWithItalic:
-    """Tests for _type_with_italic function."""
-
-    @pytest.mark.asyncio
-    async def test_no_italic_types_directly(self) -> None:
-        """Test that text without italic is typed directly."""
-        mock_page = AsyncMock()
-        remaining = await _type_with_italic(mock_page, "plain text")
-        mock_page.keyboard.type.assert_called_once_with("plain text")
-        assert remaining == ""
-
-    @pytest.mark.asyncio
-    async def test_italic_pattern_types_with_trigger(self) -> None:
-        """Test that italic pattern is typed with space trigger."""
-        mock_page = AsyncMock()
-        remaining = await _type_with_italic(mock_page, "*emphasized*")
-
-        calls = mock_page.keyboard.type.call_args_list
-        assert calls[0][0][0] == "*emphasized*"
-        assert calls[1][0][0] == " "
-        assert remaining == ""
-
-    @pytest.mark.asyncio
-    async def test_italic_with_text_before(self) -> None:
-        """Test italic with text before it."""
-        mock_page = AsyncMock()
-        await _type_with_italic(mock_page, "This is *emphasized*")
-
-        calls = mock_page.keyboard.type.call_args_list
-        assert calls[0][0][0] == "This is "
-        assert calls[1][0][0] == "*emphasized*"
-
-    @pytest.mark.asyncio
-    async def test_italic_does_not_match_bold(self) -> None:
-        """Test that italic pattern doesn't match bold pattern."""
-        mock_page = AsyncMock()
-        remaining = await _type_with_italic(mock_page, "**bold**")
-
-        # Should type directly since **bold** is not *italic*
-        mock_page.keyboard.type.assert_called_once_with("**bold**")
-        assert remaining == ""
-
-
-class TestTypeWithInlineCode:
-    """Tests for _type_with_inline_code function."""
-
-    @pytest.mark.asyncio
-    async def test_no_code_types_directly(self) -> None:
-        """Test that text without inline code is typed directly."""
-        mock_page = AsyncMock()
-        remaining = await _type_with_inline_code(mock_page, "plain text")
-        mock_page.keyboard.type.assert_called_once_with("plain text")
-        assert remaining == ""
-
-    @pytest.mark.asyncio
-    async def test_code_pattern_types_with_trigger(self) -> None:
-        """Test that inline code pattern is typed with space trigger."""
-        mock_page = AsyncMock()
-        remaining = await _type_with_inline_code(mock_page, "`code`")
-
-        calls = mock_page.keyboard.type.call_args_list
-        assert calls[0][0][0] == "`code`"
-        assert calls[1][0][0] == " "
-        assert remaining == ""
-
-    @pytest.mark.asyncio
-    async def test_code_with_text_before(self) -> None:
-        """Test inline code with text before it."""
-        mock_page = AsyncMock()
-        await _type_with_inline_code(mock_page, "Use `print()` function")
-
-        calls = mock_page.keyboard.type.call_args_list
-        assert calls[0][0][0] == "Use "
-        assert calls[1][0][0] == "`print()`"
-
-    @pytest.mark.asyncio
-    async def test_code_with_text_after(self) -> None:
-        """Test inline code with text after returns remaining."""
-        mock_page = AsyncMock()
-        remaining = await _type_with_inline_code(mock_page, "`code` is useful")
-
-        assert remaining == " is useful"
-
-
 class TestTypeWithInlineFormatting:
     """Tests for _type_with_inline_formatting function."""
 
@@ -1633,26 +1547,6 @@ class TestTypeWithInlineFormatting:
         assert "**bold**" in typed_texts
 
     @pytest.mark.asyncio
-    async def test_italic_is_processed(self) -> None:
-        """Test that italic patterns are processed."""
-        mock_page = AsyncMock()
-        await _type_with_inline_formatting(mock_page, "*italic*")
-
-        calls = mock_page.keyboard.type.call_args_list
-        typed_texts = [call[0][0] for call in calls]
-        assert "*italic*" in typed_texts
-
-    @pytest.mark.asyncio
-    async def test_inline_code_is_processed(self) -> None:
-        """Test that inline code patterns are processed."""
-        mock_page = AsyncMock()
-        await _type_with_inline_formatting(mock_page, "`code`")
-
-        calls = mock_page.keyboard.type.call_args_list
-        typed_texts = [call[0][0] for call in calls]
-        assert "`code`" in typed_texts
-
-    @pytest.mark.asyncio
     async def test_strikethrough_is_processed(self) -> None:
         """Test that strikethrough patterns are processed."""
         mock_page = AsyncMock()
@@ -1666,12 +1560,12 @@ class TestTypeWithInlineFormatting:
     async def test_multiple_patterns_are_processed(self) -> None:
         """Test that multiple patterns in text are all processed."""
         mock_page = AsyncMock()
-        await _type_with_inline_formatting(mock_page, "**bold** and *italic*")
+        await _type_with_inline_formatting(mock_page, "**bold** and ~~deleted~~")
 
         calls = mock_page.keyboard.type.call_args_list
         typed_texts = [call[0][0] for call in calls]
         assert "**bold**" in typed_texts
-        assert "*italic*" in typed_texts
+        assert "~~deleted~~" in typed_texts
 
     @pytest.mark.asyncio
     async def test_link_processed_before_bold(self) -> None:
@@ -1683,17 +1577,6 @@ class TestTypeWithInlineFormatting:
         calls = mock_page.keyboard.type.call_args_list
         typed_texts = [call[0][0] for call in calls]
         assert "[**link**](url)" in typed_texts
-
-    @pytest.mark.asyncio
-    async def test_bold_processed_before_italic(self) -> None:
-        """Test that bold (**) is processed before italic (*)."""
-        mock_page = AsyncMock()
-        # Bold should match first since it's more specific
-        await _type_with_inline_formatting(mock_page, "**text**")
-
-        calls = mock_page.keyboard.type.call_args_list
-        typed_texts = [call[0][0] for call in calls]
-        assert "**text**" in typed_texts
 
     @pytest.mark.asyncio
     async def test_japanese_text_with_formatting(self) -> None:

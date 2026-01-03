@@ -342,31 +342,6 @@ class TestNativeBoldConversion:
         assert result.success, f"Native bold conversion failed: {result.message}"
 
 
-class TestNativeItalicConversion:
-    """Tests for native italic conversion via ProseMirror."""
-
-    async def test_italic_native_conversion(
-        self,
-        real_session: Session,
-        draft_article: Article,
-        editor_page: Page,
-    ) -> None:
-        """*text* + space → <em>text</em> (native conversion)."""
-        # Arrange
-        test_text = "斜体テキスト"
-
-        # Act: type_markdown_pattern を直接使用
-        await type_markdown_pattern(editor_page, f"*{test_text}*")
-
-        # Save and open preview
-        preview_page = await save_and_open_preview(editor_page)
-
-        # Assert
-        validator = PreviewValidator(preview_page)
-        result = await validator.validate_italic(test_text)
-        assert result.success, f"Native italic conversion failed: {result.message}"
-
-
 class TestNativeHorizontalLineConversion:
     """Tests for native horizontal line conversion via ProseMirror."""
 

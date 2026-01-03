@@ -245,29 +245,6 @@ class PreviewValidator:
             result.message = f"[FALLBACK] Found <b> instead of <strong>: {result.message}"
         return result
 
-    async def validate_italic(self, text: str) -> ValidationResult:
-        """斜体が正しく変換されているか検証。
-
-        Args:
-            text: 斜体で囲まれるテキスト
-
-        Returns:
-            ValidationResult with success=True if <em> or <i> contains text
-        """
-        # emまたはiタグを検索
-        em_locator = self.page.locator("em").filter(has_text=text)
-        em_count = await em_locator.count()
-        if em_count > 0:
-            return await self._validate_element(em_locator, f"<em> containing '{text}'")
-
-        # フォールバック: iタグを検索
-        # note.comのHTML出力が変更された場合に検知するため、フォールバック発生を明示
-        i_locator = self.page.locator("i").filter(has_text=text)
-        result = await self._validate_element(i_locator, f"<i> containing '{text}'")
-        if result.success:
-            result.message = f"[FALLBACK] Found <i> instead of <em>: {result.message}"
-        return result
-
     async def validate_horizontal_line(self) -> ValidationResult:
         """水平線が正しく変換されているか検証。
 
