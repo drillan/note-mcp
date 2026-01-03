@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING, Any
 
 from note_mcp.auth.session import SessionManager
 from note_mcp.browser.manager import BrowserManager
-from note_mcp.models import Session
+from note_mcp.models import LoginError, Session
 
 if TYPE_CHECKING:
-    pass
+    from playwright.async_api import Page
 
 
 # note.com URLs
@@ -28,6 +28,15 @@ OPTIONAL_COOKIES = ["note_gql_auth_token", "XSRF-TOKEN"]
 
 # Default timeout for login (5 minutes)
 DEFAULT_LOGIN_TIMEOUT = 300
+
+# Login form selectors
+LOGIN_EMAIL_SELECTOR = 'input[name="email"]'
+LOGIN_PASSWORD_SELECTOR = 'input[name="password"]'
+LOGIN_SUBMIT_SELECTOR = 'button[type="submit"]'
+
+# Obstacle detection selectors
+RECAPTCHA_SELECTOR = '[class*="recaptcha"], iframe[src*="recaptcha"]'
+TWO_FACTOR_SELECTOR = '[data-testid="two-factor"], input[name="otp"], input[placeholder*="認証コード"]'
 
 
 def extract_session_cookies(cookies: list[dict[str, Any]]) -> dict[str, str]:
@@ -212,14 +221,92 @@ async def get_current_user(cookies: dict[str, str], xsrf_token: str | None = Non
         return {"id": str(user_id), "urlname": urlname or ""}
 
 
-async def login_with_browser(timeout: int = DEFAULT_LOGIN_TIMEOUT) -> Session:
-    """Open browser for manual login and extract session.
+async def _check_login_obstacles(page: Page) -> None:
+    """ログイン障害（reCAPTCHA/2FA）を検出する。
 
+    Args:
+        page: Playwrightページオブジェクト
+
+    Raises:
+        LoginError: 障害検出時
+    """
+    # reCAPTCHA検出
+    recaptcha = page.locator(RECAPTCHA_SELECTOR)
+    if await recaptcha.count() > 0:
+        raise LoginError(
+            code="RECAPTCHA_DETECTED",
+            message="reCAPTCHAが検出されました",
+            resolution="手動でログインしセッションを保存してください",
+        )
+
+    # 2FA検出
+    two_factor = page.locator(TWO_FACTOR_SELECTOR)
+    if await two_factor.count() > 0:
+        raise LoginError(
+            code="TWO_FACTOR_REQUIRED",
+            message="二段階認証が要求されています",
+            resolution="手動でログインしセッションを保存してください",
+        )
+
+    # ログインエラー検出（認証情報エラー）
+    error_message = page.locator('[class*="error"], [class*="alert"]')
+    if await error_message.count() > 0:
+        error_text = await error_message.first.text_content()
+        if error_text and ("パスワード" in error_text or "メールアドレス" in error_text):
+            raise LoginError(
+                code="INVALID_CREDENTIALS",
+                message="認証情報が無効です",
+                resolution="ユーザー名とパスワードを確認してください",
+            )
+
+
+async def _perform_auto_login(page: Page, username: str, password: str) -> None:
+    """自動ログインを実行する。
+
+    reCAPTCHAや2FAが検出された場合はLoginErrorを送出する。
+
+    Args:
+        page: Playwrightページオブジェクト
+        username: ログインユーザー名（メールアドレス）
+        password: ログインパスワード
+
+    Raises:
+        LoginError: reCAPTCHA/2FA検出時、認証失敗時
+    """
+    # ユーザー名入力
+    email_input = page.locator(LOGIN_EMAIL_SELECTOR)
+    await email_input.wait_for(state="visible", timeout=10000)
+    await email_input.fill(username)
+
+    # パスワード入力
+    password_input = page.locator(LOGIN_PASSWORD_SELECTOR)
+    await password_input.fill(password)
+
+    # ログインボタンクリック
+    submit_button = page.locator(LOGIN_SUBMIT_SELECTOR)
+    await submit_button.click()
+
+    # ログイン結果を待機
+    await page.wait_for_load_state("networkidle", timeout=15000)
+
+    # 障害検出
+    await _check_login_obstacles(page)
+
+
+async def login_with_browser(
+    timeout: int = DEFAULT_LOGIN_TIMEOUT,
+    credentials: tuple[str, str] | None = None,
+) -> Session:
+    """Open browser for login and extract session.
+
+    If credentials are provided, performs automatic login.
     If a saved session exists, injects cookies into browser to restore session.
     Otherwise, opens the note.com login page for manual login.
 
     Args:
         timeout: Maximum time to wait for login (seconds)
+        credentials: Optional tuple of (username, password) for automatic login.
+            If provided, attempts automatic login instead of waiting for manual input.
 
     Returns:
         Session object with cookies and user info
@@ -227,6 +314,7 @@ async def login_with_browser(timeout: int = DEFAULT_LOGIN_TIMEOUT) -> Session:
     Raises:
         TimeoutError: If login is not completed within timeout
         ValueError: If required cookies are not found
+        LoginError: If automatic login encounters obstacles (reCAPTCHA, 2FA, invalid credentials)
     """
     import logging
 
@@ -296,6 +384,29 @@ async def login_with_browser(timeout: int = DEFAULT_LOGIN_TIMEOUT) -> Session:
     # Check if already logged in (URL changed during navigation)
     if is_logged_in(current_url):
         logger.info("Already logged in, extracting cookies...")
+    elif credentials:
+        # Automatic login with provided credentials
+        username, password = credentials
+        logger.info(f"Attempting automatic login for user: {username}")
+        await _perform_auto_login(page, username, password)
+        logger.info("Automatic login completed, verifying...")
+
+        # Verify login succeeded by checking URL
+        current_url = page.url
+        if not is_logged_in(current_url):
+            # Wait for redirect after login
+            try:
+                await page.wait_for_url(
+                    is_logged_in,
+                    timeout=15000,  # 15 seconds for redirect
+                )
+                logger.info("Login redirect detected!")
+            except Exception as e:
+                raise LoginError(
+                    code="LOGIN_TIMEOUT",
+                    message="ログイン後のリダイレクトがタイムアウトしました",
+                    resolution="認証情報を確認するか、手動でログインしてください",
+                ) from e
     else:
         # Wait for user to complete login (redirected away from login page)
         # This will block until user manually logs in via the browser

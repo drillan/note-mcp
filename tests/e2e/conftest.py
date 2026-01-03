@@ -20,7 +20,8 @@ from playwright.async_api import Error as PlaywrightError
 from note_mcp.api.articles import create_draft
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
-from note_mcp.models import Article, ArticleInput, Session
+from note_mcp.browser.manager import BrowserManager
+from note_mcp.models import Article, ArticleInput, LoginError, Session
 
 if TYPE_CHECKING:
     from playwright._impl._api_structures import SetCookieParam
@@ -45,6 +46,25 @@ def _generate_test_article_title() -> str:
     return f"{E2E_TEST_PREFIX}{timestamp}]"
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def cleanup_browser_manager() -> AsyncGenerator[None, None]:
+    """Clean up BrowserManager singleton after each test.
+
+    This fixture ensures that the BrowserManager singleton is properly
+    cleaned up after each test to prevent stale browser state from
+    affecting subsequent tests.
+
+    Some E2E tests (e.g., test_create_from_toc_file) trigger browser
+    automation via MCP tools, which use BrowserManager.get_instance().
+    Without cleanup, the singleton persists and can cause hangs in
+    subsequent tests that use different browser fixtures.
+    """
+    yield
+    # Clean up BrowserManager singleton if it was used
+    if BrowserManager._instance is not None:
+        await BrowserManager.get_instance().close()
+
+
 @pytest.fixture(scope="session")
 def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
     """Create an event loop for the session."""
@@ -57,17 +77,20 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 async def real_session() -> AsyncGenerator[Session, None]:
     """Get a real authenticated session.
 
-    Uses existing session from SessionManager if valid.
-    Otherwise, opens browser for manual login.
+    Session acquisition priority:
+        1. Saved session: Use if valid and not expired
+        2. Auto-login: If NOTE_USERNAME and NOTE_PASSWORD are set
+        3. Manual login: Wait for user to complete login in browser
 
     Environment variables:
-        USE_FILE_SESSION: Set to "1" to use file-based session storage
+        NOTE_USERNAME: note.com username/email for automatic login
+        NOTE_PASSWORD: note.com password for automatic login
 
     Yields:
         Authenticated Session object
 
     Raises:
-        pytest.skip: If no valid session available and login fails
+        pytest.skip: If login fails (LoginError, timeout, etc.)
     """
     # Try to load existing session
     session_manager = SessionManager()
@@ -77,12 +100,25 @@ async def real_session() -> AsyncGenerator[Session, None]:
         yield session
         return
 
+    # Check for credentials in environment variables
+    username = os.environ.get("NOTE_USERNAME")
+    password = os.environ.get("NOTE_PASSWORD")
+    credentials: tuple[str, str] | None = None
+    if username and password:
+        credentials = (username, password)
+
     # No valid session - need to login
-    # login_with_browser opens a browser for manual login
     try:
-        session = await login_with_browser(timeout=LOGIN_TIMEOUT_SECONDS)
+        session = await login_with_browser(
+            timeout=LOGIN_TIMEOUT_SECONDS,
+            credentials=credentials,
+        )
         session_manager.save(session)
         yield session
+    except LoginError as e:
+        pytest.skip(
+            f"E2Eテスト用セッション取得失敗: {e.message}. 対処法: {e.resolution or '手動でログインしてください'}"
+        )
     except (PlaywrightError, TimeoutError) as e:
         pytest.skip(
             f"E2E tests require valid note.com session. Login failed: {e}. "
