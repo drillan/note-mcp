@@ -6,17 +6,26 @@ Extracted from conftest.py to enable reuse across test modules.
 
 from __future__ import annotations
 
+import logging
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
+from playwright.async_api import async_playwright
+
+from .constants import (
+    DEFAULT_ELEMENT_WAIT_TIMEOUT_MS,
+    DEFAULT_NAVIGATION_TIMEOUT_MS,
+    NOTE_EDITOR_URL,
+)
+
 if TYPE_CHECKING:
+    from playwright._impl._api_structures import SetCookieParam
     from playwright.async_api import Page
 
-# Timeouts (milliseconds)
-DEFAULT_NAVIGATION_TIMEOUT_MS = 30000
-DEFAULT_ELEMENT_WAIT_TIMEOUT_MS = 15000
+    from note_mcp.models import Session
 
-# note.com URLs
-NOTE_EDITOR_URL = "https://editor.note.com/notes"
+logger = logging.getLogger(__name__)
 
 
 async def open_preview_for_article_key(
@@ -70,3 +79,66 @@ async def open_preview_for_article_key(
     await new_page.wait_for_load_state("domcontentloaded", timeout=timeout)
 
     return new_page
+
+
+async def _inject_session_cookies(page: Page, session: Session) -> None:
+    """Inject session cookies into browser context.
+
+    Args:
+        page: Playwright Page instance
+        session: Session with cookies to inject
+    """
+    playwright_cookies: list[SetCookieParam] = [
+        {
+            "name": name,
+            "value": value,
+            "domain": ".note.com",
+            "path": "/",
+        }
+        for name, value in session.cookies.items()
+    ]
+    await page.context.add_cookies(playwright_cookies)
+
+
+@asynccontextmanager
+async def preview_page_context(
+    session: Session,
+    article_key: str,
+    *,
+    headless: bool = False,
+) -> AsyncGenerator[Page, None]:
+    """Open preview page with automatic browser lifecycle management.
+
+    Creates a fresh browser context, injects session cookies, and opens
+    the article preview page. Automatically cleans up all browser resources
+    on context exit.
+
+    Args:
+        session: Authenticated Session object with cookies
+        article_key: Article key (e.g., "n1234567890ab")
+        headless: Whether to run browser in headless mode
+
+    Yields:
+        Playwright Page for the preview tab
+
+    Raises:
+        TimeoutError: If navigation or element waits time out
+
+    Example:
+        async with preview_page_context(session, article_key) as preview_page:
+            validator = PreviewValidator(preview_page)
+            result = await validator.validate_toc()
+    """
+    playwright = await async_playwright().start()
+    browser = await playwright.chromium.launch(headless=headless)
+    context = await browser.new_context()
+    page = await context.new_page()
+
+    try:
+        await _inject_session_cookies(page, session)
+        preview_page = await open_preview_for_article_key(page, article_key)
+        yield preview_page
+    finally:
+        await context.close()
+        await browser.close()
+        await playwright.stop()

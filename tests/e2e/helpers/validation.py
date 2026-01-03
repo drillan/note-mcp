@@ -6,6 +6,7 @@ on note.com's preview pages.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,8 @@ from playwright.async_api import Error as PlaywrightError
 
 if TYPE_CHECKING:
     from playwright.async_api import Locator, Page
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -167,16 +170,11 @@ class PreviewValidator:
             ValidationResult with success=True if TOC element exists
         """
         # まず記事本文がロードされるのを待機
+        failure = await self._wait_for_article_body(timeout_ms)
+        if failure:
+            return failure
+
         article_body = self.page.locator(".note-common-styles__textnote-body, .p-noteBody")
-        try:
-            await article_body.first.wait_for(state="visible", timeout=timeout_ms)
-        except PlaywrightError:
-            return ValidationResult(
-                success=False,
-                expected="Article body container",
-                actual=None,
-                message="Article body not found on preview page",
-            )
 
         # note.com固有: <table-of-contents> カスタム要素を検索
         toc_custom_locator = article_body.locator("table-of-contents")
@@ -198,8 +196,12 @@ class PreviewValidator:
                 nav_locator,
                 "TOC nav element in article body",
             )
-        except PlaywrightError:
-            pass
+        except PlaywrightError as e:
+            # ログ出力: nav要素が見つからなかった場合、フォールバックを試行
+            logger.debug(
+                "TOC nav element not found within timeout, falling back to TableOfContents class search: %s",
+                e,
+            )
 
         # フォールバック: TableOfContentsクラスを検索
         toc_class_locator = self.page.locator("[class*='TableOfContents']")
@@ -227,16 +229,11 @@ class PreviewValidator:
             ValidationResult with success=True if KaTeX element exists
         """
         # 記事本文がロードされるのを待機
+        failure = await self._wait_for_article_body(timeout_ms)
+        if failure:
+            return failure
+
         article_body = self.page.locator(".note-common-styles__textnote-body, .p-noteBody")
-        try:
-            await article_body.first.wait_for(state="visible", timeout=timeout_ms)
-        except PlaywrightError:
-            return ValidationResult(
-                success=False,
-                expected="Article body container",
-                actual=None,
-                message="Article body not found on preview page",
-            )
 
         # KaTeX要素を検索
         katex_locator = article_body.locator(".katex")
@@ -296,6 +293,31 @@ class PreviewValidator:
         # href属性でリンクを検索し、テキストでフィルタ
         locator = self.page.locator(f'a[href="{url}"]').filter(has_text=text)
         return await self._validate_element(locator, f"<a href='{url}'> containing '{text}'")
+
+    async def _wait_for_article_body(self, timeout_ms: int = 5000) -> ValidationResult | None:
+        """Wait for article body to be visible.
+
+        Common helper for validation methods that need the article body
+        to be loaded before proceeding.
+
+        Args:
+            timeout_ms: Element wait timeout in milliseconds
+
+        Returns:
+            ValidationResult with failure details if article body not found,
+            None if article body is successfully loaded
+        """
+        article_body = self.page.locator(".note-common-styles__textnote-body, .p-noteBody")
+        try:
+            await article_body.first.wait_for(state="visible", timeout=timeout_ms)
+            return None  # Success - article body is visible
+        except PlaywrightError:
+            return ValidationResult(
+                success=False,
+                expected="Article body container",
+                actual=None,
+                message="Article body not found on preview page",
+            )
 
     async def validate_bold(self, text: str) -> ValidationResult:
         """太字が正しく変換されているか検証。

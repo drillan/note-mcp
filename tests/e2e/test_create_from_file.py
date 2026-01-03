@@ -16,15 +16,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from playwright.async_api import async_playwright
 
 from note_mcp.server import note_create_from_file
-from tests.e2e.conftest import _inject_session_cookies
 from tests.e2e.helpers import (
     ImageValidator,
     PreviewValidator,
     extract_article_key,
-    open_preview_for_article_key,
+    preview_page_context,
 )
 
 if TYPE_CHECKING:
@@ -277,22 +275,10 @@ class TestCreateFromFile:
         # Validate preview page
         article_key = extract_article_key(result)
 
-        playwright = await async_playwright().start()
-        browser = await playwright.chromium.launch(headless=False)
-        context = await browser.new_context()
-        page = await context.new_page()
-
-        try:
-            await _inject_session_cookies(page, real_session)
-            preview_page = await open_preview_for_article_key(page, article_key)
-
+        async with preview_page_context(real_session, article_key) as preview_page:
             validator = PreviewValidator(preview_page)
             toc_result = await validator.validate_toc()
             assert toc_result.success, f"TOC validation failed: {toc_result.message}"
-        finally:
-            await context.close()
-            await browser.close()
-            await playwright.stop()
 
     async def test_create_from_math_file(
         self,
@@ -313,15 +299,7 @@ class TestCreateFromFile:
         # Validate preview page
         article_key = extract_article_key(result)
 
-        playwright = await async_playwright().start()
-        browser = await playwright.chromium.launch(headless=False)
-        context = await browser.new_context()
-        page = await context.new_page()
-
-        try:
-            await _inject_session_cookies(page, real_session)
-            preview_page = await open_preview_for_article_key(page, article_key)
-
+        async with preview_page_context(real_session, article_key) as preview_page:
             validator = PreviewValidator(preview_page)
 
             # Verify math is rendered by KaTeX
@@ -331,11 +309,6 @@ class TestCreateFromFile:
             # Verify specific formulas are present
             inline_result = await validator.validate_math("E = mc")
             assert inline_result.success, f"Inline math validation failed: {inline_result.message}"
-
-        finally:
-            await context.close()
-            await browser.close()
-            await playwright.stop()
 
     async def test_create_with_local_image_upload(
         self,
@@ -360,25 +333,12 @@ class TestCreateFromFile:
         # Validate preview page
         article_key = extract_article_key(result)
 
-        playwright = await async_playwright().start()
-        browser = await playwright.chromium.launch(headless=False)
-        context = await browser.new_context()
-        page = await context.new_page()
-
-        try:
-            await _inject_session_cookies(page, real_session)
-            preview_page = await open_preview_for_article_key(page, article_key)
-
+        async with preview_page_context(real_session, article_key) as preview_page:
             image_validator = ImageValidator(preview_page)
 
             # Verify image is displayed on preview page
             image_result = await image_validator.validate_image_exists(expected_count=1)
             assert image_result.success, f"Image validation failed: {image_result.message}"
-
-        finally:
-            await context.close()
-            await browser.close()
-            await playwright.stop()
 
     async def test_create_without_image_upload(
         self,
@@ -422,15 +382,7 @@ class TestCreateFromFile:
         # Validate preview page
         article_key = extract_article_key(result)
 
-        playwright = await async_playwright().start()
-        browser = await playwright.chromium.launch(headless=False)
-        context = await browser.new_context()
-        page = await context.new_page()
-
-        try:
-            await _inject_session_cookies(page, real_session)
-            preview_page = await open_preview_for_article_key(page, article_key)
-
+        async with preview_page_context(real_session, article_key) as preview_page:
             preview_validator = PreviewValidator(preview_page)
             image_validator = ImageValidator(preview_page)
 
@@ -441,11 +393,6 @@ class TestCreateFromFile:
             # Verify image is displayed
             image_result = await image_validator.validate_image_exists(expected_count=1)
             assert image_result.success, f"Image validation failed: {image_result.message}"
-
-        finally:
-            await context.close()
-            await browser.close()
-            await playwright.stop()
 
 
 class TestCreateFromFileErrors:

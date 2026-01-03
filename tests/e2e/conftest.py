@@ -22,6 +22,12 @@ from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
 from note_mcp.browser.manager import BrowserManager
 from note_mcp.models import Article, ArticleInput, LoginError, Session
+from tests.e2e.helpers.constants import (
+    DEFAULT_ELEMENT_WAIT_TIMEOUT_MS,
+    DEFAULT_NAVIGATION_TIMEOUT_MS,
+    LOGIN_TIMEOUT_SECONDS,
+    NOTE_EDITOR_URL,
+)
 
 if TYPE_CHECKING:
     from playwright._impl._api_structures import SetCookieParam
@@ -30,14 +36,6 @@ if TYPE_CHECKING:
 
 # Test article prefix for identification and cleanup
 E2E_TEST_PREFIX = "[E2E-TEST-"
-
-# note.com URLs
-NOTE_EDITOR_URL = "https://editor.note.com/notes"
-
-# Timeouts (milliseconds)
-DEFAULT_NAVIGATION_TIMEOUT_MS = 30000
-DEFAULT_ELEMENT_WAIT_TIMEOUT_MS = 15000
-LOGIN_TIMEOUT_SECONDS = 300
 
 
 def _generate_test_article_title() -> str:
