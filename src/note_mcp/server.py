@@ -325,8 +325,11 @@ async def note_upload_eyecatch(
     if session is None or session.is_expired():
         return "セッションが無効です。note_loginでログインしてください。"
 
-    image = await upload_eyecatch_image(session, file_path, note_id=note_id)
-    return f"アイキャッチ画像をアップロードしました。URL: {image.url}"
+    try:
+        image = await upload_eyecatch_image(session, file_path, note_id=note_id)
+        return f"アイキャッチ画像をアップロードしました。URL: {image.url}"
+    except NoteAPIError as e:
+        return f"エラー: {e}"
 
 
 @mcp.tool()

@@ -175,7 +175,7 @@ class TestArticleCRUD:
     ) -> None:
         """記事の内容が取得できる."""
         # Act
-        result = await note_get_article.fn(draft_article.id)
+        result = await note_get_article.fn(draft_article.key)
 
         # Assert
         assert draft_article.title in result or "タイトル" in result
@@ -272,7 +272,7 @@ class TestImageAndPreview:
         # Act
         result = await note_insert_body_image.fn(
             file_path=str(test_image_path),
-            article_id=draft_article.id,
+            article_key=draft_article.key,
             caption="E2E Test Image",
         )
 
