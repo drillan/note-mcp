@@ -9,8 +9,16 @@ Supported inline formatting (note.com ProseMirror schema):
 - Strikethrough (~~text~~)
 - Links ([text](url))
 
+Processing order (most specific pattern first):
+1. Links [text](url) - processed first (bracket/parenthesis delimited)
+2. Bold **text** - processed second (double asterisk)
+3. Strikethrough ~~text~~ - processed last (double tilde)
+
 Note: Italic (*text*) and inline code (`code`) are NOT supported
-by note.com's ProseMirror schema - these marks do not exist.
+by note.com's ProseMirror schema. Technical investigation revealed:
+- `em`/`italic` mark does not exist in the schema
+- `code` mark is forbidden in paragraph nodes (only "strong strike link" allowed)
+This is a platform limitation and cannot be worked around.
 """
 
 from __future__ import annotations
