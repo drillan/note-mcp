@@ -6,6 +6,7 @@ on note.com's preview pages.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,8 @@ from playwright.async_api import Error as PlaywrightError
 
 if TYPE_CHECKING:
     from playwright.async_api import Locator, Page
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -167,16 +170,11 @@ class PreviewValidator:
             ValidationResult with success=True if TOC element exists
         """
         # まず記事本文がロードされるのを待機
+        failure = await self._wait_for_article_body(timeout_ms)
+        if failure:
+            return failure
+
         article_body = self.page.locator(".note-common-styles__textnote-body, .p-noteBody")
-        try:
-            await article_body.first.wait_for(state="visible", timeout=timeout_ms)
-        except PlaywrightError:
-            return ValidationResult(
-                success=False,
-                expected="Article body container",
-                actual=None,
-                message="Article body not found on preview page",
-            )
 
         # note.com固有: <table-of-contents> カスタム要素を検索
         toc_custom_locator = article_body.locator("table-of-contents")
@@ -198,8 +196,12 @@ class PreviewValidator:
                 nav_locator,
                 "TOC nav element in article body",
             )
-        except PlaywrightError:
-            pass
+        except PlaywrightError as e:
+            # ログ出力: nav要素が見つからなかった場合、フォールバックを試行
+            logger.debug(
+                "TOC nav element not found within timeout, falling back to TableOfContents class search: %s",
+                e,
+            )
 
         # フォールバック: TableOfContentsクラスを検索
         toc_class_locator = self.page.locator("[class*='TableOfContents']")
@@ -207,6 +209,76 @@ class PreviewValidator:
             toc_class_locator,
             "TOC element with class containing 'TableOfContents'",
         )
+
+    async def validate_math(
+        self,
+        formula_text: str | None = None,
+        timeout_ms: int = 5000,
+    ) -> ValidationResult:
+        """数式がKaTeXでレンダリングされているか検証。
+
+        note.comはKaTeXを使用して数式をレンダリングする。
+        レンダリング後の要素は `.katex` クラスを持つ。
+
+        Args:
+            formula_text: 期待される数式テキスト（部分一致）。
+                Noneの場合は数式要素の存在のみ確認。
+            timeout_ms: 要素出現待機のタイムアウト（ミリ秒）
+
+        Returns:
+            ValidationResult with success=True if KaTeX element exists
+        """
+        # 記事本文がロードされるのを待機
+        failure = await self._wait_for_article_body(timeout_ms)
+        if failure:
+            return failure
+
+        article_body = self.page.locator(".note-common-styles__textnote-body, .p-noteBody")
+
+        # KaTeX要素を検索
+        katex_locator = article_body.locator(".katex")
+
+        try:
+            count = await katex_locator.count()
+            if count == 0:
+                return ValidationResult(
+                    success=False,
+                    expected=".katex element" + (f" containing '{formula_text}'" if formula_text else ""),
+                    actual=None,
+                    message="No KaTeX-rendered math elements found",
+                )
+
+            if formula_text:
+                # 指定テキストを含む数式要素を検索
+                matching_locator = katex_locator.filter(has_text=formula_text)
+                matching_count = await matching_locator.count()
+                if matching_count > 0:
+                    return ValidationResult(
+                        success=True,
+                        expected=f".katex containing '{formula_text}'",
+                        actual=f"Found {matching_count} matching element(s)",
+                        message=f"Found KaTeX math containing '{formula_text}'",
+                    )
+                return ValidationResult(
+                    success=False,
+                    expected=f".katex containing '{formula_text}'",
+                    actual=f"Found {count} .katex element(s), none containing '{formula_text}'",
+                    message=f"KaTeX elements found but none contain '{formula_text}'",
+                )
+
+            return ValidationResult(
+                success=True,
+                expected=".katex element",
+                actual=f"Found {count} element(s)",
+                message=f"Found {count} KaTeX-rendered math element(s)",
+            )
+        except PlaywrightError as e:
+            return ValidationResult(
+                success=False,
+                expected=".katex element",
+                actual=None,
+                message=f"Playwright error: {e}",
+            )
 
     async def validate_link(self, text: str, url: str) -> ValidationResult:
         """リンクが正しく変換されているか検証。
@@ -221,6 +293,31 @@ class PreviewValidator:
         # href属性でリンクを検索し、テキストでフィルタ
         locator = self.page.locator(f'a[href="{url}"]').filter(has_text=text)
         return await self._validate_element(locator, f"<a href='{url}'> containing '{text}'")
+
+    async def _wait_for_article_body(self, timeout_ms: int = 5000) -> ValidationResult | None:
+        """Wait for article body to be visible.
+
+        Common helper for validation methods that need the article body
+        to be loaded before proceeding.
+
+        Args:
+            timeout_ms: Element wait timeout in milliseconds
+
+        Returns:
+            ValidationResult with failure details if article body not found,
+            None if article body is successfully loaded
+        """
+        article_body = self.page.locator(".note-common-styles__textnote-body, .p-noteBody")
+        try:
+            await article_body.first.wait_for(state="visible", timeout=timeout_ms)
+            return None  # Success - article body is visible
+        except PlaywrightError:
+            return ValidationResult(
+                success=False,
+                expected="Article body container",
+                actual=None,
+                message="Article body not found on preview page",
+            )
 
     async def validate_bold(self, text: str) -> ValidationResult:
         """太字が正しく変換されているか検証。

@@ -339,6 +339,97 @@ result = await note_check_auth.fn()
 
 詳細は`tests/e2e/test_mcp_tools.py`のdocstringを参照してください。
 
+## ファイルベース記事作成テスト
+
+`note_create_from_file` MCPツールの動作を検証するE2Eテストです。Markdownファイルから記事を作成し、プレビューページで実際の表示を確認します。
+
+### テストファイル
+
+| ファイル | 説明 |
+|---------|------|
+| `tests/e2e/test_create_from_file.py` | ファイルベース記事作成テスト |
+| `tests/e2e/helpers/validation.py` | プレビュー検証ヘルパー |
+| `tests/e2e/helpers/image_utils.py` | 画像検証ヘルパー |
+
+### テストケース
+
+| テストケース | 検証内容 |
+|-------------|----------|
+| `test_create_from_frontmatter_file` | YAMLフロントマター付きファイルから記事作成 |
+| `test_create_from_h1_only_file` | H1のみのファイルからタイトル抽出して記事作成 |
+| `test_create_from_toc_file` | [TOC]マーカー付きファイルから目次生成 |
+| `test_create_from_math_file` | 数式付きファイルからKaTeXレンダリング検証 |
+| `test_create_with_local_image_upload` | ローカル画像をアップロードしてプレビュー検証 |
+| `test_create_from_toc_and_image_file` | TOC + 画像の組み合わせ検証 |
+
+### プレビュー検証
+
+`PreviewValidator`クラスを使用して、プレビューページのHTML要素を検証します：
+
+```python
+from tests.e2e.helpers import PreviewValidator, open_preview_for_article_key
+
+# プレビューページを開く
+preview_page = await open_preview_for_article_key(page, article_key)
+validator = PreviewValidator(preview_page)
+
+# TOC検証
+toc_result = await validator.validate_toc()
+assert toc_result.success, f"TOC validation failed: {toc_result.message}"
+
+# 数式検証（KaTeXレンダリング）
+math_result = await validator.validate_math()
+assert math_result.success, f"Math validation failed: {math_result.message}"
+
+# 特定の数式テキストを検証
+inline_result = await validator.validate_math("E = mc")
+assert inline_result.success, f"Inline math validation failed: {inline_result.message}"
+```
+
+### 数式検証（KaTeX）
+
+note.comはKaTeXを使用して数式をレンダリングします。`validate_math()`メソッドは`.katex`クラス要素の存在を確認します：
+
+| パラメータ | 型 | デフォルト | 説明 |
+|-----------|-----|-----------|------|
+| `formula_text` | `str \| None` | `None` | 期待される数式テキスト（部分一致）|
+| `timeout_ms` | `int` | `5000` | 要素出現待機のタイムアウト |
+
+```python
+# 数式要素の存在のみ確認
+result = await validator.validate_math()
+
+# 特定の数式テキストを含む要素を確認
+result = await validator.validate_math("\\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}")
+```
+
+### 画像検証
+
+`ImageValidator`クラスを使用して、プレビューページの画像表示を検証します：
+
+```python
+from tests.e2e.helpers import ImageValidator
+
+image_validator = ImageValidator(preview_page)
+
+# 画像の存在確認（期待する件数を指定）
+result = await image_validator.validate_image_exists(expected_count=1)
+assert result.success, f"Image validation failed: {result.message}"
+```
+
+### テストの実行
+
+```bash
+# すべてのファイルベース記事作成テストを実行
+uv run pytest tests/e2e/test_create_from_file.py -v
+
+# 数式テストのみ
+uv run pytest tests/e2e/test_create_from_file.py::TestCreateFromFile::test_create_from_math_file -v
+
+# TOC + 画像の組み合わせテスト
+uv run pytest tests/e2e/test_create_from_file.py::TestCreateFromFile::test_create_from_toc_and_image_file -v
+```
+
 ### トラブルシューティング
 
 #### 認証エラー

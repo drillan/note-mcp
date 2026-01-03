@@ -22,6 +22,12 @@ from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
 from note_mcp.browser.manager import BrowserManager
 from note_mcp.models import Article, ArticleInput, LoginError, Session
+from tests.e2e.helpers.constants import (
+    DEFAULT_ELEMENT_WAIT_TIMEOUT_MS,
+    DEFAULT_NAVIGATION_TIMEOUT_MS,
+    LOGIN_TIMEOUT_SECONDS,
+    NOTE_EDITOR_URL,
+)
 
 if TYPE_CHECKING:
     from playwright._impl._api_structures import SetCookieParam
@@ -30,14 +36,6 @@ if TYPE_CHECKING:
 
 # Test article prefix for identification and cleanup
 E2E_TEST_PREFIX = "[E2E-TEST-"
-
-# note.com URLs
-NOTE_EDITOR_URL = "https://editor.note.com/notes"
-
-# Timeouts (milliseconds)
-DEFAULT_NAVIGATION_TIMEOUT_MS = 30000
-DEFAULT_ELEMENT_WAIT_TIMEOUT_MS = 15000
-LOGIN_TIMEOUT_SECONDS = 300
 
 
 def _generate_test_article_title() -> str:
@@ -181,6 +179,9 @@ async def _inject_session_cookies(page: Page, session: Session) -> None:
 async def _open_preview_and_get_page(page: Page, article_key: str) -> Page:
     """Navigate to editor and open preview, returning the preview page.
 
+    This is a thin wrapper around open_preview_for_article_key() for
+    backward compatibility with existing fixtures.
+
     Args:
         page: Playwright Page instance with session cookies
         article_key: Article key (e.g., "n1234567890ab")
@@ -188,33 +189,9 @@ async def _open_preview_and_get_page(page: Page, article_key: str) -> Page:
     Returns:
         Playwright Page for the preview tab
     """
-    # Navigate to editor page
-    editor_url = f"{NOTE_EDITOR_URL}/{article_key}/edit/"
-    await page.goto(
-        editor_url,
-        wait_until="domcontentloaded",
-        timeout=DEFAULT_NAVIGATION_TIMEOUT_MS,
-    )
-    await page.wait_for_load_state("domcontentloaded", timeout=DEFAULT_NAVIGATION_TIMEOUT_MS)
+    from tests.e2e.helpers.preview_helpers import open_preview_for_article_key
 
-    # Find and click the menu button (3-dot icon) to open header popover
-    menu_button = page.locator('button[aria-label="その他"]')
-    await menu_button.wait_for(state="visible", timeout=DEFAULT_ELEMENT_WAIT_TIMEOUT_MS)
-    await menu_button.click()
-
-    # Wait for popover and click "プレビュー" button
-    preview_button = page.locator("#header-popover button", has_text="プレビュー")
-    await preview_button.wait_for(state="visible", timeout=10000)
-
-    # Capture new page (tab) when clicking preview
-    async with page.context.expect_page(timeout=DEFAULT_NAVIGATION_TIMEOUT_MS) as new_page_info:
-        await preview_button.click()
-
-    # Get the new page (preview tab)
-    new_page = await new_page_info.value
-    await new_page.wait_for_load_state("domcontentloaded", timeout=DEFAULT_NAVIGATION_TIMEOUT_MS)
-
-    return new_page
+    return await open_preview_for_article_key(page, article_key)
 
 
 @pytest_asyncio.fixture
