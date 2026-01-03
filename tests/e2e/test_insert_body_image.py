@@ -300,7 +300,7 @@ class TestImageValidation:
 
         # Refresh preview
         await preview_page.reload()
-        await preview_page.wait_for_load_state("networkidle")
+        await preview_page.wait_for_load_state("domcontentloaded")
 
         # Validate image
         validator = ImageValidator(preview_page)
@@ -334,7 +334,7 @@ class TestImageValidation:
 
         # Refresh preview
         await preview_page.reload()
-        await preview_page.wait_for_load_state("networkidle")
+        await preview_page.wait_for_load_state("domcontentloaded")
 
         # Validate image with caption
         validator = ImageValidator(preview_page)
