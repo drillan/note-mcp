@@ -121,9 +121,14 @@ Markdown変換テストは以下の要素を検証します：
 | 見出しH2 | `## 見出し` | `<h2>`要素として変換される |
 | 見出しH3 | `### 見出し` | `<h3>`要素として変換される |
 | 打消し線 | `~~text~~` | `<s>`要素として変換される |
+| 太字 | `**text**` | `<strong>`要素として変換される |
 | コードブロック | ` ```code``` ` | `<pre><code>`要素として変換される |
 | 中央配置 | `->text<-` | `text-align: center`スタイルが適用される |
 | 右配置 | `->text` | `text-align: right`スタイルが適用される |
+| 目次 | `[TOC]` | 目次HTMLとして変換される |
+| 引用 | `> text` | `<blockquote>`要素として変換される |
+| 箇条書き | `- text` | `<ul><li>`要素として変換される |
+| 番号付き | `1. text` | `<ol><li>`要素として変換される |
 
 ### ネイティブHTML検証テスト
 
@@ -170,9 +175,14 @@ uv run pytest tests/e2e/test_native_html_validation.py -v
 | H2見出し | P1 | `## text` + スペース | `<h2>text</h2>` |
 | H3見出し | P1 | `### text` + スペース | `<h3>text</h3>` |
 | 打消し線 | P1 | `~~text~~` + スペース | `<s>text</s>` |
+| 太字 | P1 | `**text**` + スペース | `<strong>text</strong>` |
 | コードブロック | P2 | ` ``` ` | `<pre><code>` |
 | 中央揃え | P2 | `->text<-` | `text-align: center` |
 | 右揃え | P2 | `->text` | `text-align: right` |
+| 目次 | P2 | `[TOC]` | 目次HTML |
+| 引用 | P2 | `> text` | `<blockquote>` |
+| 箇条書き | P2 | `- text` | `<ul><li>` |
+| 番号付き | P2 | `1. text` | `<ol><li>` |
 
 ## ネットワークエラー時のリトライ
 
