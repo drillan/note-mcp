@@ -291,8 +291,23 @@ class TestNativeTableOfContentsConversion:
         assert not result.success, f"TOC should not be generated without headings, but found: {result.message}"
 
 
+@pytest.mark.xfail(
+    reason=(
+        "note.com's ProseMirror does NOT support [text](url) + space → <a> conversion. "
+        "Link markdown is parsed and typed, but no InputRule exists for automatic conversion. "
+        "Links must be inserted via UI (リンク挿入ボタン) or paste detection. "
+        "Verified 2024-12: schema allows 'link' mark but no markdown input rule implemented."
+    ),
+    strict=True,
+)
 class TestNativeLinkConversion:
-    """Tests for native link conversion via ProseMirror."""
+    """Tests for native link conversion via ProseMirror.
+
+    Note: This test is expected to fail because note.com's ProseMirror editor
+    does not implement a markdown InputRule for link conversion. Unlike bold
+    (**text**) and strikethrough (~~text~~) which convert on space trigger,
+    links require explicit UI interaction or paste detection.
+    """
 
     async def test_link_native_conversion(
         self,

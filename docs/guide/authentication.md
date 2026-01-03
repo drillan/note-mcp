@@ -4,7 +4,7 @@ note-mcpはnote.comへの認証をブラウザ経由で行い、セッション�
 
 ## 認証フロー
 
-### ログイン
+### 手動ログイン
 
 `note_login`ツールを使用してログインします：
 
@@ -18,6 +18,50 @@ note.comにログインしてください
 4. ブラウザは自動的に閉じられます
 
 タイムアウトはデフォルトで300秒（5分）です。
+
+### 自動ログイン（E2Eテスト用）
+
+E2Eテストやスクリプト実行時に、環境変数から認証情報を読み込んで自動ログインを行います：
+
+```python
+from note_mcp.auth.browser import login_with_browser
+
+# 認証情報を指定して自動ログイン
+session = await login_with_browser(
+    credentials=("username", "password")
+)
+```
+
+環境変数から認証情報を設定する場合：
+
+```bash
+export NOTE_USERNAME=your_username
+export NOTE_PASSWORD=your_password
+```
+
+**注意**: 自動ログイン中にreCAPTCHAや二段階認証（2FA）が検出された場合、`LoginError`例外が発生します。この場合は手動でログインし、セッションを保存してください。
+
+#### LoginError例外
+
+自動ログイン時に以下の状況で`LoginError`例外が発生します：
+
+| エラーコード | 説明 | 対処法 |
+|-------------|------|--------|
+| `RECAPTCHA_DETECTED` | reCAPTCHAが検出された | 手動でログインしセッションを保存 |
+| `TWO_FACTOR_REQUIRED` | 二段階認証が要求された | 手動でログインしセッションを保存 |
+| `INVALID_CREDENTIALS` | 認証情報が無効 | ユーザー名とパスワードを確認 |
+| `LOGIN_TIMEOUT` | ログインがタイムアウト | 認証情報を確認するか、手動でログイン |
+| `FORM_NOT_FOUND` | ログインフォームが見つからない | ページの読み込み状態を確認 |
+
+```python
+from note_mcp.models import LoginError
+
+try:
+    session = await login_with_browser(credentials=("user", "pass"))
+except LoginError as e:
+    print(f"ログイン失敗: {e.code}")
+    print(f"対処法: {e.resolution}")
+```
 
 ### 認証状態の確認
 

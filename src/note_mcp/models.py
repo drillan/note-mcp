@@ -236,6 +236,38 @@ class NoteAPIError(Exception):
         super().__init__(message)
 
 
+class LoginError(Exception):
+    """ログイン処理でのエラー。
+
+    reCAPTCHA検出、2FA要求、認証情報エラー時に送出される。
+    手動ログインへのフォールバックは行わず、明確なエラーで通知する。
+
+    Attributes:
+        code: エラーコード（RECAPTCHA_DETECTED, TWO_FACTOR_REQUIRED,
+              INVALID_CREDENTIALS, LOGIN_TIMEOUT）
+        message: エラーメッセージ
+        resolution: 推奨される対処法
+    """
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        resolution: str | None = None,
+    ) -> None:
+        """Initialize the error.
+
+        Args:
+            code: エラーコード
+            message: エラーメッセージ
+            resolution: 推奨される対処法（オプション）
+        """
+        self.code = code
+        self.message = message
+        self.resolution = resolution
+        super().__init__(message)
+
+
 def from_api_response(data: dict[str, object]) -> Article:
     """Create an Article from note.com API response.
 

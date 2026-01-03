@@ -4,13 +4,15 @@ Provides functions to type Markdown content into ProseMirror editors
 with proper handling for lists, blockquotes, citations, code blocks,
 text alignment, and embeds.
 
-Supported inline formatting (note.com ProseMirror schema):
-- Bold (**text**)
-- Strikethrough (~~text~~)
-- Links ([text](url))
+Supported inline formatting with native ProseMirror conversion:
+- Bold (**text** + space → <strong>text</strong>)
+- Strikethrough (~~text~~ + space → <s>text</s>)
+
+NOT supported for native conversion (parsed but NOT converted):
+- Links ([text](url)) - No InputRule exists; requires UI or paste detection
 
 Processing order (most specific pattern first):
-1. Links [text](url) - processed first (bracket/parenthesis delimited)
+1. Links [text](url) - parsed first (for typing, NOT automatic conversion)
 2. Bold **text** - processed second (double asterisk)
 3. Strikethrough ~~text~~ - processed last (double tilde)
 
@@ -18,7 +20,8 @@ Note: Italic (*text*) and inline code (`code`) are NOT supported
 by note.com's ProseMirror schema. Technical investigation revealed (verified: 2024-12):
 - `em`/`italic` mark does not exist in the schema
 - `code` mark is forbidden in paragraph nodes (only "strong strike link" allowed)
-This is a platform limitation and cannot be worked around.
+- `link` mark exists in schema but NO markdown InputRule for [text](url) conversion
+These are platform limitations and cannot be worked around via typing.
 """
 
 from __future__ import annotations
