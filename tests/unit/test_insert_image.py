@@ -45,7 +45,7 @@ class TestInsertImageValidation:
         with pytest.raises(NoteAPIError) as exc_info:
             await insert_image_via_browser(
                 session=session,
-                article_id="12345",
+                article_key="n12345abcdef",
                 file_path="/nonexistent/file.jpg",
             )
 
@@ -62,7 +62,7 @@ class TestInsertImageValidation:
         with pytest.raises(NoteAPIError) as exc_info:
             await insert_image_via_browser(
                 session=session,
-                article_id="12345",
+                article_key="n12345abcdef",
                 file_path=str(file_path),
             )
 
@@ -312,13 +312,13 @@ class TestInsertImageViaBrowser:
 
                 result = await insert_image_via_browser(
                     session=session,
-                    article_id="12345",
+                    article_key="n12345abcdef",
                     file_path=str(file_path),
                     caption="Test caption",
                 )
 
                 assert result["success"] is True
-                assert result["article_id"] == "12345"
+                assert result["article_key"] == "n12345abcdef"
                 assert result["file_path"] == str(file_path)
                 assert result["caption"] == "Test caption"
 
@@ -347,7 +347,7 @@ class TestInsertImageViaBrowser:
                 with pytest.raises(NoteAPIError) as exc_info:
                     await insert_image_via_browser(
                         session=session,
-                        article_id="12345",
+                        article_key="n12345abcdef",
                         file_path=str(file_path),
                     )
 
@@ -377,7 +377,7 @@ class TestInsertImageViaBrowser:
                 with pytest.raises(NoteAPIError) as exc_info:
                     await insert_image_via_browser(
                         session=session,
-                        article_id="12345",
+                        article_key="n12345abcdef",
                         file_path=str(file_path),
                     )
 
@@ -409,7 +409,7 @@ class TestInsertImageViaBrowser:
                 with pytest.raises(NoteAPIError) as exc_info:
                     await insert_image_via_browser(
                         session=session,
-                        article_id="12345",
+                        article_key="n12345abcdef",
                         file_path=str(file_path),
                     )
 

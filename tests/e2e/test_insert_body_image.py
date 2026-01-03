@@ -229,13 +229,13 @@ class TestImageInsertion:
         """
         result = await insert_image_via_browser(
             session=real_session,
-            article_id=draft_article.id,
+            article_key=draft_article.key,
             file_path=str(test_image_path),
             caption=None,
         )
 
         assert result["success"] is True
-        assert result["article_id"] == draft_article.id
+        assert result["article_key"] == draft_article.key
         assert result["file_path"] == str(test_image_path)
         assert result["caption"] is None
 
@@ -256,13 +256,13 @@ class TestImageInsertion:
 
         result = await insert_image_via_browser(
             session=real_session,
-            article_id=draft_article.id,
+            article_key=draft_article.key,
             file_path=str(test_image_path),
             caption=test_caption,
         )
 
         assert result["success"] is True
-        assert result["article_id"] == draft_article.id
+        assert result["article_key"] == draft_article.key
         assert result["caption"] == test_caption
 
 
@@ -290,7 +290,7 @@ class TestImageValidation:
         # Insert image
         await insert_image_via_browser(
             session=real_session,
-            article_id=draft_article.id,
+            article_key=draft_article.key,
             file_path=str(test_image_path),
             caption=None,
         )
@@ -324,7 +324,7 @@ class TestImageValidation:
         # Insert image with caption
         await insert_image_via_browser(
             session=real_session,
-            article_id=draft_article.id,
+            article_key=draft_article.key,
             file_path=str(test_image_path),
             caption=test_caption,
         )
@@ -359,7 +359,7 @@ class TestEdgeCases:
         # Insert first image
         result1 = await insert_image_via_browser(
             session=real_session,
-            article_id=draft_article.id,
+            article_key=draft_article.key,
             file_path=str(test_image_path),
             caption="最初の画像",
         )
@@ -368,7 +368,7 @@ class TestEdgeCases:
         # Insert second image
         result2 = await insert_image_via_browser(
             session=real_session,
-            article_id=draft_article.id,
+            article_key=draft_article.key,
             file_path=str(test_image_path),
             caption="二番目の画像",
         )
@@ -385,7 +385,7 @@ class TestEdgeCases:
         with pytest.raises(NoteAPIError):
             await insert_image_via_browser(
                 session=real_session,
-                article_id=draft_article.id,
+                article_key=draft_article.key,
                 file_path="/nonexistent/path/image.png",
                 caption=None,
             )

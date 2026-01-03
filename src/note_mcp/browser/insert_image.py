@@ -23,8 +23,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# note.com edit URL
-NOTE_EDIT_URL = "https://note.com/notes"
+# note.com editor URL (uses article_key format like "n1234567890ab")
+NOTE_EDIT_URL = "https://editor.note.com/notes"
 
 
 async def _dismiss_ai_dialog(page: Page) -> None:
@@ -94,12 +94,12 @@ async def _dismiss_ai_dialog(page: Page) -> None:
         logger.debug(f"No AI dialog to dismiss or error: {e}")
 
 
-async def _setup_page_with_session(session: Session, article_id: str) -> Page:
+async def _setup_page_with_session(session: Session, article_key: str) -> Page:
     """Setup browser page with session cookies and navigate to article edit page.
 
     Args:
         session: Authenticated session
-        article_id: ID of the article to edit
+        article_key: Key of the article to edit (e.g., "n1234567890ab")
 
     Returns:
         Playwright Page instance ready for editing
@@ -125,7 +125,7 @@ async def _setup_page_with_session(session: Session, article_id: str) -> Page:
     await page.context.add_cookies(playwright_cookies)  # type: ignore[arg-type]
 
     # Navigate to article edit page
-    edit_url = f"{NOTE_EDIT_URL}/{article_id}/edit"
+    edit_url = f"{NOTE_EDIT_URL}/{article_key}/edit/"
     await page.goto(edit_url, wait_until="domcontentloaded")
 
     # Wait for network to be idle
@@ -136,7 +136,7 @@ async def _setup_page_with_session(session: Session, article_id: str) -> Page:
 
     # Validate URL first
     current_url = page.url
-    if not validate_article_edit_url(current_url, article_id):
+    if not validate_article_edit_url(current_url, article_key):
         raise RuntimeError(f"Failed to navigate to article edit page. Current URL: {current_url}")
 
     # Dismiss AI dialog FIRST before waiting for editor
@@ -492,7 +492,7 @@ async def _save_article(page: Page, max_retries: int = 3) -> bool:
 
 async def insert_image_via_browser(
     session: Session,
-    article_id: str,
+    article_key: str,
     file_path: str,
     caption: str | None = None,
 ) -> dict[str, Any]:
@@ -507,7 +507,7 @@ async def insert_image_via_browser(
 
     Args:
         session: Authenticated session
-        article_id: ID of the article to edit
+        article_key: Key of the article to edit (e.g., "n1234567890ab")
         file_path: Path to the image file to insert
         caption: Optional caption for the image
 
@@ -522,7 +522,7 @@ async def insert_image_via_browser(
     path = Path(file_path)
 
     # Setup page
-    page = await _setup_page_with_session(session, article_id)
+    page = await _setup_page_with_session(session, article_key)
 
     # Get initial image count before upload
     initial_img_count = await page.evaluate(
@@ -535,7 +535,7 @@ async def insert_image_via_browser(
         raise NoteAPIError(
             code=ErrorCode.API_ERROR,
             message="Failed to click add image button",
-            details={"article_id": article_id},
+            details={"article_key": article_key},
         )
 
     # Upload image
@@ -543,7 +543,7 @@ async def insert_image_via_browser(
         raise NoteAPIError(
             code=ErrorCode.API_ERROR,
             message="Failed to upload image via file chooser",
-            details={"article_id": article_id, "file_path": file_path},
+            details={"article_key": article_key, "file_path": file_path},
         )
 
     # Wait for image to be inserted directly into editor (no modal)
@@ -551,7 +551,7 @@ async def insert_image_via_browser(
         raise NoteAPIError(
             code=ErrorCode.API_ERROR,
             message="Image insertion failed",
-            details={"article_id": article_id, "file_path": file_path},
+            details={"article_key": article_key, "file_path": file_path},
         )
 
     # Save article
@@ -559,12 +559,12 @@ async def insert_image_via_browser(
         raise NoteAPIError(
             code=ErrorCode.API_ERROR,
             message="Failed to save article after image insertion",
-            details={"article_id": article_id, "file_path": file_path},
+            details={"article_key": article_key, "file_path": file_path},
         )
 
     return {
         "success": True,
-        "article_id": article_id,
+        "article_key": article_key,
         "file_path": file_path,
         "caption": caption,
     }
