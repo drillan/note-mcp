@@ -16,7 +16,7 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-from note_mcp.browser.insert_embed import insert_embed_at_cursor
+from note_mcp.browser.insert_embed import EmbedResult, insert_embed_at_cursor
 
 if TYPE_CHECKING:
     from playwright.async_api import Page
@@ -103,15 +103,19 @@ async def apply_embeds(page: Page, timeout: int = 10000) -> tuple[int, str]:
         debug_steps.append(f"processing:{url[:30]}...")
 
         try:
-            success, insert_debug = await _insert_single_embed(page, url, timeout)
+            result, insert_debug = await _insert_single_embed(page, url, timeout)
             debug_steps.append(f"insert_result:{insert_debug}")
-            if success:
+            if result == EmbedResult.SUCCESS:
                 applied_count += 1
                 logger.info(f"Successfully inserted embed for: {url}")
                 debug_steps.append("SUCCESS")
+            elif result == EmbedResult.LINK_INSERTED:
+                applied_count += 1  # 処理は完了（リンクとして挿入された）
+                logger.info(f"Embed inserted as link (URL may be invalid): {url}")
+                debug_steps.append("LINK_INSERTED")
             else:
                 logger.warning(f"Failed to insert embed for: {url}")
-                debug_steps.append("FAILED")
+                debug_steps.append("TIMEOUT")
                 # If insertion fails, try to remove the placeholder to avoid infinite loop
                 await _remove_placeholder_text(page, url)
         except Exception as e:
@@ -158,7 +162,7 @@ async def _find_embed_placeholders(page: Page) -> list[str]:
     return result.get("urls", []) if result else []
 
 
-async def _insert_single_embed(page: Page, url: str, timeout: int) -> tuple[bool, str]:
+async def _insert_single_embed(page: Page, url: str, timeout: int) -> tuple[EmbedResult, str]:
     """Insert a single embed at its placeholder position.
 
     Args:
@@ -167,7 +171,7 @@ async def _insert_single_embed(page: Page, url: str, timeout: int) -> tuple[bool
         timeout: Maximum wait time in milliseconds.
 
     Returns:
-        Tuple of (success, debug info string).
+        Tuple of (EmbedResult indicating what happened, debug info string).
     """
     placeholder = f"{_EMBED_PLACEHOLDER_START}{url}{_EMBED_PLACEHOLDER_END}"
     debug_steps: list[str] = []
@@ -176,7 +180,7 @@ async def _insert_single_embed(page: Page, url: str, timeout: int) -> tuple[bool
     select_result = await _select_placeholder(page, placeholder)
     debug_steps.append(f"select={select_result}")
     if not select_result:
-        return False, "select_failed"
+        return EmbedResult.TIMEOUT, "select_failed"
 
     # 2. Delete the selected placeholder
     await page.keyboard.press("Backspace")
@@ -185,12 +189,13 @@ async def _insert_single_embed(page: Page, url: str, timeout: int) -> tuple[bool
 
     # 3. Insert the actual embed using browser automation
     try:
-        success, insert_debug = await insert_embed_at_cursor(page, url, timeout)
+        result, insert_debug = await insert_embed_at_cursor(page, url, timeout)
         debug_steps.append(f"insert[{insert_debug}]")
-        return success, "→".join(debug_steps)
+        return result, "→".join(debug_steps)
     except Exception as e:
-        debug_steps.append(f"insert_error:{type(e).__name__}")
-        return False, "→".join(debug_steps)
+        logger.error(f"Embed insertion failed for {url}: {type(e).__name__}: {e}")
+        debug_steps.append(f"insert_error:{type(e).__name__}:{str(e)[:50]}")
+        return EmbedResult.TIMEOUT, "→".join(debug_steps)
 
 
 async def _select_placeholder(page: Page, placeholder: str) -> bool:

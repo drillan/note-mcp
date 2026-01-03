@@ -14,9 +14,11 @@ from note_mcp.browser.embed_helpers import (
     _EMBED_PLACEHOLDER_PATTERN,
     _EMBED_PLACEHOLDER_START,
     _find_embed_placeholders,
+    _insert_single_embed,
     _select_placeholder,
     has_embed_placeholders,
 )
+from note_mcp.browser.insert_embed import EmbedResult
 
 
 class TestEmbedPlaceholderConstants:
@@ -203,3 +205,90 @@ class TestSelectPlaceholder:
         result = await _select_placeholder(mock_page, placeholder)
 
         assert result is False
+
+
+class TestInsertSingleEmbedResultTypes:
+    """Tests for _insert_single_embed result type handling."""
+
+    @pytest.mark.asyncio
+    async def test_returns_timeout_when_select_fails(self) -> None:
+        """Should return EmbedResult.TIMEOUT when placeholder selection fails."""
+        mock_page = MagicMock()
+        # Mock _select_placeholder to return False (via page.evaluate)
+        mock_page.evaluate = AsyncMock(return_value={"success": False, "error": "Placeholder not found"})
+
+        result, debug = await _insert_single_embed(mock_page, "https://www.youtube.com/watch?v=abc123", 10000)
+
+        assert result == EmbedResult.TIMEOUT
+        assert "select_failed" in debug
+
+    @pytest.mark.asyncio
+    async def test_returns_success_when_embed_inserted(self) -> None:
+        """Should return EmbedResult.SUCCESS when embed is successfully inserted."""
+        from unittest.mock import patch
+
+        mock_page = MagicMock()
+        mock_keyboard = MagicMock()
+        mock_keyboard.press = AsyncMock()
+        mock_page.keyboard = mock_keyboard
+
+        # Mock _select_placeholder to return True
+        mock_page.evaluate = AsyncMock(return_value={"success": True})
+
+        # Mock insert_embed_at_cursor to return SUCCESS
+        with patch(
+            "note_mcp.browser.embed_helpers.insert_embed_at_cursor",
+            new=AsyncMock(return_value=(EmbedResult.SUCCESS, "S1:OK|S2:OK|S3:OK|S4:OK|S5:success")),
+        ):
+            result, debug = await _insert_single_embed(mock_page, "https://www.youtube.com/watch?v=abc123", 10000)
+
+        assert result == EmbedResult.SUCCESS
+        assert "select=True" in debug
+
+    @pytest.mark.asyncio
+    async def test_returns_link_inserted_when_link_detected(self) -> None:
+        """Should return EmbedResult.LINK_INSERTED when link is detected instead of embed."""
+        from unittest.mock import patch
+
+        mock_page = MagicMock()
+        mock_keyboard = MagicMock()
+        mock_keyboard.press = AsyncMock()
+        mock_page.keyboard = mock_keyboard
+
+        # Mock _select_placeholder to return True
+        mock_page.evaluate = AsyncMock(return_value={"success": True})
+
+        # Mock insert_embed_at_cursor to return LINK_INSERTED
+        with patch(
+            "note_mcp.browser.embed_helpers.insert_embed_at_cursor",
+            new=AsyncMock(return_value=(EmbedResult.LINK_INSERTED, "S1:OK|S2:OK|S3:OK|S4:OK|S5:link")),
+        ):
+            result, debug = await _insert_single_embed(
+                mock_page, "https://twitter.com/user/status/deleted_tweet", 10000
+            )
+
+        assert result == EmbedResult.LINK_INSERTED
+        assert "select=True" in debug
+
+    @pytest.mark.asyncio
+    async def test_returns_timeout_on_exception(self) -> None:
+        """Should return EmbedResult.TIMEOUT when an exception occurs."""
+        from unittest.mock import patch
+
+        mock_page = MagicMock()
+        mock_keyboard = MagicMock()
+        mock_keyboard.press = AsyncMock()
+        mock_page.keyboard = mock_keyboard
+
+        # Mock _select_placeholder to return True
+        mock_page.evaluate = AsyncMock(return_value={"success": True})
+
+        # Mock insert_embed_at_cursor to raise an exception
+        with patch(
+            "note_mcp.browser.embed_helpers.insert_embed_at_cursor",
+            new=AsyncMock(side_effect=Exception("Test error")),
+        ):
+            result, debug = await _insert_single_embed(mock_page, "https://www.youtube.com/watch?v=abc123", 10000)
+
+        assert result == EmbedResult.TIMEOUT
+        assert "insert_error" in debug

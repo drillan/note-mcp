@@ -15,7 +15,7 @@ Processing order (most specific pattern first):
 3. Strikethrough ~~text~~ - processed last (double tilde)
 
 Note: Italic (*text*) and inline code (`code`) are NOT supported
-by note.com's ProseMirror schema. Technical investigation revealed:
+by note.com's ProseMirror schema. Technical investigation revealed (verified: 2024-12):
 - `em`/`italic` mark does not exist in the schema
 - `code` mark is forbidden in paragraph nodes (only "strong strike link" allowed)
 This is a platform limitation and cannot be worked around.

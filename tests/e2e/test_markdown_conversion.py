@@ -53,7 +53,7 @@ class TestHeadingConversion:
 
         # Refresh preview
         await preview_page.reload()
-        await preview_page.wait_for_load_state("networkidle")
+        await preview_page.wait_for_load_state("domcontentloaded")
 
         # Act: Validate H2
         validator = PreviewValidator(preview_page)
@@ -79,7 +79,7 @@ class TestHeadingConversion:
 
         # Refresh preview
         await preview_page.reload()
-        await preview_page.wait_for_load_state("networkidle")
+        await preview_page.wait_for_load_state("domcontentloaded")
 
         # Act: Validate H3
         validator = PreviewValidator(preview_page)
@@ -113,7 +113,7 @@ class TestStrikethroughConversion:
 
         # Refresh preview
         await preview_page.reload()
-        await preview_page.wait_for_load_state("networkidle")
+        await preview_page.wait_for_load_state("domcontentloaded")
 
         # Act: Validate strikethrough
         validator = PreviewValidator(preview_page)
@@ -143,7 +143,7 @@ class TestCodeBlockConversion:
 
         # Refresh preview
         await preview_page.reload()
-        await preview_page.wait_for_load_state("networkidle")
+        await preview_page.wait_for_load_state("domcontentloaded")
 
         # Act: Validate code block
         validator = PreviewValidator(preview_page)
@@ -173,7 +173,7 @@ class TestTextAlignment:
 
         # Refresh preview
         await preview_page.reload()
-        await preview_page.wait_for_load_state("networkidle")
+        await preview_page.wait_for_load_state("domcontentloaded")
 
         # Act: Validate center alignment
         validator = PreviewValidator(preview_page)
@@ -199,7 +199,7 @@ class TestTextAlignment:
 
         # Refresh preview
         await preview_page.reload()
-        await preview_page.wait_for_load_state("networkidle")
+        await preview_page.wait_for_load_state("domcontentloaded")
 
         # Act: Validate right alignment
         validator = PreviewValidator(preview_page)
