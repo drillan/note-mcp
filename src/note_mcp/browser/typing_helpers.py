@@ -1,8 +1,16 @@
 """Typing helpers for browser automation.
 
 Provides functions to type Markdown content into ProseMirror editors
-with proper handling for lists, blockquotes, citations, code blocks, strikethrough,
+with proper handling for lists, blockquotes, citations, code blocks,
 text alignment, and embeds.
+
+Supported inline formatting (note.com ProseMirror schema):
+- Bold (**text**)
+- Strikethrough (~~text~~)
+- Links ([text](url))
+
+Note: Italic (*text*) and inline code (`code`) are NOT supported
+by note.com's ProseMirror schema - these marks do not exist.
 """
 
 from __future__ import annotations
@@ -35,10 +43,6 @@ _STRIKETHROUGH_PATTERN = re.compile(r"~~(.+?)~~")
 _LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 # Bold pattern: **text**
 _BOLD_PATTERN = re.compile(r"\*\*(.+?)\*\*")
-# Italic pattern: *text* (not **text**)
-_ITALIC_PATTERN = re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)")
-# Inline code pattern: `code`
-_INLINE_CODE_PATTERN = re.compile(r"`([^`]+)`")
 # Horizontal line pattern: --- (must be standalone line)
 _HR_PATTERN = re.compile(r"^---$")
 # Ruby notation pattern: ｜漢字《かんじ》 or |漢字《かんじ》 or 漢字《かんじ》
@@ -204,35 +208,17 @@ async def _type_with_bold(page: Any, text: str) -> str:
     )
 
 
-async def _type_with_italic(page: Any, text: str) -> str:
-    """Process italic patterns *text* and type with proper trigger."""
-    return await _type_with_inline_pattern(
-        page,
-        text,
-        _ITALIC_PATTERN,
-        lambda m: f"*{m.group(1)}*",
-    )
-
-
-async def _type_with_inline_code(page: Any, text: str) -> str:
-    """Process inline code patterns `code` and type with proper trigger."""
-    return await _type_with_inline_pattern(
-        page,
-        text,
-        _INLINE_CODE_PATTERN,
-        lambda m: f"`{m.group(1)}`",
-    )
-
-
 async def _type_with_inline_formatting(page: Any, text: str) -> None:
     """Process all inline formatting patterns in correct order.
 
-    Processing order (most specific to least specific):
-    1. Links [text](url) - bracket/parenthesis delimited
-    2. Bold **text** - double asterisk (before italic to avoid conflict)
-    3. Italic *text* - single asterisk (after bold)
-    4. Inline code `code` - backtick delimited
-    5. Strikethrough ~~text~~ - double tilde
+    Supported formats (note.com ProseMirror schema limitations):
+    - Links [text](url) - bracket/parenthesis delimited
+    - Bold **text** - double asterisk
+    - Strikethrough ~~text~~ - double tilde
+
+    Note: Italic (*text*) and inline code (`code`) are NOT supported
+    by note.com's ProseMirror schema. These marks do not exist in
+    the editor's schema, so they cannot be applied.
 
     This function processes one pattern at a time, recursively handling
     remaining text until all patterns are processed.
@@ -251,28 +237,14 @@ async def _type_with_inline_formatting(page: Any, text: str) -> None:
             await _type_with_inline_formatting(page, remaining)
         return
 
-    # Check for bold pattern (before italic to avoid ** vs * conflict)
+    # Check for bold pattern
     if _BOLD_PATTERN.search(text):
         remaining = await _type_with_bold(page, text)
         if remaining:
             await _type_with_inline_formatting(page, remaining)
         return
 
-    # Check for italic pattern (after bold)
-    if _ITALIC_PATTERN.search(text):
-        remaining = await _type_with_italic(page, text)
-        if remaining:
-            await _type_with_inline_formatting(page, remaining)
-        return
-
-    # Check for inline code pattern
-    if _INLINE_CODE_PATTERN.search(text):
-        remaining = await _type_with_inline_code(page, text)
-        if remaining:
-            await _type_with_inline_formatting(page, remaining)
-        return
-
-    # Check for strikethrough pattern (existing)
+    # Check for strikethrough pattern
     if "~~" in text:
         await _type_with_strikethrough(page, text)
         return
