@@ -365,7 +365,7 @@ async def note_upload_body_image(
 @mcp.tool()
 async def note_insert_body_image(
     file_path: Annotated[str, "挿入する画像ファイルのパス"],
-    article_id: Annotated[str, "画像を挿入する記事のID（数字のみ）"],
+    article_key: Annotated[str, "画像を挿入する記事のキー（例: n1234567890ab）"],
     caption: Annotated[str | None, "画像のキャプション（オプション）"] = None,
 ) -> str:
     """記事本文内に画像を直接挿入します。
@@ -377,11 +377,11 @@ async def note_insert_body_image(
     note.comのAPIでは画像のHTML埋め込みが正しく保存されないため、
     このツールはブラウザ経由でエディタの「画像を追加」機能を使用します。
 
-    note_list_articlesで記事一覧を取得し、IDを確認できます。
+    note_list_articlesで記事一覧を取得し、キーを確認できます。
 
     Args:
         file_path: 挿入する画像ファイルのパス
-        article_id: 画像を挿入する記事のID
+        article_key: 画像を挿入する記事のキー（例: n1234567890ab）
         caption: 画像のキャプション（オプション）
 
     Returns:
@@ -393,14 +393,14 @@ async def note_insert_body_image(
 
     result = await insert_image_via_browser(
         session=session,
-        article_id=article_id,
+        article_key=article_key,
         file_path=file_path,
         caption=caption,
     )
 
     if result["success"]:
         caption_info = f"、キャプション: {result['caption']}" if result.get("caption") else ""
-        return f"画像を挿入しました。記事ID: {result['article_id']}{caption_info}"
+        return f"画像を挿入しました。記事キー: {result['article_key']}{caption_info}"
     else:
         return "画像の挿入に失敗しました。"
 
