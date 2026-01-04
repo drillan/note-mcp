@@ -17,7 +17,7 @@ import json
 import logging
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -302,7 +302,7 @@ async def main() -> int:
 
             # Build result summary
             result_summary = {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "commit": "67f2444",
                 "test_file": str(TEST_FILE),
                 "article": {
@@ -383,7 +383,7 @@ async def main() -> int:
         logger.exception(f"Error during verification: {e}")
         # Save error result
         error_result = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "commit": "67f2444",
             "success": False,
             "error": str(e),
