@@ -1,6 +1,6 @@
 """Unit tests for Markdown conversion utility."""
 
-from note_mcp.utils.markdown_to_html import has_math_formula, markdown_to_html
+from note_mcp.utils.markdown_to_html import has_math_formula, has_ruby_notation, markdown_to_html
 
 
 class TestMarkdownToHtml:
@@ -742,6 +742,74 @@ class TestHasMathFormula:
         """Test that double dollar signs are required for math detection."""
         assert has_math_formula("$formula$") is False
         assert has_math_formula("$$formula$$") is True
+
+
+class TestHasRubyNotation:
+    """Tests for has_ruby_notation function.
+
+    Issue #108: Ruby notation must be processed via browser path because
+    note.com's API sanitizes <ruby> HTML tags.
+    """
+
+    def test_with_fullwidth_bar_ruby(self) -> None:
+        """Test detection of ruby with fullwidth vertical bar."""
+        content = "｜漢字《かんじ》"
+        assert has_ruby_notation(content) is True
+
+    def test_with_halfwidth_bar_ruby(self) -> None:
+        """Test detection of ruby with halfwidth vertical bar."""
+        content = "|漢字《かんじ》"
+        assert has_ruby_notation(content) is True
+
+    def test_with_implicit_ruby(self) -> None:
+        """Test detection of ruby without explicit bar (kanji followed by reading)."""
+        content = "漢字《かんじ》"
+        assert has_ruby_notation(content) is True
+
+    def test_with_hiragana_ruby(self) -> None:
+        """Test detection of ruby on hiragana."""
+        content = "あいう《アイウ》"
+        assert has_ruby_notation(content) is True
+
+    def test_with_katakana_ruby(self) -> None:
+        """Test detection of ruby on katakana."""
+        content = "カタカナ《かたかな》"
+        assert has_ruby_notation(content) is True
+
+    def test_with_multiple_ruby(self) -> None:
+        """Test detection with multiple ruby notations."""
+        content = "｜東京《とうきょう》から｜大阪《おおさか》へ"
+        assert has_ruby_notation(content) is True
+
+    def test_with_ruby_in_sentence(self) -> None:
+        """Test detection of ruby within a sentence."""
+        content = "今日は｜天気《てんき》がいい"
+        assert has_ruby_notation(content) is True
+
+    def test_without_ruby_plain_text(self) -> None:
+        """Test plain text without ruby notation."""
+        content = "これは普通のテキストです。"
+        assert has_ruby_notation(content) is False
+
+    def test_without_ruby_brackets_only(self) -> None:
+        """Test text with angle brackets but no ruby pattern."""
+        content = "《》だけのテキスト"
+        assert has_ruby_notation(content) is False
+
+    def test_without_ruby_empty(self) -> None:
+        """Test empty string."""
+        content = ""
+        assert has_ruby_notation(content) is False
+
+    def test_without_ruby_markdown(self) -> None:
+        """Test markdown without ruby notation."""
+        content = "## 見出し\n\n本文テキスト"
+        assert has_ruby_notation(content) is False
+
+    def test_with_ruby_and_other_markdown(self) -> None:
+        """Test ruby notation mixed with other markdown."""
+        content = "## ｜題名《だいめい》\n\n本文に｜漢字《かんじ》があります。"
+        assert has_ruby_notation(content) is True
 
 
 class TestStandaloneUrl:

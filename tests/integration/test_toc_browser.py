@@ -84,6 +84,9 @@ class TestTocInsertion:
         toc_element.first = toc_element
         toc_element.wait_for = AsyncMock()
         page.evaluate = AsyncMock(return_value={"success": True})
+        # Mock keyboard for placeholder removal
+        page.keyboard = MagicMock()
+        page.keyboard.press = AsyncMock()
 
         result = await insert_toc_at_placeholder(page)
         assert result is True
@@ -125,6 +128,9 @@ class TestTocInsertion:
         toc_element.first = toc_element
         toc_element.wait_for = AsyncMock()
         page.evaluate = AsyncMock(return_value={"success": True})
+        # Mock keyboard for placeholder removal
+        page.keyboard = MagicMock()
+        page.keyboard.press = AsyncMock()
 
         result = await insert_toc_at_placeholder(page)
         assert result is True

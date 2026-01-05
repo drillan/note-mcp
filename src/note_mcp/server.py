@@ -32,6 +32,7 @@ from note_mcp.utils.markdown_to_html import (
     _has_toc_placeholder,
     has_embed_url,
     has_math_formula,
+    has_ruby_notation,
 )
 
 # Create MCP server instance
@@ -177,7 +178,7 @@ async def note_create_draft(
     # TOC insertion, embed insertion, and math formulas require browser automation
     toc_info = ""
     embed_info = ""
-    use_browser = _has_toc_placeholder(body) or has_embed_url(body) or has_math_formula(body)
+    use_browser = _has_toc_placeholder(body) or has_embed_url(body) or has_math_formula(body) or has_ruby_notation(body)
 
     if use_browser:
         result = await create_draft_via_browser(session, article_input)
@@ -284,7 +285,7 @@ async def note_update_article(
     # TOC insertion, embed insertion, and math formulas require browser automation
     toc_info = ""
     embed_info = ""
-    use_browser = _has_toc_placeholder(body) or has_embed_url(body) or has_math_formula(body)
+    use_browser = _has_toc_placeholder(body) or has_embed_url(body) or has_math_formula(body) or has_ruby_notation(body)
 
     if use_browser:
         result = await update_article_via_browser(session, article_id, article_input)
@@ -578,8 +579,13 @@ async def note_create_from_file(
         tags=parsed.tags,
     )
 
-    # Math formulas also require browser automation for KaTeX rendering
-    needs_browser = _has_toc_placeholder(parsed.body) or has_embed_url(parsed.body) or has_math_formula(parsed.body)
+    # Math formulas and ruby notation require browser automation
+    needs_browser = (
+        _has_toc_placeholder(parsed.body)
+        or has_embed_url(parsed.body)
+        or has_math_formula(parsed.body)
+        or has_ruby_notation(parsed.body)
+    )
 
     try:
         if needs_browser:
@@ -618,7 +624,12 @@ async def note_create_from_file(
                     body=updated_body,
                     tags=parsed.tags,
                 )
-                await update_article(session, article.id, updated_input)
+                # Use browser path for update if original creation used browser path
+                # This preserves ruby notation, math formulas, TOC, and embeds
+                if needs_browser:
+                    await update_article_via_browser(session, article.id, updated_input)
+                else:
+                    await update_article(session, article.id, updated_input)
 
         result_lines = [
             "✅ 下書きを作成しました",

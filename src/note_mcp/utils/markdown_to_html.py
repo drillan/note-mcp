@@ -46,7 +46,7 @@ _CITATION_PATTERN = re.compile(
 # Pattern to extract URL from citation: "Text (URL)"
 _CITATION_URL_PATTERN = re.compile(r"^(.+?)\s+\((\S+)\)\s*$")
 # Ruby notation pattern: ｜漢字《かんじ》 or |漢字《かんじ》 or 漢字《かんじ》
-# Vertical bar can be full-width (｜) or half-width (|) or omitted for kanji/kana
+# Note: Vertical bar is REQUIRED by note.com, but pattern accepts omission for detection
 _RUBY_PATTERN = re.compile(r"[｜|]?([一-龯ぁ-んァ-ヶー]+)《([^》]+)》")
 
 # Text alignment patterns (Issue #40)
@@ -90,6 +90,22 @@ def has_math_formula(content: str) -> bool:
         True if content contains math formulas.
     """
     return bool(_MATH_INLINE_PATTERN.search(content) or _MATH_DISPLAY_PATTERN.search(content))
+
+
+def has_ruby_notation(content: str) -> bool:
+    """Check if content contains ruby notation that requires browser automation.
+
+    Ruby notation (｜漢字《かんじ》) must be processed via browser path because
+    note.com's API sanitizes <ruby> HTML tags. The server-side processing
+    only works when content is typed through the editor.
+
+    Args:
+        content: The markdown content to check.
+
+    Returns:
+        True if ruby notation is found, False otherwise.
+    """
+    return bool(_RUBY_PATTERN.search(content))
 
 
 def has_embed_url(content: str) -> bool:
