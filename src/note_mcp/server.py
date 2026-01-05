@@ -31,6 +31,7 @@ from note_mcp.utils.file_parser import parse_markdown_file
 from note_mcp.utils.markdown_to_html import (
     _has_toc_placeholder,
     has_embed_url,
+    has_math_formula,
 )
 
 # Create MCP server instance
@@ -172,11 +173,11 @@ async def note_create_draft(
         tags=tags or [],
     )
 
-    # Use browser-based creation for articles with [TOC] marker or embed URLs
-    # TOC insertion and embed insertion require browser automation (clicking UI elements)
+    # Use browser-based creation for articles with [TOC] marker, embed URLs, or math formulas
+    # TOC insertion, embed insertion, and math formulas require browser automation
     toc_info = ""
     embed_info = ""
-    use_browser = _has_toc_placeholder(body) or has_embed_url(body)
+    use_browser = _has_toc_placeholder(body) or has_embed_url(body) or has_math_formula(body)
 
     if use_browser:
         result = await create_draft_via_browser(session, article_input)
@@ -279,10 +280,11 @@ async def note_update_article(
         tags=tags or [],
     )
 
-    # Use browser-based update for articles with [TOC] marker or embed URLs
+    # Use browser-based update for articles with [TOC] marker, embed URLs, or math formulas
+    # TOC insertion, embed insertion, and math formulas require browser automation
     toc_info = ""
     embed_info = ""
-    use_browser = _has_toc_placeholder(body) or has_embed_url(body)
+    use_browser = _has_toc_placeholder(body) or has_embed_url(body) or has_math_formula(body)
 
     if use_browser:
         result = await update_article_via_browser(session, article_id, article_input)
@@ -576,7 +578,8 @@ async def note_create_from_file(
         tags=parsed.tags,
     )
 
-    needs_browser = _has_toc_placeholder(parsed.body) or has_embed_url(parsed.body)
+    # Math formulas also require browser automation for KaTeX rendering
+    needs_browser = _has_toc_placeholder(parsed.body) or has_embed_url(parsed.body) or has_math_formula(parsed.body)
 
     try:
         if needs_browser:

@@ -165,9 +165,7 @@ The famous equation $${E = mc^2}$$ shows mass-energy equivalence.
 
 The quadratic formula:
 
-$$
-x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}
-$$
+$$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$
 
 More content after math.
 """

@@ -69,6 +69,28 @@ _EMBED_NOTE_PATTERN = re.compile(r"^https?://note\.com/\w+/n/\w+$")
 # Pattern to find URLs that are alone on a line (potential embed URLs)
 _STANDALONE_URL_PATTERN = re.compile(r"^(https?://\S+)$", re.MULTILINE)
 
+# Math formula patterns (Issue #101)
+# Must match patterns in typing_helpers.py:
+# - Inline math: $${formula}$$ (double dollar signs WITH curly braces)
+# - Display math: $$formula$$ (double dollar signs WITHOUT curly braces)
+_MATH_INLINE_PATTERN = re.compile(r"\$\$\{.+?\}\$\$", re.DOTALL)
+_MATH_DISPLAY_PATTERN = re.compile(r"\$\$[^{].*?\$\$", re.DOTALL)
+
+
+def has_math_formula(content: str) -> bool:
+    """Check if content contains math formulas that require browser automation.
+
+    Detects inline math ($${formula}$$) and display math ($$formula$$) patterns
+    that need to be processed via ProseMirror editor to render as KaTeX.
+
+    Args:
+        content: Markdown content to check.
+
+    Returns:
+        True if content contains math formulas.
+    """
+    return bool(_MATH_INLINE_PATTERN.search(content) or _MATH_DISPLAY_PATTERN.search(content))
+
 
 def has_embed_url(content: str) -> bool:
     """Check if content contains URLs that should be embedded.
