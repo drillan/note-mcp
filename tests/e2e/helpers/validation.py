@@ -244,36 +244,57 @@ class PreviewValidator:
             # Shadow DOM内のKaTeX要素をJavaScriptで検索
             # nwc-formula要素のshadowRoot内の.katex要素をカウント
             # Shadow DOMがclosedの場合に備え、nwc-formulaのtextContentも収集
-            math_info: dict[str, int | list[str]] = await self.page.evaluate(
+            math_info: dict[str, int | list[str] | str | None] = await self.page.evaluate(
                 r"""
                 () => {
-                    const formulas = document.querySelectorAll('nwc-formula');
-                    let katexCount = 0;
-                    const katexTexts = [];
-                    const nwcFormulaTexts = [];
+                    try {
+                        const formulas = document.querySelectorAll('nwc-formula');
+                        let katexCount = 0;
+                        const katexTexts = [];
+                        const nwcFormulaTexts = [];
 
-                    for (const formula of formulas) {
-                        // nwc-formula自体のテキストコンテンツ（LaTeXソース）を収集
-                        nwcFormulaTexts.push(formula.textContent || '');
+                        for (const formula of formulas) {
+                            // nwc-formula自体のテキストコンテンツ（LaTeXソース）を収集
+                            nwcFormulaTexts.push(formula.textContent || '');
 
-                        if (formula.shadowRoot) {
-                            const katexElements = formula.shadowRoot.querySelectorAll('.katex');
-                            katexCount += katexElements.length;
-                            for (const katex of katexElements) {
-                                katexTexts.push(katex.textContent || '');
+                            if (formula.shadowRoot) {
+                                const katexElements = formula.shadowRoot.querySelectorAll('.katex');
+                                katexCount += katexElements.length;
+                                for (const katex of katexElements) {
+                                    katexTexts.push(katex.textContent || '');
+                                }
                             }
                         }
-                    }
 
-                    return {
-                        nwcFormulaCount: formulas.length,
-                        katexCount: katexCount,
-                        katexTexts: katexTexts,
-                        nwcFormulaTexts: nwcFormulaTexts
-                    };
+                        return {
+                            nwcFormulaCount: formulas.length,
+                            katexCount: katexCount,
+                            katexTexts: katexTexts,
+                            nwcFormulaTexts: nwcFormulaTexts,
+                            error: null
+                        };
+                    } catch (e) {
+                        return {
+                            nwcFormulaCount: 0,
+                            katexCount: 0,
+                            katexTexts: [],
+                            nwcFormulaTexts: [],
+                            error: e.message || String(e)
+                        };
+                    }
                 }
                 """
             )
+
+            # Check for JavaScript errors
+            js_error: str | None = math_info.get("error")  # type: ignore[assignment]
+            if js_error:
+                return ValidationResult(
+                    success=False,
+                    expected=".katex element or nwc-formula",
+                    actual=None,
+                    message=f"JavaScript error during math element detection: {js_error}",
+                )
 
             nwc_formula_count: int = math_info.get("nwcFormulaCount", 0)  # type: ignore[assignment]
             katex_count: int = math_info.get("katexCount", 0)  # type: ignore[assignment]
