@@ -1,6 +1,6 @@
 """Unit tests for Markdown conversion utility."""
 
-from note_mcp.utils.markdown_to_html import markdown_to_html
+from note_mcp.utils.markdown_to_html import has_math_formula, markdown_to_html
 
 
 class TestMarkdownToHtml:
@@ -681,6 +681,67 @@ print(formula)
         assert result.count("text-align: center") == 1
         assert result.count("text-align: right") == 1
         assert result.count("text-align: left") == 1
+
+
+class TestHasMathFormula:
+    """Tests for has_math_formula function.
+
+    Issue #107 PR review comment: Add unit tests for has_math_formula()
+    to ensure math detection works correctly.
+
+    note.com uses double-dollar-sign patterns:
+    - Inline math: $${formula}$$ (with curly braces)
+    - Display math: $$formula$$ (without curly braces)
+    """
+
+    def test_inline_math_detected(self) -> None:
+        """Test that inline math $${formula}$$ is detected."""
+        assert has_math_formula("$${E = mc^2}$$") is True
+
+    def test_display_math_detected(self) -> None:
+        """Test that display math $$formula$$ is detected."""
+        assert has_math_formula("$$x = \\frac{-b}{2a}$$") is True
+
+    def test_normal_text_not_detected(self) -> None:
+        """Test that normal text without math is not detected."""
+        assert has_math_formula("通常のテキスト") is False
+
+    def test_currency_symbol_not_detected(self) -> None:
+        """Test that currency symbol $100 is not detected as math."""
+        assert has_math_formula("$100") is False
+
+    def test_inline_math_complex_formula(self) -> None:
+        """Test complex inline math formula detection."""
+        assert has_math_formula("$${\\alpha + \\beta = \\gamma}$$") is True
+
+    def test_display_math_quadratic(self) -> None:
+        """Test quadratic formula in display math."""
+        assert has_math_formula("$$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$") is True
+
+    def test_math_in_sentence(self) -> None:
+        """Test math embedded in Japanese sentence."""
+        assert has_math_formula("アインシュタインの公式は$${E = mc^2}$$です。") is True
+
+    def test_multiple_dollar_signs_no_braces(self) -> None:
+        """Test multiple single dollar signs (not math)."""
+        assert has_math_formula("The price is $50 or $100") is False
+
+    def test_empty_string(self) -> None:
+        """Test empty string returns False."""
+        assert has_math_formula("") is False
+
+    def test_only_braces_no_dollar(self) -> None:
+        """Test braces without dollar sign (not math)."""
+        assert has_math_formula("{formula}") is False
+
+    def test_single_dollar_not_detected(self) -> None:
+        """Test that single dollar sign pattern is not detected as math."""
+        assert has_math_formula("${E = mc^2}$") is False
+
+    def test_double_dollar_required(self) -> None:
+        """Test that double dollar signs are required for math detection."""
+        assert has_math_formula("$formula$") is False
+        assert has_math_formula("$$formula$$") is True
 
 
 class TestStandaloneUrl:

@@ -77,6 +77,8 @@ async def open_preview_for_article_key(
     # Get the new page (preview tab)
     new_page = await new_page_info.value
     await new_page.wait_for_load_state("domcontentloaded", timeout=timeout)
+    # Wait for JavaScript rendering (needed for math formulas like nwc-formula)
+    await new_page.wait_for_load_state("networkidle", timeout=timeout)
 
     return new_page
 

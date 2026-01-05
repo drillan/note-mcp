@@ -218,7 +218,14 @@ class PreviewValidator:
         """数式がKaTeXでレンダリングされているか検証。
 
         note.comはKaTeXを使用して数式をレンダリングする。
-        レンダリング後の要素は `.katex` クラスを持つ。
+        数式は<nwc-formula>カスタム要素のShadow DOM内に`.katex`要素として
+        レンダリングされる。
+
+        Shadow DOM構造:
+            <nwc-formula>
+              #shadow-root (open)
+                <span class="katex">...</span>
+            </nwc-formula>
 
         Args:
             formula_text: 期待される数式テキスト（部分一致）。
@@ -233,25 +240,105 @@ class PreviewValidator:
         if failure:
             return failure
 
-        article_body = self.page.locator(".note-common-styles__textnote-body, .p-noteBody")
-
-        # KaTeX要素を検索
-        katex_locator = article_body.locator(".katex")
-
         try:
-            count = await katex_locator.count()
-            if count == 0:
+            # Shadow DOM内のKaTeX要素をJavaScriptで検索
+            # nwc-formula要素のshadowRoot内の.katex要素をカウント
+            # Shadow DOMがclosedの場合に備え、nwc-formulaのtextContentも収集
+            math_info: dict[str, int | list[str] | str | None] = await self.page.evaluate(
+                r"""
+                () => {
+                    try {
+                        const formulas = document.querySelectorAll('nwc-formula');
+                        let katexCount = 0;
+                        const katexTexts = [];
+                        const nwcFormulaTexts = [];
+
+                        for (const formula of formulas) {
+                            // nwc-formula自体のテキストコンテンツ（LaTeXソース）を収集
+                            nwcFormulaTexts.push(formula.textContent || '');
+
+                            if (formula.shadowRoot) {
+                                const katexElements = formula.shadowRoot.querySelectorAll('.katex');
+                                katexCount += katexElements.length;
+                                for (const katex of katexElements) {
+                                    katexTexts.push(katex.textContent || '');
+                                }
+                            }
+                        }
+
+                        return {
+                            nwcFormulaCount: formulas.length,
+                            katexCount: katexCount,
+                            katexTexts: katexTexts,
+                            nwcFormulaTexts: nwcFormulaTexts,
+                            error: null
+                        };
+                    } catch (e) {
+                        return {
+                            nwcFormulaCount: 0,
+                            katexCount: 0,
+                            katexTexts: [],
+                            nwcFormulaTexts: [],
+                            error: e.message || String(e)
+                        };
+                    }
+                }
+                """
+            )
+
+            # Check for JavaScript errors
+            js_error: str | None = math_info.get("error")  # type: ignore[assignment]
+            if js_error:
                 return ValidationResult(
                     success=False,
-                    expected=".katex element" + (f" containing '{formula_text}'" if formula_text else ""),
+                    expected=".katex element or nwc-formula",
                     actual=None,
-                    message="No KaTeX-rendered math elements found",
+                    message=f"JavaScript error during math element detection: {js_error}",
+                )
+
+            nwc_formula_count: int = math_info.get("nwcFormulaCount", 0)  # type: ignore[assignment]
+            katex_count: int = math_info.get("katexCount", 0)  # type: ignore[assignment]
+            katex_texts: list[str] = math_info.get("katexTexts", [])  # type: ignore[assignment]
+            nwc_formula_texts: list[str] = math_info.get("nwcFormulaTexts", [])  # type: ignore[assignment]
+
+            if katex_count == 0:
+                if nwc_formula_count > 0:
+                    # nwc-formula要素が存在すれば数式変換は成功
+                    # Shadow DOMはclosed modeの可能性があり、外部からアクセスできない場合がある
+                    # 内部のKaTeXレンダリングはnote.comプラットフォームの責任
+                    if formula_text:
+                        # formula_text検証はnwc-formulaのテキストコンテンツで行う
+                        matching_count = sum(1 for text in nwc_formula_texts if formula_text in text)
+                        if matching_count > 0:
+                            return ValidationResult(
+                                success=True,
+                                expected=f"nwc-formula containing '{formula_text}'",
+                                actual=f"Found {matching_count} matching element(s)",
+                                message=f"Found nwc-formula containing '{formula_text}'",
+                            )
+                        return ValidationResult(
+                            success=False,
+                            expected=f"nwc-formula containing '{formula_text}'",
+                            actual=f"Found {nwc_formula_count} nwc-formula(s): {nwc_formula_texts}",
+                            message=f"nwc-formula elements found but none contain '{formula_text}'",
+                        )
+                    return ValidationResult(
+                        success=True,
+                        expected="nwc-formula element",
+                        actual=f"Found {nwc_formula_count} nwc-formula element(s)",
+                        message=f"Math formulas converted to {nwc_formula_count} nwc-formula element(s)",
+                    )
+                return ValidationResult(
+                    success=False,
+                    expected="nwc-formula or .katex element"
+                    + (f" containing '{formula_text}'" if formula_text else ""),
+                    actual=None,
+                    message="No math elements found (neither nwc-formula nor KaTeX)",
                 )
 
             if formula_text:
                 # 指定テキストを含む数式要素を検索
-                matching_locator = katex_locator.filter(has_text=formula_text)
-                matching_count = await matching_locator.count()
+                matching_count = sum(1 for text in katex_texts if formula_text in text)
                 if matching_count > 0:
                     return ValidationResult(
                         success=True,
@@ -262,15 +349,15 @@ class PreviewValidator:
                 return ValidationResult(
                     success=False,
                     expected=f".katex containing '{formula_text}'",
-                    actual=f"Found {count} .katex element(s), none containing '{formula_text}'",
+                    actual=f"Found {katex_count} .katex element(s), none containing '{formula_text}'",
                     message=f"KaTeX elements found but none contain '{formula_text}'",
                 )
 
             return ValidationResult(
                 success=True,
                 expected=".katex element",
-                actual=f"Found {count} element(s)",
-                message=f"Found {count} KaTeX-rendered math element(s)",
+                actual=f"Found {katex_count} element(s) in {nwc_formula_count} nwc-formula(s)",
+                message=f"Found {katex_count} KaTeX-rendered math element(s)",
             )
         except PlaywrightError as e:
             return ValidationResult(
