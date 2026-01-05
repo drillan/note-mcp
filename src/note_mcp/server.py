@@ -178,12 +178,7 @@ async def note_create_draft(
     # TOC insertion, embed insertion, and math formulas require browser automation
     toc_info = ""
     embed_info = ""
-    use_browser = (
-        _has_toc_placeholder(body)
-        or has_embed_url(body)
-        or has_math_formula(body)
-        or has_ruby_notation(body)
-    )
+    use_browser = _has_toc_placeholder(body) or has_embed_url(body) or has_math_formula(body) or has_ruby_notation(body)
 
     if use_browser:
         result = await create_draft_via_browser(session, article_input)
@@ -290,12 +285,7 @@ async def note_update_article(
     # TOC insertion, embed insertion, and math formulas require browser automation
     toc_info = ""
     embed_info = ""
-    use_browser = (
-        _has_toc_placeholder(body)
-        or has_embed_url(body)
-        or has_math_formula(body)
-        or has_ruby_notation(body)
-    )
+    use_browser = _has_toc_placeholder(body) or has_embed_url(body) or has_math_formula(body) or has_ruby_notation(body)
 
     if use_browser:
         result = await update_article_via_browser(session, article_id, article_input)
@@ -637,9 +627,7 @@ async def note_create_from_file(
                 # Use browser path for update if original creation used browser path
                 # This preserves ruby notation, math formulas, TOC, and embeds
                 if needs_browser:
-                    await update_article_via_browser(
-                        session, article.id, updated_input
-                    )
+                    await update_article_via_browser(session, article.id, updated_input)
                 else:
                     await update_article(session, article.id, updated_input)
 
