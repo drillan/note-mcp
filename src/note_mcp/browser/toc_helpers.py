@@ -146,10 +146,15 @@ async def _move_cursor_to_placeholder(page: Page) -> bool:
 
 
 async def _remove_placeholder(page: Page) -> bool:
-    """Remove the TOC placeholder text from editor.
+    """Remove the TOC placeholder text from editor using keyboard selection.
 
-    Modifies the DOM by removing the placeholder text from the text node.
-    If the parent paragraph becomes empty, focuses it for TOC insertion.
+    Uses keyboard-based selection and deletion instead of direct DOM manipulation.
+    This ensures ProseMirror's internal state is properly updated, which is
+    necessary for the changes to persist when the article is saved.
+
+    Direct DOM manipulation (node.nodeValue = ...) doesn't sync with ProseMirror's
+    internal document state. When the article is saved, ProseMirror serializes
+    from its internal state, which would still contain the placeholder.
 
     Args:
         page: Playwright page with note.com editor.
@@ -157,47 +162,27 @@ async def _remove_placeholder(page: Page) -> bool:
     Returns:
         True if placeholder was successfully removed.
     """
-    result = await page.evaluate(
-        f"""
-        () => {{
-            const placeholder = '{TOC_PLACEHOLDER}';
-            const editor = document.querySelector('{_EDITOR_SELECTOR}');
-            if (!editor) {{
-                return {{ success: false, error: 'Editor element not found' }};
-            }}
+    # The placeholder is §§TOC§§ (7 characters)
+    # Cursor is already at the start of the placeholder (from _move_cursor_to_placeholder)
+    # Select the placeholder text using Shift+Right, then delete
 
-            const walker = document.createTreeWalker(
-                editor,
-                NodeFilter.SHOW_TEXT,
-                null,
-                false
-            );
+    placeholder_length = len(TOC_PLACEHOLDER)
 
-            let node;
-            while (node = walker.nextNode()) {{
-                if (node.nodeValue && node.nodeValue.includes(placeholder)) {{
-                    // Remove only the placeholder text, keep any surrounding text
-                    node.nodeValue = node.nodeValue.replace(placeholder, '');
+    try:
+        # Select the placeholder text by pressing Shift+Right for each character
+        for _ in range(placeholder_length):
+            await page.keyboard.press("Shift+ArrowRight")
+        await asyncio.sleep(0.05)
 
-                    // If the parent is now empty, consider cleaning it up
-                    const parent = node.parentElement;
-                    if (parent && parent.textContent.trim() === '') {{
-                        // Parent paragraph is empty, focus it for TOC insertion
-                        parent.focus();
-                    }}
-                    return {{ success: true }};
-                }}
-            }}
-            return {{ success: false, error: 'Placeholder not found in text nodes' }};
-        }}
-    """
-    )
-    await asyncio.sleep(0.1)
+        # Delete the selected text
+        await page.keyboard.press("Delete")
+        await asyncio.sleep(0.1)
 
-    if not result.get("success"):
-        logger.warning(f"Failed to remove placeholder: {result.get('error')}")
+        logger.debug("TOC placeholder removed via keyboard selection")
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to remove placeholder via keyboard: {e}")
         return False
-    return True
 
 
 async def _click_menu_button(page: Page, timeout: int) -> None:

@@ -92,6 +92,22 @@ def has_math_formula(content: str) -> bool:
     return bool(_MATH_INLINE_PATTERN.search(content) or _MATH_DISPLAY_PATTERN.search(content))
 
 
+def has_ruby_notation(content: str) -> bool:
+    """Check if content contains ruby notation that requires browser automation.
+
+    Ruby notation (｜漢字《かんじ》) must be processed via browser path because
+    note.com's API sanitizes <ruby> HTML tags. The server-side processing
+    only works when content is typed through the editor.
+
+    Args:
+        content: The markdown content to check.
+
+    Returns:
+        True if ruby notation is found, False otherwise.
+    """
+    return bool(_RUBY_PATTERN.search(content))
+
+
 def has_embed_url(content: str) -> bool:
     """Check if content contains URLs that should be embedded.
 
