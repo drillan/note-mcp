@@ -46,7 +46,7 @@ _CITATION_PATTERN = re.compile(
 # Pattern to extract URL from citation: "Text (URL)"
 _CITATION_URL_PATTERN = re.compile(r"^(.+?)\s+\((\S+)\)\s*$")
 # Ruby notation pattern: ｜漢字《かんじ》 or |漢字《かんじ》 or 漢字《かんじ》
-# Vertical bar can be full-width (｜) or half-width (|) or omitted for kanji/kana
+# Note: Vertical bar is REQUIRED by note.com, but pattern accepts omission for detection
 _RUBY_PATTERN = re.compile(r"[｜|]?([一-龯ぁ-んァ-ヶー]+)《([^》]+)》")
 
 # Text alignment patterns (Issue #40)

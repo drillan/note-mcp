@@ -10,6 +10,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from playwright.async_api import Error as PlaywrightError
+
 if TYPE_CHECKING:
     from playwright.async_api import Page
 
@@ -180,7 +182,7 @@ async def _remove_placeholder(page: Page) -> bool:
 
         logger.debug("TOC placeholder removed via keyboard selection")
         return True
-    except Exception as e:
+    except PlaywrightError as e:
         logger.warning(f"Failed to remove placeholder via keyboard: {e}")
         return False
 
