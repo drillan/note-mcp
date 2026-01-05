@@ -102,8 +102,10 @@ async def apply_text_alignments(page: Page, timeout: int = 10000) -> int:
                 logger.info(f"Successfully applied {alignment_type} alignment")
             else:
                 logger.warning(f"Failed to apply {alignment_type} alignment")
+        except asyncio.CancelledError:
+            raise  # Always re-raise cancellation
         except Exception as e:
-            logger.warning(f"Error applying {alignment_type} alignment: {e}")
+            logger.warning(f"Error applying {alignment_type} alignment: {type(e).__name__}: {e}")
 
     logger.info(f"Applied {applied_count}/{len(placeholders)} alignments")
     return applied_count
