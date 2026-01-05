@@ -263,15 +263,18 @@ async def _remove_placeholder_markers(
     alignment_type: str,
     text_content: str,
 ) -> bool:
-    """Remove placeholder markers using JavaScript text manipulation.
+    """Remove placeholder markers using keyboard operations.
 
-    Uses JavaScript to find and remove only the marker strings, preserving
-    the paragraph's alignment style. This is necessary because replacing
-    the entire paragraph content via keyboard.type() resets the alignment
-    to the default (left).
+    ProseMirror doesn't sync when DOM is modified directly via JavaScript.
+    This function uses keyboard-based selection and deletion which properly
+    updates ProseMirror's internal state.
 
-    After alignment is applied, finds the paragraph containing the placeholder
-    and removes only the marker strings (§§ALIGN_X§§ and §§/ALIGN§§).
+    Strategy:
+    1. Click at the start of the paragraph to place cursor
+    2. Use Home key to ensure cursor is at line start
+    3. Select start marker characters and delete
+    4. Use End key to go to line end
+    5. Select end marker characters (backwards) and delete
 
     Args:
         page: Playwright page with note.com editor.
@@ -283,61 +286,57 @@ async def _remove_placeholder_markers(
     """
     start_marker = f"§§ALIGN_{alignment_type.upper()}§§"
     end_marker = ALIGN_END
+    start_marker_len = len(start_marker)
+    end_marker_len = len(end_marker)
 
-    # Use JavaScript to remove markers while preserving paragraph styling
     try:
-        removed: bool = await page.evaluate(
-            """
-            ([editorSelector, startMarker, endMarker]) => {
-                const editor = document.querySelector(editorSelector);
-                if (!editor) {
-                    console.warn('Editor not found with selector:', editorSelector);
-                    return false;
-                }
+        # Find and click at the paragraph containing the markers
+        paragraphs = page.locator(f"{_EDITOR_SELECTOR} p")
+        count = await paragraphs.count()
 
-                // Find all paragraphs
-                const paragraphs = editor.querySelectorAll('p');
-                for (const p of paragraphs) {
-                    const text = p.textContent || '';
-                    if (text.includes(startMarker) && text.includes(endMarker)) {
-                        // Found the paragraph with markers
-                        // Walk through text nodes and remove markers
-                        const walker = document.createTreeWalker(
-                            p,
-                            NodeFilter.SHOW_TEXT,
-                            null,
-                            false
-                        );
+        target_paragraph = None
+        for i in range(count):
+            p = paragraphs.nth(i)
+            text = await p.text_content()
+            if text and start_marker in text:
+                target_paragraph = p
+                break
 
-                        let node;
-                        while ((node = walker.nextNode())) {
-                            if (node.textContent.includes(startMarker)) {
-                                node.textContent = node.textContent.replace(startMarker, '');
-                            }
-                            if (node.textContent.includes(endMarker)) {
-                                node.textContent = node.textContent.replace(endMarker, '');
-                            }
-                        }
+        if not target_paragraph:
+            logger.warning(f"Could not find paragraph with markers for: {text_content[:30]}...")
+            return False
 
-                        // Trigger input event to sync ProseMirror state
-                        p.dispatchEvent(new InputEvent('input', { bubbles: true }));
-                        return true;
-                    }
-                }
-                return false;
-            }
-            """,
-            [_EDITOR_SELECTOR, start_marker, end_marker],
-        )
+        # Click at the start of the paragraph to place cursor
+        await target_paragraph.click()
+        await asyncio.sleep(_CLICK_WAIT_SECONDS)
+
+        # Move cursor to the beginning of line
+        await page.keyboard.press("Home")
+        await asyncio.sleep(_KEYBOARD_WAIT_SECONDS)
+
+        # Select and delete start marker
+        # Use Shift+ArrowRight to select characters
+        for _ in range(start_marker_len):
+            await page.keyboard.press("Shift+ArrowRight")
+            await asyncio.sleep(0.02)
+        await page.keyboard.press("Delete")
+        await asyncio.sleep(_KEYBOARD_WAIT_SECONDS)
+
+        # Move cursor to end of line
+        await page.keyboard.press("End")
+        await asyncio.sleep(_KEYBOARD_WAIT_SECONDS)
+
+        # Select and delete end marker (select backwards)
+        # Use Shift+ArrowLeft to select characters from the end
+        for _ in range(end_marker_len):
+            await page.keyboard.press("Shift+ArrowLeft")
+            await asyncio.sleep(0.02)
+        await page.keyboard.press("Delete")
+        await asyncio.sleep(_KEYBOARD_WAIT_SECONDS)
+
+        logger.debug(f"Successfully removed markers for: {text_content[:30]}...")
+        return True
+
     except Exception as e:
-        logger.error(f"JavaScript evaluation failed while removing markers: {e}")
+        logger.error(f"Failed to remove markers via keyboard: {e}")
         return False
-
-    if not removed:
-        logger.error(
-            f"Failed to remove placeholder markers for: {text_content[:30]}... "
-            "Alignment markers may remain in published article."
-        )
-
-    await asyncio.sleep(_KEYBOARD_WAIT_SECONDS)
-    return removed

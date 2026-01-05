@@ -2,19 +2,21 @@
 
 Provides functions to type Markdown content into ProseMirror editors
 with proper handling for lists, blockquotes, citations, code blocks,
-text alignment, and embeds.
+text alignment, embeds, and math formulas.
 
 Supported inline formatting with native ProseMirror conversion:
 - Bold (**text** + space → <strong>text</strong>)
 - Strikethrough (~~text~~ + space → <s>text</s>)
+- Math formulas ($${formula}$$ and $$formula$$ → KaTeX rendering) (Issue #101)
 
 NOT supported for native conversion (requires UI automation):
 - Links ([text](url)) - No InputRule exists; use insert_link_at_cursor() from insert_link.py
 
 Processing order (most specific pattern first):
-1. Links [text](url) - parsed first, inserted via insert_link_at_cursor()
-2. Bold **text** - processed second (double asterisk)
-3. Strikethrough ~~text~~ - processed last (double tilde)
+1. Math formulas $${...}$$ and $$...$$ - parsed first, typed with markers preserved
+2. Links [text](url) - parsed second, inserted via insert_link_at_cursor()
+3. Bold **text** - processed third (double asterisk)
+4. Strikethrough ~~text~~ - processed last (double tilde)
 
 Note: Italic (*text*) and inline code (`code`) are NOT supported
 by note.com's ProseMirror schema. Technical investigation revealed (verified: 2024-12):
@@ -54,6 +56,12 @@ _STRIKETHROUGH_PATTERN = re.compile(r"~~(.+?)~~")
 _LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 # Bold pattern: **text**
 _BOLD_PATTERN = re.compile(r"\*\*(.+?)\*\*")
+# Math formula patterns (Issue #101)
+# note.com uses $$ for math formulas (KaTeX notation):
+# - Inline math: $${formula}$$ (double dollar signs WITH curly braces)
+# - Display math: $$formula$$ (double dollar signs WITHOUT curly braces)
+_MATH_INLINE_PATTERN = re.compile(r"\$\$\{(.+?)\}\$\$", re.DOTALL)
+_MATH_DISPLAY_PATTERN = re.compile(r"\$\$([^{].*?)\$\$", re.DOTALL)
 # Horizontal line pattern: --- (must be standalone line)
 _HR_PATTERN = re.compile(r"^---$")
 # Ruby notation pattern: ｜漢字《かんじ》 or |漢字《かんじ》 or 漢字《かんじ》
@@ -252,10 +260,72 @@ async def _type_with_bold(page: Any, text: str) -> str:
     )
 
 
+async def _type_with_math_formula(page: Any, text: str) -> str:
+    """Process math formula patterns and type them preserving $$ markers.
+
+    note.com's ProseMirror editor recognizes $$ patterns and renders them
+    as KaTeX math formulas. This function ensures the $$ markers are preserved
+    during typing so the editor can process them correctly.
+
+    Patterns:
+    - Inline: $${formula}$$ (double dollar with curly braces)
+    - Display: $$formula$$ (double dollar without curly braces)
+
+    Args:
+        page: Playwright page object
+        text: Text that may contain math formula patterns
+
+    Returns:
+        Remaining text after first math pattern is processed, or empty string if no match.
+    """
+    # Check for inline math first (more specific pattern)
+    inline_match = _MATH_INLINE_PATTERN.search(text)
+    display_match = _MATH_DISPLAY_PATTERN.search(text)
+
+    # Find the first match
+    match = None
+    is_inline = False
+    if inline_match and display_match:
+        if inline_match.start() <= display_match.start():
+            match = inline_match
+            is_inline = True
+        else:
+            match = display_match
+    elif inline_match:
+        match = inline_match
+        is_inline = True
+    elif display_match:
+        match = display_match
+
+    if not match:
+        await page.keyboard.type(text)
+        return ""
+
+    # Type text before math formula
+    before = text[: match.start()]
+    if before:
+        await page.keyboard.type(before)
+
+    # Type the math formula with $$ markers preserved
+    formula = match.group(1)
+    if is_inline:
+        # Inline: $${formula}$$
+        await page.keyboard.type(f"$${{{formula}}}$$")
+    else:
+        # Display: $$formula$$
+        await page.keyboard.type(f"$${formula}$$")
+
+    logger.debug(f"Typed math formula: {'inline' if is_inline else 'display'} - {formula[:30]}...")
+
+    # Return remaining text
+    return text[match.end() :]
+
+
 async def _type_with_inline_formatting(page: Any, text: str) -> None:
     """Process all inline formatting patterns in correct order.
 
     Supported formats (note.com ProseMirror schema limitations):
+    - Math formulas $${...}$$ and $$...$$ - processed first (Issue #101)
     - Links [text](url) - bracket/parenthesis delimited
     - Bold **text** - double asterisk
     - Strikethrough ~~text~~ - double tilde
@@ -274,7 +344,15 @@ async def _type_with_inline_formatting(page: Any, text: str) -> None:
     if not text:
         return
 
-    # Check for link pattern first (most specific)
+    # Check for math formula patterns first (highest priority for Issue #101)
+    # Math patterns must be processed before other patterns to preserve $$ markers
+    if _MATH_INLINE_PATTERN.search(text) or _MATH_DISPLAY_PATTERN.search(text):
+        remaining = await _type_with_math_formula(page, text)
+        if remaining:
+            await _type_with_inline_formatting(page, remaining)
+        return
+
+    # Check for link pattern (most specific among remaining patterns)
     if _LINK_PATTERN.search(text):
         remaining = await _type_with_link(page, text)
         if remaining:

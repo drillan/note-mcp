@@ -43,7 +43,7 @@ class LinkResult(Enum):
 
 # note.com editor selectors
 _EDITOR_SELECTOR = ".ProseMirror"
-_LINK_URL_INPUT_SELECTOR = 'input[name="href"]'
+_LINK_URL_INPUT_SELECTOR = 'textarea[placeholder="https://"]'
 
 # Timing constants
 _CLICK_WAIT_SECONDS = 0.3
@@ -228,11 +228,12 @@ async def _select_text(page: Page, text: str) -> tuple[bool, str]:
         Tuple of (success, reason) where reason explains failure.
     """
     try:
-        # 日本語文字の場合、文字数分だけShift+Leftを実行
+        # 日本語文字の場合、文字数分だけShift+ArrowLeftを実行
         # 英語の場合は単語単位で選択されるが、日本語は文字単位
+        # Note: Playwrightでは "Left" ではなく "ArrowLeft" を使用
         char_count = len(text)
         for _ in range(char_count):
-            await page.keyboard.press("Shift+Left")
+            await page.keyboard.press("Shift+ArrowLeft")
             await asyncio.sleep(0.05)
 
         await asyncio.sleep(_INPUT_WAIT_SECONDS)
@@ -346,6 +347,8 @@ async def _verify_link_insertion(
     """リンクが正しく挿入されたか検証する。
 
     エディタ内に指定したhrefを持つリンクが存在するか確認する。
+    相対URLの絶対URL解決やURL正規化（末尾スラッシュ等）を考慮した
+    柔軟なマッチングを行う。
 
     Args:
         page: Playwright page with note.com editor.
@@ -359,9 +362,9 @@ async def _verify_link_insertion(
     try:
         # Wait for link to appear in editor
         result = await page.evaluate(
-            """
+            r"""
             async (args) => {
-                const { url, timeout } = args;
+                const { url, text, timeout } = args;
                 const startTime = Date.now();
 
                 const editor = document.querySelector('.ProseMirror');
@@ -369,33 +372,89 @@ async def _verify_link_insertion(
                     return { type: 'timeout', reason: 'editor_not_found' };
                 }
 
-                // Check for link with matching href
+                // Normalize URL for comparison (remove trailing slash, lowercase)
+                const normalizeUrl = (u) => {
+                    if (!u) return '';
+                    // Remove trailing slash for comparison
+                    let normalized = u.replace(/\/$/, '');
+                    return normalized.toLowerCase();
+                };
+
+                // Extract filename from URL for relative URL matching
+                const getFilename = (u) => {
+                    if (!u) return '';
+                    // Get the last path segment
+                    const parts = u.split('/');
+                    return parts[parts.length - 1] || parts[parts.length - 2] || '';
+                };
+
+                const targetUrl = normalizeUrl(url);
+                const targetFilename = getFilename(url);
+                const targetText = text.toLowerCase();
+
+                // Check for link with matching href or text
                 const findLink = () => {
                     const links = editor.querySelectorAll('a');
                     for (const link of links) {
-                        if (link.href === url || link.getAttribute('href') === url) {
-                            return true;
+                        const href = link.getAttribute('href') || '';
+                        const resolvedHref = link.href || '';
+                        const linkText = (link.textContent || '').toLowerCase();
+
+                        // Exact match on href attribute
+                        if (href === url) {
+                            return { matched: true, method: 'exact_href' };
+                        }
+
+                        // Normalized URL comparison
+                        if (normalizeUrl(href) === targetUrl ||
+                            normalizeUrl(resolvedHref) === targetUrl) {
+                            return { matched: true, method: 'normalized_url' };
+                        }
+
+                        // For relative URLs: check if resolved URL ends with target path
+                        // e.g., "./images/sample.png" matches "https://note.com/.../images/sample.png"
+                        if (url.startsWith('./') || url.startsWith('../')) {
+                            const targetPath = url.replace(/^\.+\//, '');
+                            if (resolvedHref.endsWith(targetPath) ||
+                                resolvedHref.includes('/' + targetPath)) {
+                                return { matched: true, method: 'relative_path' };
+                            }
+                        }
+
+                        // Filename matching as fallback for relative URLs
+                        if (targetFilename && getFilename(resolvedHref) === targetFilename) {
+                            // Also verify link text matches to avoid false positives
+                            if (linkText.includes(targetText) || targetText.includes(linkText)) {
+                                return { matched: true, method: 'filename_and_text' };
+                            }
+                        }
+
+                        // Text content matching as final fallback
+                        if (linkText === targetText) {
+                            return { matched: true, method: 'text_only' };
                         }
                     }
-                    return false;
+                    return { matched: false };
                 };
 
                 while (Date.now() - startTime < timeout) {
-                    if (findLink()) {
-                        return { type: 'success' };
+                    const found = findLink();
+                    if (found.matched) {
+                        return { type: 'success', method: found.method };
                     }
                     await new Promise(r => setTimeout(r, 100));
                 }
                 return { type: 'timeout', reason: 'link_not_found' };
             }
             """,
-            {"url": url, "timeout": timeout},
+            {"url": url, "text": text, "timeout": timeout},
         )
 
         result_type = result.get("type", "timeout") if result else "timeout"
 
         if result_type == "success":
-            logger.debug(f"Link verified: {url}")
+            method = result.get("method", "unknown") if result else "unknown"
+            logger.debug(f"Link verified: {url} (method: {method})")
             return LinkResult.SUCCESS
         else:
             reason = result.get("reason", "unknown") if result else "unknown"

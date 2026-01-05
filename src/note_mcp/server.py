@@ -28,7 +28,10 @@ from note_mcp.browser.update_article import update_article_via_browser
 from note_mcp.investigator import register_investigator_tools
 from note_mcp.models import ArticleInput, ArticleStatus, NoteAPIError
 from note_mcp.utils.file_parser import parse_markdown_file
-from note_mcp.utils.markdown_to_html import _has_toc_placeholder, has_embed_url
+from note_mcp.utils.markdown_to_html import (
+    _has_toc_placeholder,
+    has_embed_url,
+)
 
 # Create MCP server instance
 mcp = FastMCP("note-mcp")
