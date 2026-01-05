@@ -165,7 +165,7 @@ async def open_preview_page(page: Page, article_key: str) -> Page:
 
 async def extract_math_elements(page: Page) -> dict[str, Any]:
     """Extract math-related elements from the page."""
-    result = await page.evaluate(
+    result: dict[str, Any] = await page.evaluate(
         r"""
     () => {
         const katex = document.querySelectorAll('.katex');
