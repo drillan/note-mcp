@@ -193,43 +193,61 @@ class TestSelectPlaceholderText:
         assert result is True
 
 
+def _create_mock_page_for_marker_removal(
+    paragraph_text: str | None = "§§ALIGN_CENTER§§test content§§/ALIGN§§",
+) -> MagicMock:
+    """Create a mock page with keyboard and locator setup for marker removal tests."""
+    mock_page = MagicMock()
+
+    # Mock keyboard
+    mock_keyboard = MagicMock()
+    mock_keyboard.press = AsyncMock()
+    mock_page.keyboard = mock_keyboard
+
+    # Mock locator chain
+    mock_paragraph = MagicMock()
+    mock_paragraph.text_content = AsyncMock(return_value=paragraph_text)
+    mock_paragraph.click = AsyncMock()
+
+    mock_paragraphs = MagicMock()
+    mock_paragraphs.count = AsyncMock(return_value=1)
+    mock_paragraphs.nth = MagicMock(return_value=mock_paragraph)
+
+    mock_page.locator = MagicMock(return_value=mock_paragraphs)
+
+    return mock_page
+
+
 class TestRemovePlaceholderMarkers:
-    """Tests for _remove_placeholder_markers function using JavaScript page.evaluate()."""
+    """Tests for _remove_placeholder_markers function using keyboard operations."""
 
     @pytest.mark.asyncio
     async def test_returns_true_when_markers_removed(self) -> None:
-        """Returns True when JavaScript successfully removes markers."""
-        mock_page = MagicMock()
-        # Mock page.evaluate to return True (markers removed)
-        mock_page.evaluate = AsyncMock(return_value=True)
+        """Returns True when keyboard operations successfully remove markers."""
+        mock_page = _create_mock_page_for_marker_removal("§§ALIGN_CENTER§§aligned text§§/ALIGN§§")
 
         result = await _remove_placeholder_markers(mock_page, "center", "aligned text")
 
         assert result is True
-        mock_page.evaluate.assert_called_once()
-        # Verify evaluate was called with correct arguments
-        call_args = mock_page.evaluate.call_args
-        args_list = call_args[0][1]  # [editorSelector, startMarker, endMarker]
-        assert ".ProseMirror" in args_list[0]  # editor selector
-        assert "§§ALIGN_CENTER§§" in args_list[1]  # start_marker
+        # Verify keyboard operations were called
+        mock_page.keyboard.press.assert_called()
 
     @pytest.mark.asyncio
     async def test_returns_false_when_markers_not_found(self) -> None:
-        """Returns False when JavaScript cannot find markers."""
-        mock_page = MagicMock()
-        # Mock page.evaluate to return False (markers not found)
-        mock_page.evaluate = AsyncMock(return_value=False)
+        """Returns False when paragraph with markers cannot be found."""
+        # Create mock with no matching paragraph text
+        mock_page = _create_mock_page_for_marker_removal(paragraph_text="no markers here")
 
         result = await _remove_placeholder_markers(mock_page, "center", "test text")
 
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_returns_false_on_javascript_exception(self) -> None:
-        """Returns False when JavaScript evaluation raises exception."""
-        mock_page = MagicMock()
-        # Mock page.evaluate to raise an exception
-        mock_page.evaluate = AsyncMock(side_effect=Exception("Browser context closed"))
+    async def test_returns_false_on_keyboard_exception(self) -> None:
+        """Returns False when keyboard operation raises exception."""
+        mock_page = _create_mock_page_for_marker_removal("§§ALIGN_CENTER§§test text§§/ALIGN§§")
+        # Make keyboard.press raise an exception
+        mock_page.keyboard.press = AsyncMock(side_effect=Exception("Browser context closed"))
 
         result = await _remove_placeholder_markers(mock_page, "center", "test text")
 
@@ -237,40 +255,36 @@ class TestRemovePlaceholderMarkers:
 
     @pytest.mark.asyncio
     async def test_logs_error_on_exception(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Logs error when JavaScript evaluation fails."""
+        """Logs error when keyboard operation fails."""
         import logging
 
-        mock_page = MagicMock()
-        mock_page.evaluate = AsyncMock(side_effect=Exception("Timeout"))
+        mock_page = _create_mock_page_for_marker_removal("§§ALIGN_CENTER§§test content§§/ALIGN§§")
+        mock_page.keyboard.press = AsyncMock(side_effect=Exception("Timeout"))
 
         with caplog.at_level(logging.ERROR):
             await _remove_placeholder_markers(mock_page, "center", "test content")
 
-        assert "JavaScript evaluation failed while removing markers" in caplog.text
+        assert "Failed to remove markers via keyboard" in caplog.text
 
     @pytest.mark.asyncio
-    async def test_logs_error_when_markers_not_removed(self, caplog: pytest.LogCaptureFixture) -> None:
-        """Logs error when marker removal fails (returns False)."""
+    async def test_logs_warning_when_markers_not_found(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Logs warning when paragraph with markers not found."""
         import logging
 
-        mock_page = MagicMock()
-        mock_page.evaluate = AsyncMock(return_value=False)
+        mock_page = _create_mock_page_for_marker_removal(paragraph_text="no markers here")
 
-        with caplog.at_level(logging.ERROR):
+        with caplog.at_level(logging.WARNING):
             await _remove_placeholder_markers(mock_page, "center", "test content")
 
-        assert "Failed to remove placeholder markers" in caplog.text
-        assert "Alignment markers may remain in published article" in caplog.text
+        assert "Could not find paragraph with markers" in caplog.text
 
     @pytest.mark.asyncio
     async def test_uses_correct_alignment_marker(self) -> None:
         """Uses correct alignment marker based on alignment_type."""
-        mock_page = MagicMock()
-        mock_page.evaluate = AsyncMock(return_value=True)
+        mock_page = _create_mock_page_for_marker_removal("§§ALIGN_RIGHT§§test§§/ALIGN§§")
 
-        await _remove_placeholder_markers(mock_page, "right", "test")
+        result = await _remove_placeholder_markers(mock_page, "right", "test")
 
-        call_args = mock_page.evaluate.call_args
-        args_list = call_args[0][1]  # [editorSelector, startMarker, endMarker]
-        assert "§§ALIGN_RIGHT§§" in args_list[1]  # start_marker
-        assert "§§/ALIGN§§" in args_list[2]  # end_marker
+        assert result is True
+        # Verify the locator was called with the correct editor selector
+        mock_page.locator.assert_called()
