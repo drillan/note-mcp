@@ -415,3 +415,164 @@ class TestInsertImageViaBrowser:
 
                 assert exc_info.value.code == ErrorCode.API_ERROR
                 assert "insertion" in exc_info.value.message.lower() or "failed" in exc_info.value.message.lower()
+
+
+class TestInsertImageViaApi:
+    """Tests for insert_image_via_api function (Issue #111 API-based image insertion)."""
+
+    @pytest.mark.asyncio
+    async def test_insert_image_via_api_success(self, tmp_path: Path) -> None:
+        """Test successful image insertion via API + ProseMirror."""
+        from note_mcp.browser.insert_image import insert_image_via_api
+        from note_mcp.models import Article, ArticleStatus, Image, ImageType
+
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        mock_article = Article(
+            id="12345",
+            key="n12345abcdef",
+            title="Test Article",
+            body="Test body",
+            status=ArticleStatus.DRAFT,
+        )
+
+        mock_image = Image(
+            key="image_key_123",
+            url="https://d2l930y2yx77uc.cloudfront.net/production/uploads/images/123.jpg",
+            original_path=str(file_path),
+            uploaded_at=1234567890,
+            image_type=ImageType.BODY,
+        )
+
+        with (
+            patch("note_mcp.browser.insert_image.upload_body_image") as mock_upload,
+            patch("note_mcp.browser.insert_image.get_article") as mock_get_article,
+            patch("note_mcp.browser.insert_image._setup_page_with_session") as mock_setup,
+            patch("note_mcp.browser.insert_image._insert_image_via_prosemirror") as mock_insert,
+            patch("note_mcp.browser.insert_image._input_image_caption") as mock_caption,
+            patch("note_mcp.browser.insert_image._save_article") as mock_save,
+        ):
+            mock_upload.return_value = mock_image
+            mock_get_article.return_value = mock_article
+            mock_setup.return_value = AsyncMock()
+            mock_insert.return_value = True
+            mock_caption.return_value = True
+            mock_save.return_value = True
+
+            result = await insert_image_via_api(
+                session=session,
+                article_id="12345",
+                file_path=str(file_path),
+                caption="Test caption",
+            )
+
+            assert result["success"] is True
+            assert result["article_id"] == "12345"
+            assert result["article_key"] == "n12345abcdef"
+            assert result["image_url"] == mock_image.url
+
+            mock_upload.assert_called_once()
+            mock_get_article.assert_called_once_with(session, "12345")
+            mock_insert.assert_called_once()
+            mock_save.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_insert_image_via_api_upload_fails(self, tmp_path: Path) -> None:
+        """Test API insertion fails when image upload fails."""
+        from note_mcp.browser.insert_image import insert_image_via_api
+
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        with patch("note_mcp.browser.insert_image.upload_body_image") as mock_upload:
+            mock_upload.side_effect = NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message="Upload failed",
+            )
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await insert_image_via_api(
+                    session=session,
+                    article_id="12345",
+                    file_path=str(file_path),
+                )
+
+            assert exc_info.value.code == ErrorCode.API_ERROR
+
+    @pytest.mark.asyncio
+    async def test_insert_image_via_api_prosemirror_fallback(self, tmp_path: Path) -> None:
+        """Test fallback to browser UI when ProseMirror insertion fails."""
+        from note_mcp.browser.insert_image import insert_image_via_api
+        from note_mcp.models import Article, ArticleStatus, Image, ImageType
+
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        mock_article = Article(
+            id="12345",
+            key="n12345abcdef",
+            title="Test Article",
+            body="Test body",
+            status=ArticleStatus.DRAFT,
+        )
+
+        mock_image = Image(
+            key="image_key_123",
+            url="https://d2l930y2yx77uc.cloudfront.net/production/uploads/images/123.jpg",
+            original_path=str(file_path),
+            uploaded_at=1234567890,
+            image_type=ImageType.BODY,
+        )
+
+        with (
+            patch("note_mcp.browser.insert_image.upload_body_image") as mock_upload,
+            patch("note_mcp.browser.insert_image.get_article") as mock_get_article,
+            patch("note_mcp.browser.insert_image._setup_page_with_session") as mock_setup,
+            patch("note_mcp.browser.insert_image._insert_image_via_prosemirror") as mock_insert,
+            patch("note_mcp.browser.insert_image._click_add_image_button") as mock_click,
+            patch("note_mcp.browser.insert_image._upload_image_via_file_chooser") as mock_upload_ui,
+            patch("note_mcp.browser.insert_image._wait_for_image_insertion") as mock_wait,
+            patch("note_mcp.browser.insert_image._save_article") as mock_save,
+        ):
+            mock_upload.return_value = mock_image
+            mock_get_article.return_value = mock_article
+            mock_page = AsyncMock()
+            mock_page.evaluate = AsyncMock(return_value=0)
+            mock_setup.return_value = mock_page
+            mock_insert.return_value = False  # ProseMirror fails
+            mock_click.return_value = True
+            mock_upload_ui.return_value = True
+            mock_wait.return_value = True
+            mock_save.return_value = True
+
+            result = await insert_image_via_api(
+                session=session,
+                article_id="12345",
+                file_path=str(file_path),
+            )
+
+            assert result["success"] is True
+            assert result["fallback_used"] is True
+            mock_insert.assert_called_once()  # ProseMirror attempted
+            mock_click.assert_called_once()  # Fallback to browser UI
+
+    @pytest.mark.asyncio
+    async def test_insert_image_via_api_file_not_found(self) -> None:
+        """Test API insertion fails when file not found."""
+        from note_mcp.browser.insert_image import insert_image_via_api
+
+        session = create_mock_session()
+
+        with pytest.raises(NoteAPIError) as exc_info:
+            await insert_image_via_api(
+                session=session,
+                article_id="12345",
+                file_path="/nonexistent/file.jpg",
+            )
+
+        assert exc_info.value.code == ErrorCode.INVALID_INPUT
+        assert "not found" in exc_info.value.message.lower()

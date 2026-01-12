@@ -11,8 +11,10 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from note_mcp.api.images import validate_image_file
+from note_mcp.api.articles import get_article
+from note_mcp.api.images import upload_body_image, validate_image_file
 from note_mcp.browser.manager import BrowserManager
+from note_mcp.browser.typing_helpers import _insert_image_via_prosemirror
 from note_mcp.browser.url_helpers import validate_article_edit_url
 from note_mcp.models import ErrorCode, NoteAPIError
 
@@ -567,4 +569,108 @@ async def insert_image_via_browser(
         "article_key": article_key,
         "file_path": file_path,
         "caption": caption,
+    }
+
+
+async def insert_image_via_api(
+    session: Session,
+    article_id: str,
+    file_path: str,
+    caption: str | None = None,
+) -> dict[str, Any]:
+    """Insert an image into an article via API + ProseMirror (Issue #111).
+
+    This function uses a hybrid approach:
+    1. Upload image via API (faster, more reliable)
+    2. Insert into editor via ProseMirror JavaScript (no UI automation)
+    3. Fallback to browser UI if ProseMirror fails
+
+    Args:
+        session: Authenticated session
+        article_id: ID of the article to edit (numeric or key format)
+        file_path: Path to the image file to insert
+        caption: Optional caption for the image
+
+    Returns:
+        Dictionary with status and details
+
+    Raises:
+        NoteAPIError: If image insertion fails
+    """
+    # Validate file (existence, extension, and size)
+    validate_image_file(file_path)
+    path = Path(file_path)
+
+    # Step 1: Upload image via API
+    image = await upload_body_image(session, file_path, article_id)
+    logger.info(f"Image uploaded via API: {image.url[:50]}...")
+
+    # Step 2: Get article info to retrieve article_key
+    article = await get_article(session, article_id)
+    article_key = article.key
+    logger.debug(f"Article key: {article_key} for ID: {article_id}")
+
+    # Step 3: Setup page and navigate to editor
+    page = await _setup_page_with_session(session, article_key)
+
+    # Step 4: Try ProseMirror insertion first
+    fallback_used = False
+    inserted = await _insert_image_via_prosemirror(page, image.url, caption or "")
+
+    if inserted:
+        logger.info("Image inserted via ProseMirror")
+    else:
+        # Fallback to browser UI
+        logger.info("ProseMirror insertion failed, falling back to browser UI")
+        fallback_used = True
+
+        # Get initial image count
+        initial_img_count = await page.evaluate(
+            "() => document.querySelectorAll('.ProseMirror figure img, .ProseMirror img').length"
+        )
+
+        # Click add image button
+        if not await _click_add_image_button(page):
+            raise NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message="Failed to click add image button (fallback)",
+                details={"article_id": article_id},
+            )
+
+        # Upload image via file chooser
+        if not await _upload_image_via_file_chooser(page, str(path.absolute())):
+            raise NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message="Failed to upload image via file chooser (fallback)",
+                details={"article_id": article_id, "file_path": file_path},
+            )
+
+        # Wait for image insertion
+        if not await _wait_for_image_insertion(page, initial_img_count, caption):
+            raise NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message="Image insertion failed (fallback)",
+                details={"article_id": article_id, "file_path": file_path},
+            )
+
+    # Step 5: Add caption if provided and not already added
+    if caption and not fallback_used:
+        await _input_image_caption(page, caption)
+
+    # Step 6: Save article
+    if not await _save_article(page):
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Failed to save article after image insertion",
+            details={"article_id": article_id, "file_path": file_path},
+        )
+
+    return {
+        "success": True,
+        "article_id": article_id,
+        "article_key": article_key,
+        "file_path": file_path,
+        "image_url": image.url,
+        "caption": caption,
+        "fallback_used": fallback_used,
     }

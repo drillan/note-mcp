@@ -22,7 +22,7 @@ from note_mcp.api.images import upload_body_image, upload_eyecatch_image
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
 from note_mcp.browser.create_draft import create_draft_via_browser
-from note_mcp.browser.insert_image import insert_image_via_browser
+from note_mcp.browser.insert_image import insert_image_via_api
 from note_mcp.browser.preview import show_preview
 from note_mcp.browser.update_article import update_article_via_browser
 from note_mcp.investigator import register_investigator_tools
@@ -377,23 +377,20 @@ async def note_upload_body_image(
 @mcp.tool()
 async def note_insert_body_image(
     file_path: Annotated[str, "挿入する画像ファイルのパス"],
-    article_key: Annotated[str, "画像を挿入する記事のキー（例: n1234567890ab）"],
+    article_id: Annotated[str, "画像を挿入する記事のID（数値またはキー形式）"],
     caption: Annotated[str | None, "画像のキャプション（オプション）"] = None,
 ) -> str:
     """記事本文内に画像を直接挿入します。
 
-    ブラウザ自動化を使用してnote.comエディタに画像を挿入します。
+    API経由で画像をアップロードし、ProseMirrorで直接挿入します。
     JPEG、PNG、GIF、WebP形式の画像を挿入できます。
     最大ファイルサイズは10MBです。
 
-    note.comのAPIでは画像のHTML埋め込みが正しく保存されないため、
-    このツールはブラウザ経由でエディタの「画像を追加」機能を使用します。
-
-    note_list_articlesで記事一覧を取得し、キーを確認できます。
+    note_list_articlesで記事一覧を取得し、IDを確認できます。
 
     Args:
         file_path: 挿入する画像ファイルのパス
-        article_key: 画像を挿入する記事のキー（例: n1234567890ab）
+        article_id: 画像を挿入する記事のID（数値またはキー形式）
         caption: 画像のキャプション（オプション）
 
     Returns:
@@ -403,18 +400,26 @@ async def note_insert_body_image(
     if session is None or session.is_expired():
         return "セッションが無効です。note_loginでログインしてください。"
 
-    result = await insert_image_via_browser(
-        session=session,
-        article_key=article_key,
-        file_path=file_path,
-        caption=caption,
-    )
+    try:
+        result = await insert_image_via_api(
+            session=session,
+            article_id=article_id,
+            file_path=file_path,
+            caption=caption,
+        )
 
-    if result["success"]:
-        caption_info = f"、キャプション: {result['caption']}" if result.get("caption") else ""
-        return f"画像を挿入しました。記事キー: {result['article_key']}{caption_info}"
-    else:
-        return "画像の挿入に失敗しました。"
+        if result["success"]:
+            caption_info = f"、キャプション: {result['caption']}" if result.get("caption") else ""
+            fallback_info = "（フォールバック使用）" if result.get("fallback_used") else ""
+            return (
+                f"画像を挿入しました。{fallback_info}\n"
+                f"記事ID: {result['article_id']}、キー: {result['article_key']}{caption_info}\n"
+                f"画像URL: {result['image_url']}"
+            )
+        else:
+            return "画像の挿入に失敗しました。"
+    except NoteAPIError as e:
+        return f"エラー: {e}"
 
 
 @mcp.tool()
@@ -588,18 +593,16 @@ async def note_create_from_file(
     )
 
     try:
-        if needs_browser:
-            browser_result = await create_draft_via_browser(session, article_input)
-            article = browser_result.article
-        else:
-            article = await create_draft(session, article_input)
+        # Always create draft via API first (Issue #111: API-based image upload)
+        # This ensures we have an article ID for image uploads before browser processing
+        article = await create_draft(session, article_input)
 
         uploaded_count = 0
         failed_images: list[str] = []
 
+        # Upload images via API and replace local paths with URLs
+        updated_body = parsed.body
         if upload_images and parsed.local_images:
-            updated_body = parsed.body
-
             for img in parsed.local_images:
                 if img.absolute_path.exists():
                     try:
@@ -618,18 +621,20 @@ async def note_create_from_file(
                 else:
                     failed_images.append(f"{img.markdown_path}: ファイルが見つかりません")
 
-            if uploaded_count > 0:
-                updated_input = ArticleInput(
-                    title=parsed.title,
-                    body=updated_body,
-                    tags=parsed.tags,
-                )
-                # Use browser path for update if original creation used browser path
-                # This preserves ruby notation, math formulas, TOC, and embeds
-                if needs_browser:
-                    await update_article_via_browser(session, article.id, updated_input)
-                else:
-                    await update_article(session, article.id, updated_input)
+        # Update article with image URLs and special formatting
+        if uploaded_count > 0 or needs_browser:
+            updated_input = ArticleInput(
+                title=parsed.title,
+                body=updated_body,
+                tags=parsed.tags,
+            )
+            # Use browser path if TOC, embed, math, or ruby processing is needed
+            # Images are already uploaded via API, so typing_helpers will handle
+            # note.com CDN URLs specially (no re-upload needed)
+            if needs_browser:
+                await update_article_via_browser(session, article.id, updated_input)
+            elif uploaded_count > 0:
+                await update_article(session, article.id, updated_input)
 
         result_lines = [
             "✅ 下書きを作成しました",
