@@ -847,3 +847,109 @@ class TestStandaloneUrl:
         assert "data-embed-service" not in result
         assert 'href="https://example.com/article"' in result
         assert "記事を読む" in result
+
+
+class TestEmbedUrlConversion:
+    """埋め込みURL変換のテスト（Issue #116）
+
+    YouTube、Twitter、note.comのURLが単独行にある場合、
+    自動的にfigure要素（埋め込み）に変換されます。
+    """
+
+    def test_youtube_url_becomes_embed(self) -> None:
+        """YouTubeのURLは埋め込みに変換される"""
+        markdown = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        result = markdown_to_html(markdown)
+
+        assert "<figure" in result
+        assert 'embedded-service="youtube"' in result
+        assert 'data-src="https://www.youtube.com/watch?v=dQw4w9WgXcQ"' in result
+        assert "embedded-content-key=" in result
+
+    def test_youtube_short_url_becomes_embed(self) -> None:
+        """YouTube短縮URLも埋め込みに変換される"""
+        markdown = "https://youtu.be/dQw4w9WgXcQ"
+        result = markdown_to_html(markdown)
+
+        assert "<figure" in result
+        assert 'embedded-service="youtube"' in result
+        assert 'data-src="https://youtu.be/dQw4w9WgXcQ"' in result
+
+    def test_twitter_url_becomes_embed(self) -> None:
+        """TwitterのURLは埋め込みに変換される"""
+        markdown = "https://twitter.com/user/status/1234567890"
+        result = markdown_to_html(markdown)
+
+        assert "<figure" in result
+        assert 'embedded-service="twitter"' in result
+        assert 'data-src="https://twitter.com/user/status/1234567890"' in result
+
+    def test_x_url_becomes_embed(self) -> None:
+        """X（Twitter）のURLも埋め込みに変換される"""
+        markdown = "https://x.com/user/status/1234567890"
+        result = markdown_to_html(markdown)
+
+        assert "<figure" in result
+        assert 'embedded-service="twitter"' in result
+        assert 'data-src="https://x.com/user/status/1234567890"' in result
+
+    def test_note_url_becomes_embed(self) -> None:
+        """note.comのURLは埋め込みに変換される"""
+        markdown = "https://note.com/username/n/n1234567890ab"
+        result = markdown_to_html(markdown)
+
+        assert "<figure" in result
+        assert 'embedded-service="note"' in result
+        assert 'data-src="https://note.com/username/n/n1234567890ab"' in result
+
+    def test_embed_url_with_surrounding_text(self) -> None:
+        """テキストに囲まれた埋め込みURLも変換される"""
+        markdown = """テスト文章です。
+
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
+
+テスト続きです。"""
+        result = markdown_to_html(markdown)
+
+        assert "<figure" in result
+        assert 'embedded-service="youtube"' in result
+        # 前後のテキストも保持される
+        assert "テスト文章です" in result
+        assert "テスト続きです" in result
+
+    def test_multiple_embed_urls(self) -> None:
+        """複数の埋め込みURLが変換される"""
+        markdown = """https://www.youtube.com/watch?v=video1
+
+https://twitter.com/user/status/123"""
+        result = markdown_to_html(markdown)
+
+        assert result.count("<figure") == 2
+        assert 'embedded-service="youtube"' in result
+        assert 'embedded-service="twitter"' in result
+
+    def test_embed_url_in_list_not_converted(self) -> None:
+        """リスト内のURLは埋め込みに変換されない"""
+        markdown = "- https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        result = markdown_to_html(markdown)
+
+        # リストアイテム内のURLは変換されない
+        assert "<li>" in result
+        assert 'embedded-service="youtube"' not in result
+
+    def test_embed_url_as_link_not_converted(self) -> None:
+        """リンク内のURLは埋め込みに変換されない"""
+        markdown = "[動画を見る](https://www.youtube.com/watch?v=dQw4w9WgXcQ)"
+        result = markdown_to_html(markdown)
+
+        assert 'href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"' in result
+        assert 'embedded-service="youtube"' not in result
+
+    def test_unsupported_url_not_converted(self) -> None:
+        """サポートされていないURLは埋め込みに変換されない"""
+        markdown = "https://vimeo.com/123456"
+        result = markdown_to_html(markdown)
+
+        assert "<figure" not in result
+        assert "embedded-service" not in result
+        assert "https://vimeo.com/123456" in result

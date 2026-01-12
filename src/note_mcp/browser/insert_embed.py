@@ -15,11 +15,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 from enum import Enum
 from typing import TYPE_CHECKING
 
 from playwright.async_api import Error as PlaywrightError
+
+from note_mcp.api.embeds import get_embed_service as _api_get_embed_service
+from note_mcp.api.embeds import is_embed_url as _api_is_embed_url
 
 if TYPE_CHECKING:
     from playwright.async_api import Page
@@ -41,10 +43,8 @@ class EmbedResult(Enum):
     TIMEOUT = "timeout"  # タイムアウト（予期しない失敗）
 
 
-# Supported embed services and their URL patterns
-YOUTUBE_PATTERN = re.compile(r"^https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w-]+")
-TWITTER_PATTERN = re.compile(r"^https?://(?:www\.)?(?:twitter\.com|x\.com)/\w+/status/\d+")
-NOTE_PATTERN = re.compile(r"^https?://note\.com/\w+/n/\w+")
+# Embed URL patterns are defined in api.embeds (DRY principle - Issue #116)
+# Supported services: YouTube, Twitter/X, note.com articles
 
 # note.com editor selectors
 _EDITOR_SELECTOR = ".ProseMirror"
@@ -63,17 +63,21 @@ _EMBED_WAIT_TIMEOUT_MS = 10000
 def is_supported_embed_url(url: str) -> bool:
     """Check if URL is from a supported embed service.
 
+    Delegates to api.embeds.is_embed_url (DRY principle - Issue #116).
+
     Args:
         url: URL to check.
 
     Returns:
         True if URL is from YouTube, Twitter, or note.com.
     """
-    return bool(YOUTUBE_PATTERN.match(url) or TWITTER_PATTERN.match(url) or NOTE_PATTERN.match(url))
+    return _api_is_embed_url(url)
 
 
 def get_embed_service(url: str) -> str | None:
     """Get the embed service name for a URL.
+
+    Delegates to api.embeds.get_embed_service (DRY principle - Issue #116).
 
     Args:
         url: URL to check.
@@ -81,13 +85,7 @@ def get_embed_service(url: str) -> str | None:
     Returns:
         Service name ('youtube', 'twitter', 'note') or None if unsupported.
     """
-    if YOUTUBE_PATTERN.match(url):
-        return "youtube"
-    if TWITTER_PATTERN.match(url):
-        return "twitter"
-    if NOTE_PATTERN.match(url):
-        return "note"
-    return None
+    return _api_get_embed_service(url)
 
 
 async def insert_embed_at_cursor(

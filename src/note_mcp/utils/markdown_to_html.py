@@ -8,6 +8,14 @@ import uuid
 
 from markdown_it import MarkdownIt
 
+from note_mcp.api.embeds import (
+    NOTE_PATTERN,
+    TWITTER_PATTERN,
+    YOUTUBE_PATTERN,
+    generate_embed_html,
+    get_embed_service,
+)
+
 # Pre-compiled regex patterns for performance
 # TOC pattern: [TOC] must be alone on a line
 _TOC_PATTERN = re.compile(r"^\[TOC\]$", re.MULTILINE)
@@ -57,14 +65,6 @@ _RUBY_PATTERN = re.compile(r"[｜|]?([一-龯ぁ-んァ-ヶー]+)《([^》]+)》
 _TEXT_ALIGN_CENTER_PATTERN = re.compile(r"^->(.+)<-$", re.MULTILINE)
 _TEXT_ALIGN_RIGHT_PATTERN = re.compile(r"^->(.+)$", re.MULTILINE)
 _TEXT_ALIGN_LEFT_PATTERN = re.compile(r"^<-(.+)$", re.MULTILINE)
-
-# Embed URL patterns (Issue #41)
-# YouTube: youtube.com/watch?v=xxx or youtu.be/xxx
-# Twitter/X: twitter.com/user/status/xxx or x.com/user/status/xxx
-# note.com: note.com/user/n/xxx
-_EMBED_YOUTUBE_PATTERN = re.compile(r"^https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w-]+$")
-_EMBED_TWITTER_PATTERN = re.compile(r"^https?://(?:www\.)?(?:twitter\.com|x\.com)/\w+/status/\d+$")
-_EMBED_NOTE_PATTERN = re.compile(r"^https?://note\.com/\w+/n/\w+$")
 
 # Pattern to find URLs that are alone on a line (potential embed URLs)
 _STANDALONE_URL_PATTERN = re.compile(r"^(https?://\S+)$", re.MULTILINE)
@@ -123,10 +123,50 @@ def has_embed_url(content: str) -> bool:
     # Find all standalone URLs (URLs alone on their own line)
     for match in _STANDALONE_URL_PATTERN.finditer(content):
         url = match.group(1)
-        # Check if this URL matches any embed pattern
-        if _EMBED_YOUTUBE_PATTERN.match(url) or _EMBED_TWITTER_PATTERN.match(url) or _EMBED_NOTE_PATTERN.match(url):
+        # Check if this URL matches any embed pattern (using api.embeds patterns)
+        if YOUTUBE_PATTERN.match(url) or TWITTER_PATTERN.match(url) or NOTE_PATTERN.match(url):
             return True
     return False
+
+
+# Pattern to match standalone embed URLs in HTML paragraphs
+# Matches: <p name="..." id="...">https://youtube.com/watch?v=xxx</p>
+# Uses negative lookbehind to exclude paragraphs inside list items
+_STANDALONE_EMBED_URL_IN_HTML_PATTERN = re.compile(
+    r'(?<!<li>)<p\s+name="[^"]+"\s+id="[^"]+">(\s*)(https?://\S+?)(\s*)</p>',
+    re.IGNORECASE,
+)
+
+
+def _convert_standalone_embed_urls(html: str) -> str:
+    """Convert standalone embed URLs to figure elements.
+
+    Detects standalone URLs (URLs that are alone in a paragraph) and converts
+    supported embed URLs (YouTube, Twitter, note.com) to figure elements.
+
+    This function should be called after markdown conversion and UUID addition,
+    but before code block processing.
+
+    Args:
+        html: HTML content with paragraphs containing potential embed URLs.
+
+    Returns:
+        HTML with embed URLs converted to figure elements.
+    """
+
+    def replace_embed_url(match: re.Match[str]) -> str:
+        url = match.group(2).strip()
+
+        # Check if this URL is a supported embed URL
+        service = get_embed_service(url)
+        if service is None:
+            # Not an embed URL, keep original paragraph
+            return match.group(0)
+
+        # Generate embed HTML
+        return generate_embed_html(url, service)
+
+    return _STANDALONE_EMBED_URL_IN_HTML_PATTERN.sub(replace_embed_url, html)
 
 
 def _generate_uuid() -> str:
@@ -629,6 +669,10 @@ def markdown_to_html(content: str) -> str:
     # Convert blockquotes to note.com figure format
     # This is required for the API to preserve <br> tags inside blockquotes
     result = _convert_blockquotes_to_note_format(result)
+
+    # Convert standalone embed URLs to figure elements (Issue #116)
+    # YouTube, Twitter, note.com URLs alone in a paragraph become embeds
+    result = _convert_standalone_embed_urls(result)
 
     # Convert code blocks to note.com format and handle newlines
     result = _convert_code_blocks_to_note_format(result)

@@ -10,10 +10,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from playwright.async_api import Error as PlaywrightError
 
-from note_mcp.browser.insert_embed import (
+from note_mcp.api.embeds import (
     NOTE_PATTERN,
     TWITTER_PATTERN,
     YOUTUBE_PATTERN,
+)
+from note_mcp.browser.insert_embed import (
     EmbedResult,
     _wait_for_embed_insertion,
     get_embed_service,
