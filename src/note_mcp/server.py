@@ -28,11 +28,7 @@ from note_mcp.browser.update_article import update_article_via_browser
 from note_mcp.investigator import register_investigator_tools
 from note_mcp.models import ArticleInput, ArticleStatus, NoteAPIError
 from note_mcp.utils.file_parser import parse_markdown_file
-from note_mcp.utils.markdown_to_html import (
-    _has_toc_placeholder,
-    has_math_formula,
-    has_ruby_notation,
-)
+from note_mcp.utils.markdown_to_html import has_ruby_notation
 
 # Create MCP server instance
 mcp = FastMCP("note-mcp")
@@ -173,12 +169,14 @@ async def note_create_draft(
         tags=tags or [],
     )
 
-    # Use browser-based creation for articles with [TOC] marker, math formulas, or ruby notation
-    # TOC insertion and math/ruby require browser automation
+    # Use browser-based creation for articles with ruby notation
+    # Ruby requires browser automation for server-side conversion
     # Note: Embed URLs are now handled via API (Issue #116)
+    # Note: Math formulas are now handled via API (Issue #117) - text preserved and rendered on preview
+    # Note: TOC is now handled via API (Issue #117) - <table-of-contents> element preserved
     toc_info = ""
     embed_info = ""
-    use_browser = _has_toc_placeholder(body) or has_math_formula(body) or has_ruby_notation(body)
+    use_browser = has_ruby_notation(body)
 
     if use_browser:
         result = await create_draft_via_browser(session, article_input)
@@ -282,12 +280,14 @@ async def note_update_article(
         tags=tags or [],
     )
 
-    # Use browser-based update for articles with [TOC] marker, math formulas, or ruby notation
-    # TOC insertion and math/ruby require browser automation
+    # Use browser-based update for articles with ruby notation
+    # Ruby requires browser automation for server-side conversion
     # Note: Embed URLs are now handled via API (Issue #116)
+    # Note: Math formulas are now handled via API (Issue #117) - text preserved and rendered on preview
+    # Note: TOC is now handled via API (Issue #117) - <table-of-contents> element preserved
     toc_info = ""
     embed_info = ""
-    use_browser = _has_toc_placeholder(body) or has_math_formula(body) or has_ruby_notation(body)
+    use_browser = has_ruby_notation(body)
 
     if use_browser:
         result = await update_article_via_browser(session, article_id, article_input)
@@ -592,9 +592,11 @@ async def note_create_from_file(
         tags=parsed.tags,
     )
 
-    # TOC, math formulas, and ruby notation require browser automation
+    # Ruby notation requires browser automation for server-side conversion
     # Note: Embed URLs are now handled via API (Issue #116)
-    needs_browser = _has_toc_placeholder(parsed.body) or has_math_formula(parsed.body) or has_ruby_notation(parsed.body)
+    # Note: Math formulas are now handled via API (Issue #117) - text preserved and rendered on preview
+    # Note: TOC is now handled via API (Issue #117) - <table-of-contents> element preserved
+    needs_browser = has_ruby_notation(parsed.body)
 
     try:
         # Always create draft via API first (Issue #111: API-based image upload)
