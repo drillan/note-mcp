@@ -61,6 +61,11 @@ _IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 _IMAGE_PLACEHOLDER_START = "§§IMAGE:"
 _IMAGE_PLACEHOLDER_SEPARATOR = "||"
 _IMAGE_PLACEHOLDER_END = "§§"
+# note.com CDN URL pattern (Issue #111: API-based image upload)
+# Images already uploaded via API have this URL prefix.
+# note.com uses Amazon CloudFront CDN for image delivery.
+# If note.com changes CDN providers, this prefix will need updating.
+_NOTE_CDN_URL_PREFIX = "https://d2l930y2yx77uc.cloudfront.net/"
 # Bold pattern: **text**
 _BOLD_PATTERN = re.compile(r"\*\*(.+?)\*\*")
 # Math formula patterns (Issue #101)
@@ -258,10 +263,93 @@ async def _type_with_ruby(page: Any, text: str) -> str:
     return text[match.end() :]
 
 
+async def _insert_image_via_prosemirror(page: Any, image_url: str, alt_text: str) -> bool:
+    """Insert an image directly into ProseMirror via JavaScript (Issue #111).
+
+    For note.com CDN URLs (already uploaded images), this function inserts
+    the image directly into the editor using ProseMirror's transaction API.
+    This avoids the need for re-downloading and re-uploading the image.
+
+    Args:
+        page: Playwright page object
+        image_url: URL of the image (should be note.com CDN URL)
+        alt_text: Alt text for the image
+
+    Returns:
+        True if image was inserted successfully, False otherwise.
+    """
+    result = await page.evaluate(
+        """
+        ([url, alt]) => {
+            const editor = document.querySelector('.ProseMirror');
+            if (!editor) return { success: false, error: 'Editor not found' };
+
+            // Try to access ProseMirror view (note.com may expose it differently)
+            const view = editor.pmView || window.view || window.editorView;
+            if (!view) {
+                // Fallback: Create figure element and dispatch input event
+                // This may not work perfectly with ProseMirror's state management
+                return { success: false, error: 'ProseMirror view not accessible' };
+            }
+
+            try {
+                const { state, dispatch } = view;
+                const { schema, tr, selection } = state;
+
+                // Check if schema has figure and image nodes
+                const figureType = schema.nodes.figure;
+                const imageType = schema.nodes.image;
+
+                if (!imageType) {
+                    return { success: false, error: 'Image node type not in schema' };
+                }
+
+                // Create image node
+                const imageAttrs = { src: url };
+                if (alt) imageAttrs.alt = alt;
+                const imageNode = imageType.create(imageAttrs);
+
+                // Wrap in figure if available
+                let nodeToInsert = imageNode;
+                if (figureType) {
+                    // Create figure with image and empty figcaption
+                    const figcaptionType = schema.nodes.figcaption;
+                    const children = [imageNode];
+                    if (figcaptionType) {
+                        children.push(figcaptionType.create(null, alt ? schema.text(alt) : null));
+                    }
+                    nodeToInsert = figureType.create(null, children);
+                }
+
+                // Insert at current cursor position
+                dispatch(tr.insert(selection.from, nodeToInsert));
+
+                return { success: true };
+            } catch (e) {
+                return { success: false, error: e.message };
+            }
+        }
+        """,
+        [image_url, alt_text],
+    )
+
+    if result.get("success"):
+        logger.debug(f"Inserted image via ProseMirror: {image_url[:50]}...")
+        await asyncio.sleep(0.3)  # Wait for DOM update
+        return True
+    else:
+        logger.info(f"ProseMirror image insertion failed: {result.get('error')}")
+        return False
+
+
 async def _type_with_image(page: Any, text: str) -> str:
     """Process image patterns ![alt](url) - Issue #110 Problem 1.
 
-    Images are converted to placeholders for later browser handling.
+    For note.com CDN URLs (already uploaded via API), images are inserted
+    directly via ProseMirror JavaScript API (Issue #111).
+    For other URLs/paths, images are converted to placeholders for later
+    browser handling by apply_images().
+
     This function MUST be called before _type_with_link to prevent
     ![alt](url) from being partially matched as [alt](url).
 
@@ -286,7 +374,17 @@ async def _type_with_image(page: Any, text: str) -> str:
     alt_text = match.group(1)
     image_url = match.group(2)
 
-    # Type image as placeholder for later processing
+    # Check if this is a note.com CDN URL (already uploaded via API)
+    if image_url.startswith(_NOTE_CDN_URL_PREFIX):
+        # Try direct ProseMirror insertion for already-uploaded images
+        inserted = await _insert_image_via_prosemirror(page, image_url, alt_text)
+        if inserted:
+            logger.debug(f"Inserted note.com CDN image directly: {image_url[:50]}...")
+            return text[match.end() :]
+        # If direct insertion failed, fall through to placeholder method
+        logger.warning(f"Direct CDN image insertion failed, using placeholder for: {image_url[:50]}...")
+
+    # Type image as placeholder for later processing by apply_images()
     placeholder = (
         f"{_IMAGE_PLACEHOLDER_START}{alt_text}{_IMAGE_PLACEHOLDER_SEPARATOR}{image_url}{_IMAGE_PLACEHOLDER_END}"
     )

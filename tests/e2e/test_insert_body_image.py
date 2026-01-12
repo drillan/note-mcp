@@ -30,7 +30,7 @@ import pytest
 import pytest_asyncio
 from playwright.async_api import async_playwright
 
-from note_mcp.browser.insert_image import insert_image_via_browser
+from note_mcp.browser.insert_image import insert_image_via_api, insert_image_via_browser
 from tests.e2e.helpers import (
     ImageValidator,
     ProseMirrorStabilizer,
@@ -389,3 +389,104 @@ class TestEdgeCases:
                 file_path="/nonexistent/path/image.png",
                 caption=None,
             )
+
+
+class TestInsertImageViaApiE2E:
+    """E2E tests for insert_image_via_api function (Issue #111).
+
+    Tests the API-based image insertion flow:
+    1. Upload image via API
+    2. Insert into editor via ProseMirror
+    3. Fallback to browser UI if ProseMirror fails
+    """
+
+    async def test_api_image_insertion_without_caption(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        test_image_path: Path,
+    ) -> None:
+        """Test API-based image insertion without caption.
+
+        Uses article_id instead of article_key.
+        """
+        result = await insert_image_via_api(
+            session=real_session,
+            article_id=draft_article.id,
+            file_path=str(test_image_path),
+            caption=None,
+        )
+
+        assert result["success"] is True
+        assert result["article_id"] == draft_article.id
+        assert result["article_key"] == draft_article.key
+        assert result["image_url"].startswith("https://")
+
+    async def test_api_image_insertion_with_caption(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        test_image_path: Path,
+    ) -> None:
+        """Test API-based image insertion with caption."""
+        test_caption = "API経由テスト画像のキャプション"
+
+        result = await insert_image_via_api(
+            session=real_session,
+            article_id=draft_article.id,
+            file_path=str(test_image_path),
+            caption=test_caption,
+        )
+
+        assert result["success"] is True
+        assert result["article_id"] == draft_article.id
+        assert result["caption"] == test_caption
+
+    async def test_api_image_insertion_with_key_format(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        test_image_path: Path,
+    ) -> None:
+        """Test API-based image insertion using article_key format.
+
+        The article_id parameter should accept both numeric ID and key format.
+        """
+        result = await insert_image_via_api(
+            session=real_session,
+            article_id=draft_article.key,  # Using key format
+            file_path=str(test_image_path),
+            caption=None,
+        )
+
+        assert result["success"] is True
+        assert result["article_key"] == draft_article.key
+
+    async def test_api_image_visible_in_preview(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        test_image_path: Path,
+        preview_page: Page,
+    ) -> None:
+        """Test that API-inserted image is visible in preview."""
+        # Insert image via API
+        await insert_image_via_api(
+            session=real_session,
+            article_id=draft_article.id,
+            file_path=str(test_image_path),
+            caption=None,
+        )
+
+        # Wait for changes to propagate
+        await asyncio.sleep(2)
+
+        # Refresh preview
+        await preview_page.reload()
+        await preview_page.wait_for_load_state("domcontentloaded")
+
+        # Validate image
+        validator = ImageValidator(preview_page)
+        result = await validator.validate_image_exists(expected_count=1)
+
+        assert result.success, f"API-inserted image validation failed: {result.message}"

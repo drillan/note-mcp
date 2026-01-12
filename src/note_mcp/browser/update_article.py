@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from playwright.async_api import Error as PlaywrightError
 
 from note_mcp.browser.embed_helpers import apply_embeds
+from note_mcp.browser.image_helpers import apply_images
 from note_mcp.browser.manager import BrowserManager
 from note_mcp.browser.text_align_helpers import apply_text_alignments
 from note_mcp.browser.toc_helpers import insert_toc_at_placeholder
@@ -191,6 +192,23 @@ async def update_article_via_browser(
         logger.warning(f"Embed insertion failed for article {article_id}: {embed_error}")
         # Embed insertion failure is not fatal
 
+    # Insert images at placeholder positions (after embeds, before save)
+    # Wait for DOM to stabilize after embed insertions
+    await asyncio.sleep(1.0)
+
+    images_inserted = 0
+    image_error: str | None = None
+    try:
+        logger.info(f"Starting image application for article {article_id}...")
+        images_inserted, _image_debug = await apply_images(page)
+        logger.info(f"apply_images returned: {images_inserted}, debug: {_image_debug}")
+        if images_inserted > 0:
+            logger.info(f"Inserted {images_inserted} image(s) to article {article_id}")
+    except (TimeoutError, PlaywrightError) as e:
+        image_error = str(e)
+        logger.warning(f"Image insertion failed for article {article_id}: {image_error}")
+        # Image insertion failure is not fatal
+
     # Click save draft button explicitly instead of relying on auto-save
     await asyncio.sleep(1)
 
@@ -237,4 +255,6 @@ async def update_article_via_browser(
         alignment_error=alignment_error,
         embeds_inserted=embeds_inserted if embeds_inserted > 0 else None,
         embed_error=embed_error,
+        images_inserted=images_inserted if images_inserted > 0 else None,
+        image_error=image_error,
     )

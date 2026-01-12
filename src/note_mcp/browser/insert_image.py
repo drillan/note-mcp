@@ -11,8 +11,10 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from note_mcp.api.images import validate_image_file
+from note_mcp.api.articles import get_article
+from note_mcp.api.images import upload_body_image, validate_image_file
 from note_mcp.browser.manager import BrowserManager
+from note_mcp.browser.typing_helpers import _insert_image_via_prosemirror
 from note_mcp.browser.url_helpers import validate_article_edit_url
 from note_mcp.models import ErrorCode, NoteAPIError
 
@@ -54,6 +56,8 @@ async def _dismiss_ai_dialog(page: Page) -> None:
                     await asyncio.sleep(0.5)
                     logger.debug(f"Dismissed AI dialog using selector: {selector}")
                     return
+            except (asyncio.CancelledError, KeyboardInterrupt):
+                raise
             except Exception as e:
                 logger.debug(f"Selector '{selector}' failed: {type(e).__name__}: {e}")
                 continue
@@ -90,6 +94,8 @@ async def _dismiss_ai_dialog(page: Page) -> None:
         if dialog_result:
             await asyncio.sleep(0.5)
             logger.debug("Dismissed AI dialog via JavaScript")
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        raise
     except Exception as e:
         logger.debug(f"No AI dialog to dismiss or error: {e}")
 
@@ -131,6 +137,8 @@ async def _setup_page_with_session(session: Session, article_key: str) -> Page:
     # Wait for network to be idle
     try:
         await page.wait_for_load_state("networkidle", timeout=15000)
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        raise
     except Exception as e:
         logger.warning(f"Network idle wait interrupted: {type(e).__name__}: {e}")
 
@@ -567,4 +575,127 @@ async def insert_image_via_browser(
         "article_key": article_key,
         "file_path": file_path,
         "caption": caption,
+    }
+
+
+async def insert_image_via_api(
+    session: Session,
+    article_id: str,
+    file_path: str,
+    caption: str | None = None,
+) -> dict[str, Any]:
+    """Insert an image into an article via API + ProseMirror (Issue #111).
+
+    This function uses a hybrid approach:
+    1. Upload image via API (faster, more reliable)
+    2. Insert into editor via ProseMirror JavaScript (no UI automation)
+    3. Fallback to browser UI if ProseMirror fails
+
+    Args:
+        session: Authenticated session
+        article_id: ID of the article to edit (numeric or key format)
+        file_path: Path to the image file to insert
+        caption: Optional caption for the image
+
+    Returns:
+        Dictionary with the following keys:
+        - success: Always True on success (raises on failure)
+        - article_id: Numeric article ID
+        - article_key: Article key (e.g., "n1234567890ab")
+        - file_path: Path to the uploaded file
+        - image_url: URL of the uploaded image on note.com CDN
+        - caption: Caption text (if provided)
+        - fallback_used: True if browser UI fallback was used
+
+    Raises:
+        NoteAPIError: If image insertion fails
+    """
+    # Validate file (existence, extension, and size)
+    validate_image_file(file_path)
+    path = Path(file_path)
+
+    # Step 1: Validate article ID and get article info FIRST
+    # This catches invalid IDs early with a clear error message
+    try:
+        article = await get_article(session, article_id)
+    except NoteAPIError as e:
+        raise NoteAPIError(
+            code=ErrorCode.INVALID_INPUT,
+            message=f"Invalid article ID: {article_id}. Please verify the article exists and you have access.",
+            details={"article_id": article_id, "original_error": str(e)},
+        ) from e
+
+    article_key = article.key
+    numeric_id = article.id
+    logger.debug(f"Article validated: key={article_key}, numeric_id={numeric_id}")
+
+    # Step 2: Upload image via API (use numeric ID for consistency)
+    image = await upload_body_image(session, file_path, numeric_id)
+    logger.info(f"Image uploaded via API: {image.url[:50]}...")
+
+    # Step 3: Setup page and navigate to editor
+    page = await _setup_page_with_session(session, article_key)
+
+    # Step 4: Try ProseMirror insertion first
+    fallback_used = False
+    inserted = await _insert_image_via_prosemirror(page, image.url, caption or "")
+
+    if inserted:
+        logger.info("Image inserted via ProseMirror")
+    else:
+        # Fallback to browser UI
+        logger.info("ProseMirror insertion failed, falling back to browser UI")
+        fallback_used = True
+
+        # Get initial image count
+        initial_img_count = await page.evaluate(
+            "() => document.querySelectorAll('.ProseMirror figure img, .ProseMirror img').length"
+        )
+
+        # Click add image button
+        if not await _click_add_image_button(page):
+            raise NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message="Failed to click add image button (fallback)",
+                details={"article_id": numeric_id, "article_key": article_key},
+            )
+
+        # Upload image via file chooser
+        if not await _upload_image_via_file_chooser(page, str(path.absolute())):
+            raise NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message="Failed to upload image via file chooser (fallback)",
+                details={"article_id": numeric_id, "article_key": article_key, "file_path": file_path},
+            )
+
+        # Wait for image insertion
+        if not await _wait_for_image_insertion(page, initial_img_count, caption):
+            raise NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message="Image insertion failed (fallback)",
+                details={"article_id": numeric_id, "article_key": article_key, "file_path": file_path},
+            )
+
+    # Step 5: Add caption if provided and not already added
+    if caption and not fallback_used:
+        caption_success = await _input_image_caption(page, caption)
+        if not caption_success:
+            logger.warning(f"Failed to input caption for image: {caption}")
+
+    # Step 6: Save article
+    if not await _save_article(page):
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Failed to save article after image insertion",
+            details={"article_id": numeric_id, "article_key": article_key, "file_path": file_path},
+        )
+
+    return {
+        "success": True,
+        "article_id": numeric_id,
+        "article_key": article_key,
+        "file_path": file_path,
+        "image_url": image.url,
+        "caption": caption,
+        "fallback_used": fallback_used,
     }
