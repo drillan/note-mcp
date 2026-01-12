@@ -50,6 +50,7 @@ packages = ["src/note_mcp"]
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+exclude = ["tests/manual"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
@@ -64,7 +65,7 @@ strict = true
 warn_return_any = true
 warn_unused_ignores = true
 disallow_untyped_defs = true
-exclude = ["^debug/"]
+exclude = ["^debug/", "^tests/manual/"]
 
 [[tool.mypy.overrides]]
 module = "mitmproxy.*"

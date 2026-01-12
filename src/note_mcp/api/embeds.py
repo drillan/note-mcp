@@ -4,6 +4,10 @@ This module provides functions for detecting embed URLs (YouTube, Twitter, note.
 and generating the required HTML structure for note.com embeds.
 
 This is the single source of truth for embed URL patterns (DRY principle).
+
+Issue #116: Server-registered embed keys are required for proper iframe rendering.
+Random keys generated locally will not work - note.com frontend only renders embeds
+with keys registered via the embed_by_external_api endpoint.
 """
 
 from __future__ import annotations
@@ -11,6 +15,13 @@ from __future__ import annotations
 import html
 import re
 import uuid
+from typing import TYPE_CHECKING
+
+from note_mcp.api.client import NoteAPIClient
+from note_mcp.models import ErrorCode, NoteAPIError
+
+if TYPE_CHECKING:
+    from note_mcp.models import Session
 
 # Embed URL patterns (single source of truth - DRY principle)
 # YouTube: youtube.com/watch?v=xxx or youtu.be/xxx
@@ -53,11 +64,48 @@ def is_embed_url(url: str) -> bool:
     return get_embed_service(url) is not None
 
 
+def _build_embed_figure_html(
+    url: str,
+    embed_key: str,
+    service: str,
+) -> str:
+    """Build the HTML figure element for an embed.
+
+    Internal helper to generate the figure HTML structure.
+    This is the single source of truth for embed figure HTML format (DRY).
+
+    Args:
+        url: Original URL (YouTube, Twitter, note.com).
+        embed_key: Embed key (random for placeholder, server-registered for final).
+        service: Service type ('youtube', 'twitter', 'note').
+
+    Returns:
+        HTML figure element string.
+    """
+    element_id = str(uuid.uuid4())
+    escaped_url = html.escape(url, quote=True)
+
+    return (
+        f'<figure name="{element_id}" id="{element_id}" '
+        f'data-src="{escaped_url}" '
+        f'embedded-service="{service}" '
+        f'embedded-content-key="{embed_key}" '
+        f'contenteditable="false"></figure>'
+    )
+
+
 def generate_embed_html(url: str, service: str | None = None) -> str:
-    """Generate embed HTML for note.com.
+    """Generate embed HTML for note.com with a random key.
 
     Creates a figure element with the required attributes for note.com
     to render the embed (iframe is rendered client-side by note.com frontend).
+
+    NOTE: This generates a random embed key which will NOT work for rendering.
+    Use fetch_embed_key() to get a server-registered key, then use
+    generate_embed_html_with_key() for proper rendering.
+
+    This function is kept for backward compatibility and as a placeholder
+    during markdown-to-html conversion (key is replaced later via API).
 
     Args:
         url: Original URL (YouTube, Twitter, note.com).
@@ -76,14 +124,163 @@ def generate_embed_html(url: str, service: str | None = None) -> str:
     if service is None:
         raise ValueError(f"Unsupported embed URL: {url}")
 
-    element_id = str(uuid.uuid4())
     embed_key = f"emb{uuid.uuid4().hex[:13]}"
-    escaped_url = html.escape(url, quote=True)
+    return _build_embed_figure_html(url, embed_key, service)
 
-    return (
-        f'<figure name="{element_id}" id="{element_id}" '
-        f'data-src="{escaped_url}" '
-        f'embedded-service="{service}" '
-        f'embedded-content-key="{embed_key}" '
-        f'contenteditable="false"></figure>'
-    )
+
+async def fetch_embed_key(
+    session: Session,
+    url: str,
+    article_key: str,
+) -> tuple[str, str]:
+    """Fetch server-registered embed key from note.com API.
+
+    This function calls the embed_by_external_api endpoint to register
+    the embed URL with note.com's server and obtain a valid embed key.
+
+    The server-registered key is required for note.com's frontend to
+    render the iframe. Random keys generated locally will not work.
+
+    Args:
+        session: Authenticated session with valid cookies.
+        url: Embed URL (YouTube, Twitter, note.com).
+        article_key: Article key where the embed will be inserted
+                     (e.g., "n1234567890ab").
+
+    Returns:
+        Tuple of (embed_key, html_for_embed):
+        - embed_key: Server-registered key (e.g., "emb0076d44f4f7f")
+        - html_for_embed: HTML snippet for rendering the embed
+
+    Raises:
+        ValueError: If URL is not a supported embed URL.
+        NoteAPIError: If API request fails or returns empty response.
+    """
+    service = get_embed_service(url)
+    if service is None:
+        raise ValueError(f"Unsupported embed URL: {url}")
+
+    # Build query parameters for embed_by_external_api endpoint
+    params = {
+        "url": url,
+        "service": service,
+        "embeddable_key": article_key,
+        "embeddable_type": "Note",
+    }
+
+    async with NoteAPIClient(session) as client:
+        response = await client.get("/v2/embed_by_external_api", params=params)
+
+    # Validate response
+    data = response.get("data", {})
+    embed_key = data.get("key")
+    html_for_embed = data.get("html_for_embed")
+
+    if not embed_key or not html_for_embed:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Failed to fetch embed key: API returned empty response",
+            details={"url": url, "article_key": article_key, "response": response},
+        )
+
+    return embed_key, html_for_embed
+
+
+def generate_embed_html_with_key(
+    url: str,
+    embed_key: str,
+    service: str | None = None,
+) -> str:
+    """Generate embed HTML with a server-registered key.
+
+    Unlike generate_embed_html(), this uses a server-registered key
+    which enables proper iframe rendering by note.com's frontend.
+
+    Args:
+        url: Original URL (YouTube, Twitter, note.com).
+        embed_key: Server-registered embed key from fetch_embed_key().
+        service: Service type ('youtube', 'twitter', 'note').
+                 If None, auto-detected from URL.
+
+    Returns:
+        HTML figure element string with server-registered key.
+
+    Raises:
+        ValueError: If URL is not a supported embed URL.
+    """
+    if service is None:
+        service = get_embed_service(url)
+
+    if service is None:
+        raise ValueError(f"Unsupported embed URL: {url}")
+
+    return _build_embed_figure_html(url, embed_key, service)
+
+
+# Pattern to find embed figure elements with their keys and URLs
+# Uses non-greedy matching to handle any attribute order
+_EMBED_FIGURE_PATTERN = re.compile(
+    r"<figure\s+"
+    r"(?=(?:[^>]*?data-src=\"([^\"]+)\"))"  # Lookahead for data-src
+    r"(?=(?:[^>]*?embedded-content-key=\"([^\"]+)\"))"  # Lookahead for embedded-content-key
+    r"[^>]*>",
+    re.IGNORECASE,
+)
+
+
+async def resolve_embed_keys(
+    session: Session,
+    html_body: str,
+    article_key: str,
+) -> str:
+    """Replace random embed keys with server-registered keys.
+
+    Finds all <figure> elements with embedded-content-key attribute and
+    replaces their keys with server-registered keys obtained via API.
+
+    This function should be called after markdown_to_html() conversion
+    and before saving the article body to note.com.
+
+    Args:
+        session: Authenticated session with valid cookies.
+        html_body: HTML body containing figure elements with random embed keys.
+        article_key: Article key where embeds will be inserted
+                     (e.g., "n1234567890ab").
+
+    Returns:
+        HTML body with embed keys replaced by server-registered keys.
+
+    Raises:
+        NoteAPIError: If any API request fails.
+    """
+    # Find all embed figures in the HTML
+    matches = list(_EMBED_FIGURE_PATTERN.finditer(html_body))
+
+    if not matches:
+        # No embeds found, return unchanged
+        return html_body
+
+    result = html_body
+
+    # Process each embed figure
+    for match in matches:
+        data_src = match.group(1)
+        old_key = match.group(2)
+
+        # Unescape the URL (it was escaped when generating HTML)
+        url = html.unescape(data_src)
+
+        # Skip if URL is not a supported embed URL
+        if get_embed_service(url) is None:
+            continue
+
+        # Fetch server-registered key
+        server_key, _ = await fetch_embed_key(session, url, article_key)
+
+        # Replace the old key with the server key
+        result = result.replace(
+            f'embedded-content-key="{old_key}"',
+            f'embedded-content-key="{server_key}"',
+        )
+
+    return result
