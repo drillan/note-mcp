@@ -693,6 +693,48 @@ class TestGenerateImageHtml:
         figcaption_pos = result.find("<figcaption>")
         assert img_pos < figcaption_pos
 
+    def test_xss_prevention_in_caption(self) -> None:
+        """Test that caption is HTML-escaped to prevent XSS attacks."""
+        from note_mcp.api.articles import generate_image_html
+
+        result = generate_image_html(
+            image_url="https://example.com/image.jpg",
+            caption="<script>alert('XSS')</script>",
+        )
+
+        # Script tags should be escaped
+        assert "<script>" not in result
+        assert "&lt;script&gt;" in result
+        assert "alert(&#x27;XSS&#x27;)" in result
+
+    def test_special_characters_in_caption(self) -> None:
+        """Test that special HTML characters in caption are escaped."""
+        from note_mcp.api.articles import generate_image_html
+
+        result = generate_image_html(
+            image_url="https://example.com/image.jpg",
+            caption='Caption with "quotes" & <brackets>',
+        )
+
+        # Special characters should be escaped
+        assert "&quot;" in result
+        assert "&amp;" in result
+        assert "&lt;" in result
+        assert "&gt;" in result
+
+    def test_xss_prevention_in_url(self) -> None:
+        """Test that URL is HTML-escaped to prevent XSS attacks."""
+        from note_mcp.api.articles import generate_image_html
+
+        result = generate_image_html(
+            image_url='javascript:alert("XSS")',
+            caption="",
+        )
+
+        # URL should be escaped
+        assert 'javascript:alert("XSS")' not in result
+        assert "javascript:alert(&quot;XSS&quot;)" in result
+
 
 class TestAppendImageToBody:
     """Tests for append_image_to_body function (Issue #114)."""
@@ -890,6 +932,70 @@ class TestUpdateArticleRawHtml:
                 {"hashtag": {"name": "tag1"}},
                 {"hashtag": {"name": "tag2"}},
             ]
+
+    @pytest.mark.asyncio
+    async def test_update_article_empty_response_raises_error(self) -> None:
+        """Test that empty API response raises NoteAPIError."""
+        from note_mcp.api.articles import update_article_raw_html
+
+        session = create_mock_session()
+
+        # Empty data in response
+        mock_response: dict[str, dict[str, str]] = {"data": {}}
+
+        with (
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
+        ):
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_resolve.return_value = "12345"
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await update_article_raw_html(
+                    session=session,
+                    article_id="12345",
+                    title="Title",
+                    html_body="<p>Content</p>",
+                )
+
+            assert exc_info.value.code == ErrorCode.API_ERROR
+            assert "empty response" in exc_info.value.message.lower()
+
+    @pytest.mark.asyncio
+    async def test_update_article_response_missing_id_raises_error(self) -> None:
+        """Test that response without id field raises NoteAPIError."""
+        from note_mcp.api.articles import update_article_raw_html
+
+        session = create_mock_session()
+
+        # Response with data but no id field
+        mock_response = {"data": {"name": "Title", "body": "<p>Content</p>"}}
+
+        with (
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
+        ):
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_resolve.return_value = "12345"
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await update_article_raw_html(
+                    session=session,
+                    article_id="12345",
+                    title="Title",
+                    html_body="<p>Content</p>",
+                )
+
+            assert exc_info.value.code == ErrorCode.API_ERROR
+            assert "empty response" in exc_info.value.message.lower()
 
 
 class TestInsertImageViaApiOnly:

@@ -5,6 +5,7 @@ Provides functions for creating, updating, and managing articles.
 
 from __future__ import annotations
 
+import html
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +16,8 @@ from note_mcp.models import (
     ArticleInput,
     ArticleListResult,
     ArticleStatus,
+    ErrorCode,
+    NoteAPIError,
     Session,
     from_api_response,
 )
@@ -28,12 +31,16 @@ if TYPE_CHECKING:
 # Issue #114: API-only Image Insertion Helper Functions
 # =============================================================================
 
+# Default image dimensions used by note.com's editor
+NOTE_DEFAULT_IMAGE_WIDTH: int = 620
+NOTE_DEFAULT_IMAGE_HEIGHT: int = 457
+
 
 def generate_image_html(
     image_url: str,
     caption: str = "",
-    width: int = 620,
-    height: int = 457,
+    width: int = NOTE_DEFAULT_IMAGE_WIDTH,
+    height: int = NOTE_DEFAULT_IMAGE_HEIGHT,
 ) -> str:
     """Generate note.com figure HTML for an image.
 
@@ -50,11 +57,14 @@ def generate_image_html(
         HTML string: <figure name="..." id="..."><img ...><figcaption>...</figcaption></figure>
     """
     element_id = str(uuid.uuid4())
+    # Escape caption and URL to prevent XSS attacks
+    escaped_caption = html.escape(caption)
+    escaped_url = html.escape(image_url)
     return (
         f'<figure name="{element_id}" id="{element_id}">'
-        f'<img src="{image_url}" alt="" width="{width}" height="{height}" '
+        f'<img src="{escaped_url}" alt="" width="{width}" height="{height}" '
         f'contenteditable="false" draggable="false">'
-        f"<figcaption>{caption}</figcaption></figure>"
+        f"<figcaption>{escaped_caption}</figcaption></figure>"
     )
 
 
@@ -151,8 +161,14 @@ async def update_article_raw_html(
             json=payload,
         )
 
-    # Parse response
+    # Parse and validate response
     article_data = response.get("data", {})
+    if not article_data or not article_data.get("id"):
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Article update failed: API returned empty response",
+            details={"article_id": article_id, "response": response},
+        )
     return from_api_response(article_data)
 
 
