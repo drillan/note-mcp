@@ -392,12 +392,13 @@ class TestEdgeCases:
 
 
 class TestInsertImageViaApiE2E:
-    """E2E tests for insert_image_via_api function (Issue #111).
+    """E2E tests for insert_image_via_api function (Issue #114 API-only).
 
-    Tests the API-based image insertion flow:
-    1. Upload image via API
-    2. Insert into editor via ProseMirror
-    3. Fallback to browser UI if ProseMirror fails
+    Tests the fully API-based image insertion flow (no Playwright dependency):
+    1. Upload image to S3 via API
+    2. Get article HTML body via API
+    3. Append image HTML to body
+    4. Save via draft_save API
     """
 
     async def test_api_image_insertion_without_caption(
@@ -409,6 +410,7 @@ class TestInsertImageViaApiE2E:
         """Test API-based image insertion without caption.
 
         Uses article_id instead of article_key.
+        Verifies API-only mode (no fallback).
         """
         result = await insert_image_via_api(
             session=real_session,
@@ -421,6 +423,7 @@ class TestInsertImageViaApiE2E:
         assert result["article_id"] == draft_article.id
         assert result["article_key"] == draft_article.key
         assert result["image_url"].startswith("https://")
+        assert result["fallback_used"] is False  # API-only mode (Issue #114)
 
     async def test_api_image_insertion_with_caption(
         self,
@@ -490,3 +493,59 @@ class TestInsertImageViaApiE2E:
         result = await validator.validate_image_exists(expected_count=1)
 
         assert result.success, f"API-inserted image validation failed: {result.message}"
+
+    async def test_api_only_caption_persisted(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        test_image_path: Path,
+    ) -> None:
+        """Test that caption is persisted in article body (Issue #114).
+
+        Verifies that the figcaption HTML is correctly saved via draft_save API.
+        """
+        from note_mcp.api.articles import get_article_raw_html
+
+        test_caption = "E2E検証用キャプション_API保存確認"
+
+        # Insert image with caption via API
+        result = await insert_image_via_api(
+            session=real_session,
+            article_id=draft_article.id,
+            file_path=str(test_image_path),
+            caption=test_caption,
+        )
+
+        assert result["success"] is True
+        assert result["fallback_used"] is False
+
+        # Verify caption is in the article body
+        article = await get_article_raw_html(real_session, draft_article.id)
+        assert test_caption in article.body, f"Caption not found in article body: {article.body[:500]}..."
+
+    async def test_api_only_no_playwright_required(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        test_image_path: Path,
+    ) -> None:
+        """Test that API-only insertion works without browser (Issue #114).
+
+        Verifies that the image insertion completes faster than browser-based
+        insertion would (indicating no Playwright startup overhead).
+        """
+        import time
+
+        start = time.time()
+        result = await insert_image_via_api(
+            session=real_session,
+            article_id=draft_article.id,
+            file_path=str(test_image_path),
+            caption=None,
+        )
+        elapsed = time.time() - start
+
+        assert result["success"] is True
+        assert result["fallback_used"] is False
+        # API-only should complete in under 5 seconds (browser would take 10-15s)
+        assert elapsed < 5.0, f"API-only insertion took too long: {elapsed:.2f}s (expected < 5s)"
