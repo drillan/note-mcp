@@ -601,14 +601,24 @@ async def insert_image_via_api(
     validate_image_file(file_path)
     path = Path(file_path)
 
-    # Step 1: Upload image via API
-    image = await upload_body_image(session, file_path, article_id)
-    logger.info(f"Image uploaded via API: {image.url[:50]}...")
+    # Step 1: Validate article ID and get article info FIRST
+    # This catches invalid IDs early with a clear error message
+    try:
+        article = await get_article(session, article_id)
+    except NoteAPIError as e:
+        raise NoteAPIError(
+            code=ErrorCode.INVALID_INPUT,
+            message=f"Invalid article ID: {article_id}. Please verify the article exists and you have access.",
+            details={"article_id": article_id, "original_error": str(e)},
+        ) from e
 
-    # Step 2: Get article info to retrieve article_key
-    article = await get_article(session, article_id)
     article_key = article.key
-    logger.debug(f"Article key: {article_key} for ID: {article_id}")
+    numeric_id = article.id
+    logger.debug(f"Article validated: key={article_key}, numeric_id={numeric_id}")
+
+    # Step 2: Upload image via API (use numeric ID for consistency)
+    image = await upload_body_image(session, file_path, numeric_id)
+    logger.info(f"Image uploaded via API: {image.url[:50]}...")
 
     # Step 3: Setup page and navigate to editor
     page = await _setup_page_with_session(session, article_key)
@@ -634,7 +644,7 @@ async def insert_image_via_api(
             raise NoteAPIError(
                 code=ErrorCode.API_ERROR,
                 message="Failed to click add image button (fallback)",
-                details={"article_id": article_id},
+                details={"article_id": numeric_id, "article_key": article_key},
             )
 
         # Upload image via file chooser
@@ -642,7 +652,7 @@ async def insert_image_via_api(
             raise NoteAPIError(
                 code=ErrorCode.API_ERROR,
                 message="Failed to upload image via file chooser (fallback)",
-                details={"article_id": article_id, "file_path": file_path},
+                details={"article_id": numeric_id, "article_key": article_key, "file_path": file_path},
             )
 
         # Wait for image insertion
@@ -650,7 +660,7 @@ async def insert_image_via_api(
             raise NoteAPIError(
                 code=ErrorCode.API_ERROR,
                 message="Image insertion failed (fallback)",
-                details={"article_id": article_id, "file_path": file_path},
+                details={"article_id": numeric_id, "article_key": article_key, "file_path": file_path},
             )
 
     # Step 5: Add caption if provided and not already added
@@ -662,12 +672,12 @@ async def insert_image_via_api(
         raise NoteAPIError(
             code=ErrorCode.API_ERROR,
             message="Failed to save article after image insertion",
-            details={"article_id": article_id, "file_path": file_path},
+            details={"article_id": numeric_id, "article_key": article_key, "file_path": file_path},
         )
 
     return {
         "success": True,
-        "article_id": article_id,
+        "article_id": numeric_id,
         "article_key": article_key,
         "file_path": file_path,
         "image_url": image.url,

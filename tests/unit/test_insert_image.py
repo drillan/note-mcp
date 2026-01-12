@@ -482,12 +482,25 @@ class TestInsertImageViaApi:
     async def test_insert_image_via_api_upload_fails(self, tmp_path: Path) -> None:
         """Test API insertion fails when image upload fails."""
         from note_mcp.browser.insert_image import insert_image_via_api
+        from note_mcp.models import Article, ArticleStatus
 
         session = create_mock_session()
         file_path = tmp_path / "test.jpg"
         file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
 
-        with patch("note_mcp.browser.insert_image.upload_body_image") as mock_upload:
+        mock_article = Article(
+            id="12345",
+            key="n12345abcdef",
+            title="Test Article",
+            body="Test body",
+            status=ArticleStatus.DRAFT,
+        )
+
+        with (
+            patch("note_mcp.browser.insert_image.get_article") as mock_get_article,
+            patch("note_mcp.browser.insert_image.upload_body_image") as mock_upload,
+        ):
+            mock_get_article.return_value = mock_article
             mock_upload.side_effect = NoteAPIError(
                 code=ErrorCode.API_ERROR,
                 message="Upload failed",
@@ -576,3 +589,29 @@ class TestInsertImageViaApi:
 
         assert exc_info.value.code == ErrorCode.INVALID_INPUT
         assert "not found" in exc_info.value.message.lower()
+
+    @pytest.mark.asyncio
+    async def test_insert_image_via_api_invalid_article_id(self, tmp_path: Path) -> None:
+        """Test API insertion fails when article ID is invalid."""
+        from note_mcp.browser.insert_image import insert_image_via_api
+
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        with patch("note_mcp.browser.insert_image.get_article") as mock_get_article:
+            mock_get_article.side_effect = NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message="API request failed with status 400",
+            )
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await insert_image_via_api(
+                    session=session,
+                    article_id="invalid_id",
+                    file_path=str(file_path),
+                )
+
+            assert exc_info.value.code == ErrorCode.INVALID_INPUT
+            assert "invalid_id" in exc_info.value.message.lower()
+            assert "verify" in exc_info.value.message.lower()
