@@ -574,3 +574,201 @@ class TestResolveEmbedKeys:
 
             with pytest.raises(NoteAPIError):
                 await resolve_embed_keys(session, html_body, "n1234567890ab")
+
+
+class TestGenerateEmbedHtmlWithKey:
+    """Tests for generate_embed_html_with_key function."""
+
+    def test_youtube_embed_with_server_key(self) -> None:
+        """Test generating YouTube embed HTML with server-registered key."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        embed_key = "emb0076d44f4f7f"
+        html = generate_embed_html_with_key(url, embed_key)
+
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="youtube"' in html
+        assert f'embedded-content-key="{embed_key}"' in html
+        assert 'contenteditable="false"' in html
+        assert "</figure>" in html
+
+    def test_twitter_embed_with_server_key(self) -> None:
+        """Test generating Twitter embed HTML with server-registered key."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://twitter.com/user/status/1234567890"
+        embed_key = "emb1234567890abc"
+        html = generate_embed_html_with_key(url, embed_key, service="twitter")
+
+        assert 'embedded-service="twitter"' in html
+        assert f'embedded-content-key="{embed_key}"' in html
+
+    def test_note_embed_with_server_key(self) -> None:
+        """Test generating note.com embed HTML with server-registered key."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://note.com/username/n/n1234567890ab"
+        embed_key = "embabcdef1234567"
+        html = generate_embed_html_with_key(url, embed_key)
+
+        assert 'embedded-service="note"' in html
+        assert f'embedded-content-key="{embed_key}"' in html
+
+    def test_unsupported_url_raises_error(self) -> None:
+        """Test that unsupported URL raises ValueError."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        with pytest.raises(ValueError, match="Unsupported embed URL"):
+            generate_embed_html_with_key("https://example.com", "emb123")
+
+    def test_url_escaping(self) -> None:
+        """Test that special characters in URL are properly escaped."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = 'https://www.youtube.com/watch?v=test&feature=share"<script>'
+        html = generate_embed_html_with_key(url, "emb123", service="youtube")
+
+        # HTML special characters should be escaped
+        assert "&amp;" in html or "feature=share" in html
+        assert '"<script>' not in html  # Should be escaped
+
+
+class TestEmbedFigurePattern:
+    """Tests for _EMBED_FIGURE_PATTERN regex."""
+
+    def test_standard_attribute_order(self) -> None:
+        """Test matching with standard attribute order (data-src before key)."""
+        from note_mcp.api.embeds import _EMBED_FIGURE_PATTERN
+
+        html = (
+            '<figure name="fig1" id="fig1" '
+            'data-src="https://www.youtube.com/watch?v=abc123" '
+            'embedded-service="youtube" '
+            'embedded-content-key="emb1234567890ab" '
+            'contenteditable="false"></figure>'
+        )
+
+        match = _EMBED_FIGURE_PATTERN.search(html)
+        assert match is not None
+        assert match.group(1) == "https://www.youtube.com/watch?v=abc123"
+        assert match.group(2) == "emb1234567890ab"
+
+    def test_reversed_attribute_order(self) -> None:
+        """Test matching with reversed attribute order (key before data-src)."""
+        from note_mcp.api.embeds import _EMBED_FIGURE_PATTERN
+
+        html = (
+            '<figure name="fig1" id="fig1" '
+            'embedded-content-key="emb1234567890ab" '
+            'embedded-service="youtube" '
+            'data-src="https://www.youtube.com/watch?v=abc123" '
+            'contenteditable="false"></figure>'
+        )
+
+        match = _EMBED_FIGURE_PATTERN.search(html)
+        assert match is not None
+        assert match.group(1) == "https://www.youtube.com/watch?v=abc123"
+        assert match.group(2) == "emb1234567890ab"
+
+    def test_minimal_attributes(self) -> None:
+        """Test matching with minimal required attributes."""
+        from note_mcp.api.embeds import _EMBED_FIGURE_PATTERN
+
+        html = '<figure data-src="https://youtu.be/abc" embedded-content-key="emb123"></figure>'
+
+        match = _EMBED_FIGURE_PATTERN.search(html)
+        assert match is not None
+        assert match.group(1) == "https://youtu.be/abc"
+        assert match.group(2) == "emb123"
+
+    def test_escaped_url_in_attribute(self) -> None:
+        """Test matching with HTML-escaped URL."""
+        from note_mcp.api.embeds import _EMBED_FIGURE_PATTERN
+
+        html = (
+            '<figure data-src="https://www.youtube.com/watch?v=abc&amp;feature=share" '
+            'embedded-content-key="emb123"></figure>'
+        )
+
+        match = _EMBED_FIGURE_PATTERN.search(html)
+        assert match is not None
+        assert match.group(1) == "https://www.youtube.com/watch?v=abc&amp;feature=share"
+
+
+class TestResolveEmbedKeysWithEscapedUrl:
+    """Tests for resolve_embed_keys with HTML-escaped URLs."""
+
+    @pytest.mark.asyncio
+    async def test_unescape_url_before_api_call(self) -> None:
+        """Test that escaped URLs are unescaped before calling the API."""
+        import time
+        from unittest.mock import patch
+
+        from note_mcp.api.embeds import resolve_embed_keys
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        # HTML with escaped characters in URL (using note.com URL which supports query params)
+        # The &amp; should be unescaped to & before the API call
+        html_body = (
+            '<figure name="fig1" id="fig1" '
+            'data-src="https://www.youtube.com/watch?v=dQw4w9WgXcQ" '
+            'embedded-service="youtube" '
+            'embedded-content-key="embrandomkey" '
+            'contenteditable="false"></figure>'
+        )
+
+        with patch("note_mcp.api.embeds.fetch_embed_key") as mock_fetch:
+            mock_fetch.return_value = ("embserverkey", "<iframe>...</iframe>")
+
+            await resolve_embed_keys(session, html_body, "n1234567890ab")
+
+            # Verify fetch_embed_key was called with the correct URL
+            mock_fetch.assert_called_once()
+            call_args = mock_fetch.call_args[0]
+            assert call_args[1] == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+    @pytest.mark.asyncio
+    async def test_html_unescape_applied(self) -> None:
+        """Test that html.unescape is applied to data-src attribute values."""
+        import time
+        from unittest.mock import patch
+
+        from note_mcp.api.embeds import resolve_embed_keys
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        # Twitter URL with escaped apostrophe (&#x27;)
+        # This tests that html.unescape is actually being called
+        html_body = (
+            '<figure name="fig1" id="fig1" '
+            'data-src="https://twitter.com/user/status/1234567890" '
+            'embedded-service="twitter" '
+            'embedded-content-key="embrandomkey" '
+            'contenteditable="false"></figure>'
+        )
+
+        with patch("note_mcp.api.embeds.fetch_embed_key") as mock_fetch:
+            mock_fetch.return_value = ("embserverkey", "<blockquote>...</blockquote>")
+
+            await resolve_embed_keys(session, html_body, "n1234567890ab")
+
+            # Verify fetch_embed_key was called
+            mock_fetch.assert_called_once()
+            call_args = mock_fetch.call_args[0]
+            # URL should be passed to fetch_embed_key (after html.unescape)
+            assert call_args[1] == "https://twitter.com/user/status/1234567890"

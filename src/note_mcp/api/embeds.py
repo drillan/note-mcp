@@ -64,6 +64,36 @@ def is_embed_url(url: str) -> bool:
     return get_embed_service(url) is not None
 
 
+def _build_embed_figure_html(
+    url: str,
+    embed_key: str,
+    service: str,
+) -> str:
+    """Build the HTML figure element for an embed.
+
+    Internal helper to generate the figure HTML structure.
+    This is the single source of truth for embed figure HTML format (DRY).
+
+    Args:
+        url: Original URL (YouTube, Twitter, note.com).
+        embed_key: Embed key (random for placeholder, server-registered for final).
+        service: Service type ('youtube', 'twitter', 'note').
+
+    Returns:
+        HTML figure element string.
+    """
+    element_id = str(uuid.uuid4())
+    escaped_url = html.escape(url, quote=True)
+
+    return (
+        f'<figure name="{element_id}" id="{element_id}" '
+        f'data-src="{escaped_url}" '
+        f'embedded-service="{service}" '
+        f'embedded-content-key="{embed_key}" '
+        f'contenteditable="false"></figure>'
+    )
+
+
 def generate_embed_html(url: str, service: str | None = None) -> str:
     """Generate embed HTML for note.com with a random key.
 
@@ -94,17 +124,8 @@ def generate_embed_html(url: str, service: str | None = None) -> str:
     if service is None:
         raise ValueError(f"Unsupported embed URL: {url}")
 
-    element_id = str(uuid.uuid4())
     embed_key = f"emb{uuid.uuid4().hex[:13]}"
-    escaped_url = html.escape(url, quote=True)
-
-    return (
-        f'<figure name="{element_id}" id="{element_id}" '
-        f'data-src="{escaped_url}" '
-        f'embedded-service="{service}" '
-        f'embedded-content-key="{embed_key}" '
-        f'contenteditable="false"></figure>'
-    )
+    return _build_embed_figure_html(url, embed_key, service)
 
 
 async def fetch_embed_key(
@@ -193,23 +214,15 @@ def generate_embed_html_with_key(
     if service is None:
         raise ValueError(f"Unsupported embed URL: {url}")
 
-    element_id = str(uuid.uuid4())
-    escaped_url = html.escape(url, quote=True)
-
-    return (
-        f'<figure name="{element_id}" id="{element_id}" '
-        f'data-src="{escaped_url}" '
-        f'embedded-service="{service}" '
-        f'embedded-content-key="{embed_key}" '
-        f'contenteditable="false"></figure>'
-    )
+    return _build_embed_figure_html(url, embed_key, service)
 
 
 # Pattern to find embed figure elements with their keys and URLs
+# Uses non-greedy matching to handle any attribute order
 _EMBED_FIGURE_PATTERN = re.compile(
-    r"<figure\s+[^>]*"
-    r'data-src="([^"]+)"[^>]*'
-    r'embedded-content-key="([^"]+)"'
+    r"<figure\s+"
+    r"(?=(?:[^>]*?data-src=\"([^\"]+)\"))"  # Lookahead for data-src
+    r"(?=(?:[^>]*?embedded-content-key=\"([^\"]+)\"))"  # Lookahead for embedded-content-key
     r"[^>]*>",
     re.IGNORECASE,
 )

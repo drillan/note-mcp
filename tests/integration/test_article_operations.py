@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -130,13 +130,18 @@ class TestUpdateArticle:
             }
         }
 
-        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+        with (
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
+            patch("note_mcp.api.articles.resolve_embed_keys") as mock_resolve_embeds,
+        ):
             mock_client = AsyncMock()
-            mock_client_class.return_value = mock_client
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock()
+            mock_client_class.return_value.__aenter__.return_value = mock_client
             # Uses POST to draft_save endpoint
             mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client.get = AsyncMock(return_value={"data": {"key": "n1234567890ab"}})
+            mock_resolve.return_value = "123456"
+            mock_resolve_embeds.return_value = "<p>Updated content</p>\n"
 
             article = await update_article(session, "123456", article_input)
 
@@ -163,13 +168,18 @@ class TestUpdateArticle:
             }
         }
 
-        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+        with (
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
+            patch("note_mcp.api.articles.resolve_embed_keys") as mock_resolve_embeds,
+        ):
             mock_client = AsyncMock()
-            mock_client_class.return_value = mock_client
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock()
+            mock_client_class.return_value.__aenter__.return_value = mock_client
             # Uses POST to draft_save endpoint
             mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client.get = AsyncMock(return_value={"data": {"key": "n1234567890ab"}})
+            mock_resolve.return_value = "123456"
+            mock_resolve_embeds.return_value = ""
 
             article = await update_article(session, "123456", article_input)
 
@@ -591,3 +601,180 @@ class TestPublishArticle:
             await publish_article(session)
 
         assert "article_id" in str(exc_info.value) or "article_input" in str(exc_info.value)
+
+
+class TestCreateDraftWithEmbeds:
+    """Integration tests for create_draft with embed URL resolution."""
+
+    @pytest.mark.asyncio
+    async def test_create_draft_resolves_youtube_embed(self) -> None:
+        """Test that create_draft resolves YouTube embed keys via API."""
+        session = create_mock_session()
+        article_input = ArticleInput(
+            title="Article with YouTube",
+            body="Check out this video:\n\nhttps://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        )
+
+        # Mock response for article creation
+        mock_create_response = {
+            "data": {
+                "id": "123456",
+                "key": "n1234567890ab",
+                "name": "Article with YouTube",
+                "body": "",
+                "status": "draft",
+                "hashtags": [],
+            }
+        }
+
+        # Mock response for draft_save
+        embed_html = (
+            '<figure data-src="https://www.youtube.com/watch?v=dQw4w9WgXcQ" '
+            'embedded-content-key="emb0076d44f4f7f"></figure>'
+        )
+        mock_save_response = {
+            "data": {
+                "id": "123456",
+                "key": "n1234567890ab",
+                "name": "Article with YouTube",
+                "body": embed_html,
+                "status": "draft",
+                "hashtags": [],
+            }
+        }
+
+        with (
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles.resolve_embed_keys") as mock_resolve_embeds,
+        ):
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+
+            # Different responses for different endpoints
+            def mock_post(endpoint: str, **kwargs: object) -> dict[str, Any]:
+                if "/v1/text_notes/draft_save" in endpoint:
+                    return mock_save_response
+                return mock_create_response
+
+            mock_client.post = AsyncMock(side_effect=mock_post)
+            mock_resolve_embeds.return_value = embed_html
+
+            article = await create_draft(session, article_input)
+
+            assert article.id == "123456"
+            # Verify both create and draft_save were called
+            assert mock_client.post.call_count == 2
+            # Verify resolve_embed_keys was called with correct article_key
+            mock_resolve_embeds.assert_called_once()
+            call_args = mock_resolve_embeds.call_args[0]
+            assert call_args[2] == "n1234567890ab"  # article_key
+
+    @pytest.mark.asyncio
+    async def test_create_draft_fails_without_article_key(self) -> None:
+        """Test that create_draft raises error when API returns no article key."""
+        from note_mcp.models import NoteAPIError
+
+        session = create_mock_session()
+        article_input = ArticleInput(
+            title="Test Article",
+            body="Content",
+        )
+
+        # Mock response missing the key field
+        mock_response = {
+            "data": {
+                "id": "123456",
+                # "key" is missing!
+                "name": "Test Article",
+                "status": "draft",
+            }
+        }
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+            mock_client.post = AsyncMock(return_value=mock_response)
+
+            with pytest.raises(NoteAPIError, match="no article key"):
+                await create_draft(session, article_input)
+
+    @pytest.mark.asyncio
+    async def test_create_draft_fails_without_article_id(self) -> None:
+        """Test that create_draft raises error when API returns no article ID."""
+        from note_mcp.models import NoteAPIError
+
+        session = create_mock_session()
+        article_input = ArticleInput(
+            title="Test Article",
+            body="Content",
+        )
+
+        # Mock response missing the id field
+        mock_response = {
+            "data": {
+                # "id" is missing!
+                "key": "n1234567890ab",
+                "name": "Test Article",
+                "status": "draft",
+            }
+        }
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+            mock_client.post = AsyncMock(return_value=mock_response)
+
+            with pytest.raises(NoteAPIError, match="no article ID"):
+                await create_draft(session, article_input)
+
+
+class TestUpdateArticleWithEmbeds:
+    """Integration tests for update_article with embed URL resolution."""
+
+    @pytest.mark.asyncio
+    async def test_update_article_resolves_embed_keys(self) -> None:
+        """Test that update_article resolves embed keys for new embeds."""
+        session = create_mock_session()
+        article_input = ArticleInput(
+            title="Updated with Twitter",
+            body="Check this tweet:\n\nhttps://twitter.com/user/status/1234567890",
+        )
+
+        # Mock response for draft_save
+        twitter_embed_html = (
+            '<figure data-src="https://twitter.com/user/status/1234567890" '
+            'embedded-content-key="emb1234567890abc"></figure>'
+        )
+        mock_save_response = {
+            "data": {
+                "id": "123456",
+                "key": "n1234567890ab",
+                "name": "Updated with Twitter",
+                "body": twitter_embed_html,
+                "status": "draft",
+                "hashtags": [],
+            }
+        }
+
+        with (
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
+            patch("note_mcp.api.articles.resolve_embed_keys") as mock_resolve_embeds,
+        ):
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_save_response)
+            mock_client.get = AsyncMock(return_value={"data": {"key": "n1234567890ab"}})
+
+            mock_resolve.return_value = "123456"
+            mock_resolve_embeds.return_value = twitter_embed_html
+
+            article = await update_article(session, "123456", article_input)
+
+            assert article.id == "123456"
+            # Verify resolve_embed_keys was called
+            mock_resolve_embeds.assert_called_once()

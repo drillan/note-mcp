@@ -266,19 +266,32 @@ async def create_draft(
         article_id = article_data.get("id")
         article_key = article_data.get("key")
 
-        if article_id and article_key:
-            # Step 2: Resolve embed keys via API
-            # Replace random keys with server-registered keys for iframe rendering
-            resolved_html = await resolve_embed_keys(session, html_body, str(article_key))
-
-            # Step 3: Save the body content with draft_save
-            # Use resolved HTML with server-registered embed keys
-            save_payload = _build_article_payload(article_input, resolved_html)
-
-            await client.post(
-                f"/v1/text_notes/draft_save?id={article_id}&is_temp_saved=true",
-                json=save_payload,
+        # Validate that required fields are present
+        if not article_id:
+            raise NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message="Article creation failed: API returned no article ID",
+                details={"response": response},
             )
+        if not article_key:
+            raise NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message="Article creation failed: API returned no article key",
+                details={"article_id": article_id, "response": response},
+            )
+
+        # Step 2: Resolve embed keys via API
+        # Replace random keys with server-registered keys for iframe rendering
+        resolved_html = await resolve_embed_keys(session, html_body, str(article_key))
+
+        # Step 3: Save the body content with draft_save
+        # Use resolved HTML with server-registered embed keys
+        save_payload = _build_article_payload(article_input, resolved_html)
+
+        await client.post(
+            f"/v1/text_notes/draft_save?id={article_id}&is_temp_saved=true",
+            json=save_payload,
+        )
 
     # Parse response
     return from_api_response(article_data)
