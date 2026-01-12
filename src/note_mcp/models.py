@@ -173,7 +173,7 @@ class ArticleListResult(BaseModel):
 class BrowserArticleResult(BaseModel):
     """Result of browser-based article creation/update.
 
-    Includes the article and optional TOC/alignment/embed insertion results for user notification.
+    Includes the article and optional TOC/alignment/embed/image insertion results for user notification.
 
     Attributes:
         article: The created/updated article
@@ -183,6 +183,8 @@ class BrowserArticleResult(BaseModel):
         alignment_error: Error message if text alignment application failed
         embeds_inserted: Number of embeds successfully inserted, None if not attempted
         embed_error: Error message if embed insertion failed
+        images_inserted: Number of images successfully inserted, None if not attempted
+        image_error: Error message if image insertion failed
         debug_info: Debug information for troubleshooting (temporary)
     """
 
@@ -193,6 +195,8 @@ class BrowserArticleResult(BaseModel):
     alignment_error: str | None = None
     embeds_inserted: int | None = None
     embed_error: str | None = None
+    images_inserted: int | None = None
+    image_error: str | None = None
     debug_info: str | None = None
 
 

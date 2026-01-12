@@ -54,6 +54,13 @@ _CITATION_URL_PATTERN = re.compile(r"^(.+?)\s+\((\S+)\)\s*$")
 _STRIKETHROUGH_PATTERN = re.compile(r"~~(.+?)~~")
 # Link pattern: [text](url)
 _LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+# Image pattern: ![alt](url) - Issue #110
+# Must be checked BEFORE link pattern since ![alt](url) contains [alt](url)
+_IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+# Image placeholder format: §§IMAGE:alt||url§§
+_IMAGE_PLACEHOLDER_START = "§§IMAGE:"
+_IMAGE_PLACEHOLDER_SEPARATOR = "||"
+_IMAGE_PLACEHOLDER_END = "§§"
 # Bold pattern: **text**
 _BOLD_PATTERN = re.compile(r"\*\*(.+?)\*\*")
 # Math formula patterns (Issue #101)
@@ -207,6 +214,90 @@ async def _type_with_inline_pattern(
     return remaining
 
 
+async def _type_with_ruby(page: Any, text: str) -> str:
+    """Process ruby notation patterns ｜漢字《かんじ》 - Issue #110 Problem 3.
+
+    note.com requires the vertical bar (｜ or |) before kanji for ruby to work.
+    This function ensures the vertical bar is present and types the ruby notation
+    correctly.
+
+    Args:
+        page: Playwright page object
+        text: Text that may contain ruby notation patterns
+
+    Returns:
+        Remaining text after first ruby is processed, or empty string if no match.
+    """
+    match = _RUBY_PATTERN.search(text)
+    if not match:
+        await page.keyboard.type(text)
+        return ""
+
+    # Type text before ruby
+    before = text[: match.start()]
+    if before:
+        await page.keyboard.type(before)
+
+    # Extract ruby components
+    kanji = match.group(1)
+    reading = match.group(2)
+
+    # Type ruby with vertical bar (required by note.com)
+    # Check if the match already includes a vertical bar
+    full_match = match.group(0)
+    if full_match.startswith("｜") or full_match.startswith("|"):
+        # Vertical bar already present, type as-is
+        await page.keyboard.type(full_match)
+    else:
+        # Add full-width vertical bar for note.com compatibility
+        await page.keyboard.type(f"｜{kanji}《{reading}》")
+
+    logger.debug(f"Typed ruby: {kanji}《{reading}》")
+
+    # Return remaining text
+    return text[match.end() :]
+
+
+async def _type_with_image(page: Any, text: str) -> str:
+    """Process image patterns ![alt](url) - Issue #110 Problem 1.
+
+    Images are converted to placeholders for later browser handling.
+    This function MUST be called before _type_with_link to prevent
+    ![alt](url) from being partially matched as [alt](url).
+
+    Args:
+        page: Playwright page object
+        text: Text that may contain ![alt](url) patterns
+
+    Returns:
+        Remaining text after first image is processed, or empty string if no match.
+    """
+    match = _IMAGE_PATTERN.search(text)
+    if not match:
+        await page.keyboard.type(text)
+        return ""
+
+    # Type text before image
+    before = text[: match.start()]
+    if before:
+        await page.keyboard.type(before)
+
+    # Extract image alt text and URL
+    alt_text = match.group(1)
+    image_url = match.group(2)
+
+    # Type image as placeholder for later processing
+    placeholder = (
+        f"{_IMAGE_PLACEHOLDER_START}{alt_text}{_IMAGE_PLACEHOLDER_SEPARATOR}{image_url}{_IMAGE_PLACEHOLDER_END}"
+    )
+    await page.keyboard.type(placeholder)
+
+    logger.debug(f"Typed image placeholder: alt={alt_text[:20]}..., url={image_url[:30]}...")
+
+    # Return remaining text
+    return text[match.end() :]
+
+
 async def _type_with_link(page: Any, text: str) -> str:
     """Process link patterns [text](url) via UI automation.
 
@@ -326,7 +417,9 @@ async def _type_with_inline_formatting(page: Any, text: str) -> None:
 
     Supported formats (note.com ProseMirror schema limitations):
     - Math formulas $${...}$$ and $$...$$ - processed first (Issue #101)
+    - Images ![alt](url) - processed before links (Issue #110)
     - Links [text](url) - bracket/parenthesis delimited
+    - Ruby ｜漢字《かんじ》 - processed for note.com (Issue #110)
     - Bold **text** - double asterisk
     - Strikethrough ~~text~~ - double tilde
 
@@ -352,9 +445,24 @@ async def _type_with_inline_formatting(page: Any, text: str) -> None:
             await _type_with_inline_formatting(page, remaining)
         return
 
-    # Check for link pattern (most specific among remaining patterns)
+    # Check for image pattern BEFORE link pattern (Issue #110)
+    # ![alt](url) contains [alt](url), so image must be matched first
+    if _IMAGE_PATTERN.search(text):
+        remaining = await _type_with_image(page, text)
+        if remaining:
+            await _type_with_inline_formatting(page, remaining)
+        return
+
+    # Check for link pattern
     if _LINK_PATTERN.search(text):
         remaining = await _type_with_link(page, text)
+        if remaining:
+            await _type_with_inline_formatting(page, remaining)
+        return
+
+    # Check for ruby pattern (Issue #110)
+    if _RUBY_PATTERN.search(text):
+        remaining = await _type_with_ruby(page, text)
         if remaining:
             await _type_with_inline_formatting(page, remaining)
         return
@@ -502,10 +610,13 @@ async def type_markdown_content(page: Any, content: str) -> None:
             continue
 
         # If in code block, type content directly
+        # Issue #110 Problem 2: Empty lines must be preserved in code blocks
         if in_code_block:
+            # Type line content if non-empty
+            # Note: Empty lines (line == "") should NOT be typed, just Enter pressed
             if line:
                 await page.keyboard.type(line)
-            # Use Enter for line breaks within code block
+            # Use Enter for line breaks within code block (including empty lines)
             next_line = lines[i + 1].strip() if i + 1 < len(lines) else ""
             if i < len(lines) - 1 and not _CODE_FENCE_PATTERN.match(next_line):
                 await page.keyboard.press("Enter")

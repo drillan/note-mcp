@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from playwright.async_api import Error as PlaywrightError
 
 from note_mcp.browser.embed_helpers import apply_embeds
+from note_mcp.browser.image_helpers import apply_images
 from note_mcp.browser.manager import BrowserManager
 from note_mcp.browser.text_align_helpers import apply_text_alignments
 from note_mcp.browser.toc_helpers import insert_toc_at_placeholder
@@ -226,6 +227,25 @@ async def create_draft_via_browser(
         logger.warning(f"Embed insertion failed: {embed_error}")
         # Embed insertion failure is not fatal
 
+    # Insert images at placeholder positions (after embeds, before save)
+    # Wait for DOM to stabilize after embed insertions
+    await asyncio.sleep(1.0)
+
+    images_inserted = 0
+    image_error: str | None = None
+    image_debug_info: str | None = None
+    try:
+        logger.info("Starting image application...")
+        images_inserted, image_debug = await apply_images(page)
+        image_debug_info = f"apply_images returned: {images_inserted} | Steps: {image_debug}"
+        logger.info(f"apply_images returned: {images_inserted}, debug: {image_debug}")
+        if images_inserted > 0:
+            logger.info(f"Inserted {images_inserted} image(s) to draft")
+    except (TimeoutError, PlaywrightError) as e:
+        image_error = str(e)
+        logger.warning(f"Image insertion failed: {image_error}")
+        # Image insertion failure is not fatal
+
     # Click save draft button explicitly instead of relying on auto-save
     await asyncio.sleep(1)
 
@@ -282,6 +302,11 @@ async def create_draft_via_browser(
         tags=article_input.tags,
     )
 
+    # Combine debug info from embed and image processing
+    combined_debug_info = debug_info or ""
+    if image_debug_info:
+        combined_debug_info += f" | {image_debug_info}" if combined_debug_info else image_debug_info
+
     return BrowserArticleResult(
         article=article,
         toc_inserted=toc_inserted if toc_inserted else None,
@@ -290,5 +315,7 @@ async def create_draft_via_browser(
         alignment_error=alignment_error,
         embeds_inserted=embeds_inserted if embeds_inserted > 0 else None,
         embed_error=embed_error,
-        debug_info=debug_info,
+        images_inserted=images_inserted if images_inserted > 0 else None,
+        image_error=image_error,
+        debug_info=combined_debug_info if combined_debug_info else None,
     )

@@ -1655,3 +1655,352 @@ class TestTypeWithInlineFormatting:
         typed_texts = [call[0][0] for call in calls]
         assert "これは" in typed_texts
         assert "**太字**" in typed_texts
+
+
+# =============================================================================
+# Issue #110 Tests: ブラウザパスでのMarkdown変換に3つの問題
+# =============================================================================
+
+
+class TestImagePattern:
+    """Tests for image pattern detection (![alt](url)) - Issue #110 Problem 1."""
+
+    def test_matches_image_syntax(self) -> None:
+        """Test that image syntax is detected."""
+        from note_mcp.browser.typing_helpers import _IMAGE_PATTERN
+
+        match = _IMAGE_PATTERN.search("![alt text](https://example.com/image.png)")
+        assert match is not None
+        assert match.group(1) == "alt text"
+        assert match.group(2) == "https://example.com/image.png"
+
+    def test_matches_image_with_local_path(self) -> None:
+        """Test that image with local path is detected."""
+        from note_mcp.browser.typing_helpers import _IMAGE_PATTERN
+
+        match = _IMAGE_PATTERN.search("![サンプル画像](./images/sample_image.png)")
+        assert match is not None
+        assert match.group(1) == "サンプル画像"
+        assert match.group(2) == "./images/sample_image.png"
+
+    def test_matches_image_in_text(self) -> None:
+        """Test that image in middle of text is detected."""
+        from note_mcp.browser.typing_helpers import _IMAGE_PATTERN
+
+        match = _IMAGE_PATTERN.search("前テキスト![alt](url)後テキスト")
+        assert match is not None
+        assert match.group(1) == "alt"
+        assert match.group(2) == "url"
+
+    def test_distinguishes_from_link(self) -> None:
+        """Test that image pattern is distinct from link pattern."""
+        from note_mcp.browser.typing_helpers import _IMAGE_PATTERN
+
+        # Image pattern should NOT match regular link (no !)
+        match = _IMAGE_PATTERN.search("[not image](url)")
+        assert match is None
+
+    def test_matches_image_with_empty_alt(self) -> None:
+        """Test that image with empty alt text is detected."""
+        from note_mcp.browser.typing_helpers import _IMAGE_PATTERN
+
+        match = _IMAGE_PATTERN.search("![](https://example.com/image.png)")
+        assert match is not None
+        assert match.group(1) == ""
+
+    def test_no_match_for_plain_text(self) -> None:
+        """Test that plain text is not matched."""
+        from note_mcp.browser.typing_helpers import _IMAGE_PATTERN
+
+        match = _IMAGE_PATTERN.search("Regular text without images")
+        assert match is None
+
+
+class TestTypeWithImage:
+    """Tests for _type_with_image function - Issue #110 Problem 1."""
+
+    @pytest.mark.asyncio
+    async def test_no_image_types_directly(self) -> None:
+        """Test that text without images is typed directly."""
+        from note_mcp.browser.typing_helpers import _type_with_image
+
+        mock_page = AsyncMock()
+        remaining = await _type_with_image(mock_page, "plain text")
+        mock_page.keyboard.type.assert_called_once_with("plain text")
+        assert remaining == ""
+
+    @pytest.mark.asyncio
+    async def test_image_types_placeholder(self) -> None:
+        """Test that image is converted to placeholder."""
+        from note_mcp.browser.typing_helpers import (
+            _IMAGE_PLACEHOLDER_END,
+            _IMAGE_PLACEHOLDER_START,
+            _type_with_image,
+        )
+
+        mock_page = AsyncMock()
+        remaining = await _type_with_image(mock_page, "![サンプル画像](./images/sample_image.png)")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_text = calls[0][0][0]
+        # Should contain placeholder markers
+        assert _IMAGE_PLACEHOLDER_START in typed_text
+        assert _IMAGE_PLACEHOLDER_END in typed_text
+        assert remaining == ""
+
+    @pytest.mark.asyncio
+    async def test_image_with_text_before(self) -> None:
+        """Test image with text before types text first."""
+        from note_mcp.browser.typing_helpers import (
+            _IMAGE_PLACEHOLDER_START,
+            _type_with_image,
+        )
+
+        mock_page = AsyncMock()
+        remaining = await _type_with_image(mock_page, "Text before ![alt](url) after")
+
+        calls = mock_page.keyboard.type.call_args_list
+        # First call should be text before image
+        assert calls[0][0][0] == "Text before "
+        # Second call should contain image placeholder
+        assert _IMAGE_PLACEHOLDER_START in calls[1][0][0]
+        # Remaining should be " after"
+        assert remaining == " after"
+
+    @pytest.mark.asyncio
+    async def test_image_preserves_alt_and_url(self) -> None:
+        """Test that image placeholder preserves alt text and URL."""
+        from note_mcp.browser.typing_helpers import _type_with_image
+
+        mock_page = AsyncMock()
+        await _type_with_image(mock_page, "![代替テキスト](https://example.com/img.png)")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_text = calls[0][0][0]
+        # Placeholder should contain alt and URL info
+        assert "代替テキスト" in typed_text
+        assert "https://example.com/img.png" in typed_text
+
+
+class TestTypeWithInlineFormattingImage:
+    """Tests for _type_with_inline_formatting with image handling - Issue #110."""
+
+    @pytest.mark.asyncio
+    async def test_image_processed_before_link(self) -> None:
+        """Test that images are processed before links (priority order)."""
+        from note_mcp.browser.typing_helpers import (
+            _IMAGE_PLACEHOLDER_START,
+            _type_with_inline_formatting,
+        )
+
+        mock_page = AsyncMock()
+        await _type_with_inline_formatting(mock_page, "![alt](url)")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        # Should be processed as image, not link
+        found_image_placeholder = any(_IMAGE_PLACEHOLDER_START in text for text in typed_texts)
+        assert found_image_placeholder, f"Image placeholder not found in {typed_texts}"
+
+    @pytest.mark.asyncio
+    async def test_exclamation_not_typed_separately(self) -> None:
+        """Test that ! is not typed separately from image syntax."""
+        from note_mcp.browser.typing_helpers import _type_with_inline_formatting
+
+        mock_page = AsyncMock()
+        await _type_with_inline_formatting(mock_page, "![サンプル](./images/sample.png)")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        # The "!" should NOT appear alone
+        assert "!" not in typed_texts, f"! typed separately: {typed_texts}"
+
+
+class TestCodeBlockEmptyLines:
+    """Tests for code block empty line handling - Issue #110 Problem 2."""
+
+    @pytest.mark.asyncio
+    async def test_code_block_preserves_empty_lines(self) -> None:
+        """Test that empty lines inside code blocks are preserved."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        # Python code with empty line (simpler case)
+        content = """```python
+line1
+
+line3
+```"""
+        await type_markdown_content(mock_page, content)
+
+        # Empty line should trigger Enter press
+        press_calls = mock_page.keyboard.press.call_args_list
+        pressed_keys = [call[0][0] for call in press_calls]
+        # Count Enter presses during code block (should include one for empty line)
+        enter_count = pressed_keys.count("Enter")
+        # Expect: Enter after line1, Enter for empty line, Enter after line3 = 3 minimum
+        # (plus possible ArrowDown presses for exiting code block)
+        assert enter_count >= 2, f"Expected at least 2 Enter presses, got {enter_count}"
+
+    @pytest.mark.asyncio
+    async def test_code_block_with_comment_line(self) -> None:
+        """Test that comment lines (# ...) in code blocks are typed."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = """```python
+# This is a comment
+code = "value"
+```"""
+        await type_markdown_content(mock_page, content)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        # Comment line should be typed
+        assert "# This is a comment" in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_code_block_empty_line_types_enter(self) -> None:
+        """Test that empty lines in code blocks type Enter key."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = """```
+line1
+
+line3
+```"""
+        await type_markdown_content(mock_page, content)
+
+        # Check that Enter was pressed for the empty line
+        press_calls = mock_page.keyboard.press.call_args_list
+        pressed_keys = [call[0][0] for call in press_calls]
+        # Should have multiple Enter presses including one for empty line
+        assert pressed_keys.count("Enter") >= 2
+
+
+class TestRubyPattern:
+    """Tests for ruby notation pattern - Issue #110 Problem 3."""
+
+    def test_ruby_pattern_matches_full_width_bar(self) -> None:
+        """Test ruby pattern with full-width vertical bar."""
+        from note_mcp.browser.typing_helpers import _RUBY_PATTERN
+
+        match = _RUBY_PATTERN.search("｜漢字《かんじ》")
+        assert match is not None
+
+    def test_ruby_pattern_matches_half_width_bar(self) -> None:
+        """Test ruby pattern with half-width vertical bar."""
+        from note_mcp.browser.typing_helpers import _RUBY_PATTERN
+
+        match = _RUBY_PATTERN.search("|漢字《かんじ》")
+        assert match is not None
+
+    def test_ruby_pattern_matches_without_bar(self) -> None:
+        """Test ruby pattern without vertical bar (just kanji+ruby)."""
+        from note_mcp.browser.typing_helpers import _RUBY_PATTERN
+
+        match = _RUBY_PATTERN.search("漢字《かんじ》")
+        assert match is not None
+
+
+class TestTypeWithRuby:
+    """Tests for _type_with_ruby function - Issue #110 Problem 3."""
+
+    @pytest.mark.asyncio
+    async def test_no_ruby_types_directly(self) -> None:
+        """Test that text without ruby is typed directly."""
+        from note_mcp.browser.typing_helpers import _type_with_ruby
+
+        mock_page = AsyncMock()
+        remaining = await _type_with_ruby(mock_page, "普通のテキスト")
+        mock_page.keyboard.type.assert_called_once_with("普通のテキスト")
+        assert remaining == ""
+
+    @pytest.mark.asyncio
+    async def test_ruby_types_with_vertical_bar(self) -> None:
+        """Test that ruby notation is typed with required vertical bar."""
+        from note_mcp.browser.typing_helpers import _type_with_ruby
+
+        mock_page = AsyncMock()
+        # Input without bar
+        await _type_with_ruby(mock_page, "漢字《かんじ》")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        # Output should contain vertical bar (required by note.com)
+        typed_all = "".join(typed_texts)
+        assert "｜" in typed_all or "|" in typed_all
+
+    @pytest.mark.asyncio
+    async def test_ruby_preserves_existing_bar(self) -> None:
+        """Test that ruby notation preserves existing vertical bar."""
+        from note_mcp.browser.typing_helpers import _type_with_ruby
+
+        mock_page = AsyncMock()
+        await _type_with_ruby(mock_page, "｜東京《とうきょう》")
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        typed_all = "".join(typed_texts)
+        # Should preserve the bar and contain the text
+        assert "東京" in typed_all
+        assert "とうきょう" in typed_all
+
+    @pytest.mark.asyncio
+    async def test_ruby_with_text_before_and_after(self) -> None:
+        """Test ruby notation with surrounding text."""
+        from note_mcp.browser.typing_helpers import _type_with_ruby
+
+        mock_page = AsyncMock()
+        remaining = await _type_with_ruby(mock_page, "前の｜漢字《かんじ》後の")
+
+        # Should type text before ruby, then ruby, and return remaining
+        calls = mock_page.keyboard.type.call_args_list
+        assert len(calls) >= 1
+        # Remaining text should be "後の"
+        assert remaining == "後の"
+
+
+class TestTypeMarkdownContentRuby:
+    """Tests for type_markdown_content with ruby handling - Issue #110 Problem 3."""
+
+    @pytest.mark.asyncio
+    async def test_ruby_does_not_break_subsequent_content(self) -> None:
+        """Test that ruby notation doesn't break subsequent content."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = """｜漢字《かんじ》のテキスト
+
+## 次の見出し
+
+通常の段落"""
+        await type_markdown_content(mock_page, content)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+
+        # Heading should be processed correctly
+        assert "## " in typed_texts
+        assert "次の見出し" in typed_texts
+        # Paragraph should be typed
+        assert "通常の段落" in typed_texts
+
+    @pytest.mark.asyncio
+    async def test_multiple_ruby_in_same_line(self) -> None:
+        """Test multiple ruby notations in the same line."""
+        mock_page = AsyncMock()
+        mock_page.locator.return_value.first.click = AsyncMock()
+
+        content = "｜東京《とうきょう》の｜天気《てんき》は晴れです。"
+        await type_markdown_content(mock_page, content)
+
+        calls = mock_page.keyboard.type.call_args_list
+        typed_texts = [call[0][0] for call in calls]
+        typed_all = "".join(typed_texts)
+
+        # Both ruby notations should be typed
+        assert "東京" in typed_all
+        assert "天気" in typed_all
+        assert "晴れです" in typed_all
