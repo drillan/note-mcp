@@ -4,6 +4,15 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from note_mcp.api.embeds import (
+    NOTE_PATTERN as _EMBED_NOTE_PATTERN,
+)
+from note_mcp.api.embeds import (
+    TWITTER_PATTERN as _EMBED_TWITTER_PATTERN,
+)
+from note_mcp.api.embeds import (
+    YOUTUBE_PATTERN as _EMBED_YOUTUBE_PATTERN,
+)
 from note_mcp.browser.typing_helpers import (
     _ALIGN_CENTER_PATTERN,
     _ALIGN_CENTER_PLACEHOLDER,
@@ -17,11 +26,8 @@ from note_mcp.browser.typing_helpers import (
     _CITATION_PATTERN,
     _CITATION_URL_PATTERN,
     _CODE_FENCE_PATTERN,
-    _EMBED_NOTE_PATTERN,
     _EMBED_PLACEHOLDER_END,
     _EMBED_PLACEHOLDER_START,
-    _EMBED_TWITTER_PATTERN,
-    _EMBED_YOUTUBE_PATTERN,
     _HEADING_PATTERN,
     _ORDERED_LIST_PATTERN,
     _STRIKETHROUGH_PATTERN,

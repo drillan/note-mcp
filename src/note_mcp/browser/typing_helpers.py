@@ -34,6 +34,8 @@ import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from note_mcp.api.embeds import is_embed_url as _api_is_embed_url
+
 if TYPE_CHECKING:
     pass
 
@@ -102,11 +104,8 @@ _ALIGN_RIGHT_PLACEHOLDER = "§§ALIGN_RIGHT§§"
 _ALIGN_LEFT_PLACEHOLDER = "§§ALIGN_LEFT§§"
 _ALIGN_END_PLACEHOLDER = "§§/ALIGN§§"
 
-# Embed URL patterns (must match insert_embed.py)
+# Embed URL patterns are defined in api.embeds (DRY principle - Issue #116)
 # Supported services: YouTube, Twitter/X, note.com articles
-_EMBED_YOUTUBE_PATTERN = re.compile(r"^https?://(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)[\w-]+$")
-_EMBED_TWITTER_PATTERN = re.compile(r"^https?://(?:www\.)?(?:twitter\.com|x\.com)/\w+/status/\d+$")
-_EMBED_NOTE_PATTERN = re.compile(r"^https?://note\.com/\w+/n/\w+$")
 
 # Embed placeholder format: §§EMBED:url§§
 _EMBED_PLACEHOLDER_START = "§§EMBED:"
@@ -116,18 +115,17 @@ _EMBED_PLACEHOLDER_END = "§§"
 def _is_embed_url(url: str) -> bool:
     """Check if URL should be embedded (YouTube, Twitter, note.com).
 
+    Delegates to api.embeds.is_embed_url (DRY principle - Issue #116).
+
     Args:
         url: URL string to check.
 
     Returns:
         True if URL matches a supported embed service.
     """
-    is_youtube = bool(_EMBED_YOUTUBE_PATTERN.match(url))
-    is_twitter = bool(_EMBED_TWITTER_PATTERN.match(url))
-    is_note = bool(_EMBED_NOTE_PATTERN.match(url))
-    is_embed = is_youtube or is_twitter or is_note
+    is_embed = _api_is_embed_url(url)
     if is_embed:
-        logger.info(f"_is_embed_url: {url} -> youtube={is_youtube}, twitter={is_twitter}, note={is_note}")
+        logger.info(f"_is_embed_url: {url} -> embed=True")
     return is_embed
 
 

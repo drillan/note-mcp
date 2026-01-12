@@ -30,7 +30,6 @@ from note_mcp.models import ArticleInput, ArticleStatus, NoteAPIError
 from note_mcp.utils.file_parser import parse_markdown_file
 from note_mcp.utils.markdown_to_html import (
     _has_toc_placeholder,
-    has_embed_url,
     has_math_formula,
     has_ruby_notation,
 )
@@ -174,11 +173,12 @@ async def note_create_draft(
         tags=tags or [],
     )
 
-    # Use browser-based creation for articles with [TOC] marker, embed URLs, or math formulas
-    # TOC insertion, embed insertion, and math formulas require browser automation
+    # Use browser-based creation for articles with [TOC] marker, math formulas, or ruby notation
+    # TOC insertion and math/ruby require browser automation
+    # Note: Embed URLs are now handled via API (Issue #116)
     toc_info = ""
     embed_info = ""
-    use_browser = _has_toc_placeholder(body) or has_embed_url(body) or has_math_formula(body) or has_ruby_notation(body)
+    use_browser = _has_toc_placeholder(body) or has_math_formula(body) or has_ruby_notation(body)
 
     if use_browser:
         result = await create_draft_via_browser(session, article_input)
@@ -199,8 +199,9 @@ async def note_create_draft(
         debug_info = f"、DEBUG: {result.debug_info}" if result.debug_info else ""
     else:
         article = await create_draft(session, article_input)
-        # Show preview in browser (browser-based creation already shows editor)
-        await show_preview(session, article.key)
+        # Note: Preview is NOT automatically shown for API-created articles
+        # because the editor's auto-save corrupts embed HTML (Issue #116).
+        # Use note_show_preview explicitly if needed.
         debug_info = ""
 
     tag_info = f"、タグ: {', '.join(article.tags)}" if article.tags else ""
@@ -281,11 +282,12 @@ async def note_update_article(
         tags=tags or [],
     )
 
-    # Use browser-based update for articles with [TOC] marker, embed URLs, or math formulas
-    # TOC insertion, embed insertion, and math formulas require browser automation
+    # Use browser-based update for articles with [TOC] marker, math formulas, or ruby notation
+    # TOC insertion and math/ruby require browser automation
+    # Note: Embed URLs are now handled via API (Issue #116)
     toc_info = ""
     embed_info = ""
-    use_browser = _has_toc_placeholder(body) or has_embed_url(body) or has_math_formula(body) or has_ruby_notation(body)
+    use_browser = _has_toc_placeholder(body) or has_math_formula(body) or has_ruby_notation(body)
 
     if use_browser:
         result = await update_article_via_browser(session, article_id, article_input)
@@ -430,6 +432,10 @@ async def note_show_preview(
     指定した記事のプレビューページをブラウザで開きます。
     下書き記事の場合、プレビュー用アクセスキーを使用して表示します。
 
+    **警告**: このツールはエディターページを経由するため、
+    埋め込み(YouTube, Twitter等)のHTMLが変更される可能性があります。
+    埋め込みを含む記事ではプレビューを避けることを推奨します(Issue #116)。
+
     Args:
         article_key: プレビューする記事のキー
 
@@ -441,7 +447,10 @@ async def note_show_preview(
         return "セッションが無効です。note_loginでログインしてください。"
 
     await show_preview(session, article_key)
-    return f"プレビューを表示しました。記事キー: {article_key}"
+    return (
+        f"プレビューを表示しました。記事キー: {article_key}\n"
+        "注意: エディター経由のプレビューは埋め込みHTMLを変更する可能性があります。"
+    )
 
 
 @mcp.tool()
@@ -583,13 +592,9 @@ async def note_create_from_file(
         tags=parsed.tags,
     )
 
-    # Math formulas and ruby notation require browser automation
-    needs_browser = (
-        _has_toc_placeholder(parsed.body)
-        or has_embed_url(parsed.body)
-        or has_math_formula(parsed.body)
-        or has_ruby_notation(parsed.body)
-    )
+    # TOC, math formulas, and ruby notation require browser automation
+    # Note: Embed URLs are now handled via API (Issue #116)
+    needs_browser = _has_toc_placeholder(parsed.body) or has_math_formula(parsed.body) or has_ruby_notation(parsed.body)
 
     try:
         # Always create draft via API first (Issue #111: API-based image upload)
@@ -627,7 +632,7 @@ async def note_create_from_file(
                 body=updated_body,
                 tags=parsed.tags,
             )
-            # Use browser path if TOC, embed, math, or ruby processing is needed
+            # Use browser path if TOC, math, or ruby processing is needed
             # Images are already uploaded via API, so typing_helpers will handle
             # note.com CDN URLs specially (no re-upload needed)
             if needs_browser:
