@@ -94,34 +94,47 @@ class TestTocPlaceholderConversion:
 
 
 class TestMarkdownToHtmlWithToc:
-    """Tests for markdown_to_html with TOC support."""
+    """Tests for markdown_to_html with TOC support.
 
-    def test_toc_converted_in_full_pipeline(self) -> None:
-        """[TOC] is converted through full markdown pipeline."""
+    Issue #117: TOC is now converted directly to <table-of-contents> element
+    instead of placeholder, enabling API-based article creation without browser.
+    """
+
+    def test_toc_converted_to_custom_element(self) -> None:
+        """[TOC] is converted to <table-of-contents> custom element."""
         content = "# Title\n\n[TOC]\n\n## Section\nText"
         result = markdown_to_html(content)
-        assert "§§TOC§§" in result
+        assert "<table-of-contents" in result
+        assert "</table-of-contents>" in result
         assert "[TOC]" not in result
+        assert "§§TOC§§" not in result
         assert "<h1 " in result or "<h1>" in result
         assert "<h2 " in result or "<h2>" in result
 
-    def test_toc_placeholder_preserved_after_html_conversion(self) -> None:
-        """TOC placeholder is preserved after HTML conversion."""
+    def test_toc_element_has_uuid_attributes(self) -> None:
+        """TOC element has name and id attributes with UUID."""
         content = "# Title\n\n[TOC]\n\n## Section"
         result = markdown_to_html(content)
-        # Placeholder should be in the HTML output
-        assert "§§TOC§§" in result
+        assert '<table-of-contents name="' in result
+        assert 'id="' in result
+        # Verify it's a valid UUID format (8-4-4-4-12 hex chars)
+        import re
+
+        uuid_pattern = r'name="([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})"'
+        assert re.search(uuid_pattern, result) is not None
 
     def test_toc_with_other_features(self) -> None:
         """[TOC] works alongside other markdown features."""
         content = "# Title\n\n[TOC]\n\n**bold** and *italic*\n\n## Section"
         result = markdown_to_html(content)
-        assert "§§TOC§§" in result
+        assert "<table-of-contents" in result
         assert "<strong>" in result
         assert "<em>" in result
 
     def test_empty_content_with_only_toc(self) -> None:
-        """Content with only [TOC] is converted."""
+        """Content with only [TOC] is converted to custom element."""
         content = "[TOC]"
         result = markdown_to_html(content)
-        assert "§§TOC§§" in result
+        assert "<table-of-contents" in result
+        assert "</table-of-contents>" in result
+        assert "§§TOC§§" not in result

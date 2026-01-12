@@ -22,6 +22,11 @@ _TOC_PATTERN = re.compile(r"^\[TOC\]$", re.MULTILINE)
 # TOC placeholder (text marker, not HTML comment)
 # Must match TOC_PLACEHOLDER in toc_helpers.py and _TOC_PLACEHOLDER in typing_helpers.py
 _TOC_PLACEHOLDER = "§§TOC§§"
+# Pattern to match TOC placeholder wrapped in paragraph tags (after Markdown conversion)
+_TOC_PLACEHOLDER_HTML_PATTERN = re.compile(
+    r'<p\s+name="([^"]+)"\s+id="([^"]+)">' + re.escape(_TOC_PLACEHOLDER) + r"</p>",
+    re.IGNORECASE,
+)
 
 # Note: <li> and <blockquote> are excluded because note.com doesn't add name/id to these tags
 _TAG_PATTERN = re.compile(
@@ -619,6 +624,32 @@ def _convert_toc_to_placeholder(content: str) -> str:
     return result
 
 
+def _convert_toc_placeholder_to_html(html: str) -> str:
+    """Convert TOC placeholder in HTML to <table-of-contents> element.
+
+    Replaces <p name="..." id="...">§§TOC§§</p> with
+    <table-of-contents name="..." id="..."></table-of-contents>
+
+    This is called after markdown conversion and UUID addition to convert
+    the placeholder to the actual custom element that note.com preserves via API.
+
+    Issue #117: This enables TOC via API without browser automation.
+
+    Args:
+        html: HTML content with potential TOC placeholder
+
+    Returns:
+        HTML with TOC placeholder converted to <table-of-contents> element
+    """
+
+    def replace_with_toc(match: re.Match[str]) -> str:
+        name = match.group(1)
+        element_id = match.group(2)
+        return f'<table-of-contents name="{name}" id="{element_id}"></table-of-contents>'
+
+    return _TOC_PLACEHOLDER_HTML_PATTERN.sub(replace_with_toc, html)
+
+
 def markdown_to_html(content: str) -> str:
     """Convert Markdown content to HTML.
 
@@ -662,6 +693,10 @@ def markdown_to_html(content: str) -> str:
 
     # Add UUID to all elements (note.com requirement)
     result = _add_uuid_to_elements(result)
+
+    # Convert TOC placeholder to <table-of-contents> element (Issue #117)
+    # Must be after UUID addition to preserve name/id attributes
+    result = _convert_toc_placeholder_to_html(result)
 
     # Apply text alignment styles to paragraphs (must be after UUID addition)
     result = _apply_text_alignment_to_html(result)
