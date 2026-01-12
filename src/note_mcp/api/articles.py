@@ -10,6 +10,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 from note_mcp.api.client import NoteAPIClient
+from note_mcp.api.embeds import resolve_embed_keys
 from note_mcp.api.images import _resolve_numeric_note_id
 from note_mcp.models import (
     Article,
@@ -230,14 +231,14 @@ async def create_draft(
     Uses the note.com API to create the draft directly.
     Converts Markdown body to HTML as required by the API.
 
-    Note: This function performs two API calls:
+    Note: This function performs multiple API calls:
     1. POST /v1/text_notes - Creates the article entry (without body)
-    2. POST /v1/text_notes/draft_save - Saves the body content
+    2. GET /v2/embed_by_external_api - For each embed URL, fetches server key
+    3. POST /v1/text_notes/draft_save - Saves the body content with resolved keys
 
     The body is sent only via draft_save to preserve HTML structure.
-    However, note that note.com's API sanitizes certain HTML elements
-    (e.g., <br> tags inside blockquotes) regardless of how content is sent.
-    This is a server-side limitation that cannot be worked around.
+    Embed URLs (YouTube, Twitter, note.com) are processed to obtain
+    server-registered keys required for iframe rendering.
 
     Args:
         session: Authenticated session
@@ -249,7 +250,7 @@ async def create_draft(
     Raises:
         NoteAPIError: If API request fails
     """
-    # Convert Markdown to HTML for API
+    # Convert Markdown to HTML for API (embeds get random keys initially)
     html_body = markdown_to_html(article_input.body)
 
     # Step 1 payload: without body to avoid sanitization
@@ -260,14 +261,19 @@ async def create_draft(
         # The body is saved separately via draft_save to preserve <br> tags
         response = await client.post("/v1/text_notes", json=create_payload)
 
-        # Get the numeric article ID from response
+        # Get the article ID and key from response
         article_data = response.get("data", {})
         article_id = article_data.get("id")
+        article_key = article_data.get("key")
 
-        if article_id:
-            # Step 2: Save the body content with draft_save
-            # This endpoint preserves <br> tags unlike /v1/text_notes
-            save_payload = _build_article_payload(article_input, html_body)
+        if article_id and article_key:
+            # Step 2: Resolve embed keys via API
+            # Replace random keys with server-registered keys for iframe rendering
+            resolved_html = await resolve_embed_keys(session, html_body, str(article_key))
+
+            # Step 3: Save the body content with draft_save
+            # Use resolved HTML with server-registered embed keys
+            save_payload = _build_article_payload(article_input, resolved_html)
 
             await client.post(
                 f"/v1/text_notes/draft_save?id={article_id}&is_temp_saved=true",
@@ -287,10 +293,12 @@ async def update_article(
 
     Uses the note.com API to update the article.
     Converts Markdown body to HTML as required by the API.
+    Embed URLs (YouTube, Twitter, note.com) are processed to obtain
+    server-registered keys required for iframe rendering.
 
     Args:
         session: Authenticated session
-        article_id: ID of the article to update
+        article_id: ID of the article to update (numeric or key format)
         article_input: New article content and metadata
 
     Returns:
@@ -302,11 +310,25 @@ async def update_article(
     # Resolve to numeric ID (API requirement)
     numeric_id = await _resolve_numeric_note_id(session, article_id)
 
-    # Convert Markdown to HTML for API
+    # Determine article key for embed resolution
+    # Key format: starts with "n" followed by alphanumeric characters
+    if article_id.startswith("n") and not article_id.isdigit():
+        article_key = article_id
+    else:
+        # Fetch article to get the key
+        async with NoteAPIClient(session) as client:
+            response = await client.get(f"/v3/notes/{article_id}")
+        article_key = response.get("data", {}).get("key", article_id)
+
+    # Convert Markdown to HTML for API (embeds get random keys initially)
     html_body = markdown_to_html(article_input.body)
 
-    # Build payload using helper
-    payload = _build_article_payload(article_input, html_body)
+    # Resolve embed keys via API
+    # Replace random keys with server-registered keys for iframe rendering
+    resolved_html = await resolve_embed_keys(session, html_body, str(article_key))
+
+    # Build payload using helper with resolved HTML
+    payload = _build_article_payload(article_input, resolved_html)
 
     async with NoteAPIClient(session) as client:
         # Use draft_save endpoint with POST (not PUT)
