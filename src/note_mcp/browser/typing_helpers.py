@@ -62,7 +62,9 @@ _IMAGE_PLACEHOLDER_START = "§§IMAGE:"
 _IMAGE_PLACEHOLDER_SEPARATOR = "||"
 _IMAGE_PLACEHOLDER_END = "§§"
 # note.com CDN URL pattern (Issue #111: API-based image upload)
-# Images already uploaded via API have this URL prefix
+# Images already uploaded via API have this URL prefix.
+# note.com uses Amazon CloudFront CDN for image delivery.
+# If note.com changes CDN providers, this prefix will need updating.
 _NOTE_CDN_URL_PREFIX = "https://d2l930y2yx77uc.cloudfront.net/"
 # Bold pattern: **text**
 _BOLD_PATTERN = re.compile(r"\*\*(.+?)\*\*")
@@ -336,7 +338,7 @@ async def _insert_image_via_prosemirror(page: Any, image_url: str, alt_text: str
         await asyncio.sleep(0.3)  # Wait for DOM update
         return True
     else:
-        logger.debug(f"ProseMirror image insertion failed: {result.get('error')}")
+        logger.info(f"ProseMirror image insertion failed: {result.get('error')}")
         return False
 
 
@@ -380,7 +382,7 @@ async def _type_with_image(page: Any, text: str) -> str:
             logger.debug(f"Inserted note.com CDN image directly: {image_url[:50]}...")
             return text[match.end() :]
         # If direct insertion failed, fall through to placeholder method
-        logger.debug(f"Direct insertion failed, using placeholder for: {image_url[:50]}...")
+        logger.warning(f"Direct CDN image insertion failed, using placeholder for: {image_url[:50]}...")
 
     # Type image as placeholder for later processing by apply_images()
     placeholder = (

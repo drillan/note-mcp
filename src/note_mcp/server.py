@@ -408,16 +408,15 @@ async def note_insert_body_image(
             caption=caption,
         )
 
-        if result["success"]:
-            caption_info = f"、キャプション: {result['caption']}" if result.get("caption") else ""
-            fallback_info = "（フォールバック使用）" if result.get("fallback_used") else ""
-            return (
-                f"画像を挿入しました。{fallback_info}\n"
-                f"記事ID: {result['article_id']}、キー: {result['article_key']}{caption_info}\n"
-                f"画像URL: {result['image_url']}"
-            )
-        else:
-            return "画像の挿入に失敗しました。"
+        # insert_image_via_api always returns {"success": True} on success
+        # or raises NoteAPIError on failure, so we can assume success here
+        caption_info = f"、キャプション: {result['caption']}" if result.get("caption") else ""
+        fallback_info = "（フォールバック使用）" if result.get("fallback_used") else ""
+        return (
+            f"画像を挿入しました。{fallback_info}\n"
+            f"記事ID: {result['article_id']}、キー: {result['article_key']}{caption_info}\n"
+            f"画像URL: {result['image_url']}"
+        )
     except NoteAPIError as e:
         return f"エラー: {e}"
 

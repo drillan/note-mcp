@@ -56,6 +56,8 @@ async def _dismiss_ai_dialog(page: Page) -> None:
                     await asyncio.sleep(0.5)
                     logger.debug(f"Dismissed AI dialog using selector: {selector}")
                     return
+            except (asyncio.CancelledError, KeyboardInterrupt):
+                raise
             except Exception as e:
                 logger.debug(f"Selector '{selector}' failed: {type(e).__name__}: {e}")
                 continue
@@ -92,6 +94,8 @@ async def _dismiss_ai_dialog(page: Page) -> None:
         if dialog_result:
             await asyncio.sleep(0.5)
             logger.debug("Dismissed AI dialog via JavaScript")
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        raise
     except Exception as e:
         logger.debug(f"No AI dialog to dismiss or error: {e}")
 
@@ -133,6 +137,8 @@ async def _setup_page_with_session(session: Session, article_key: str) -> Page:
     # Wait for network to be idle
     try:
         await page.wait_for_load_state("networkidle", timeout=15000)
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        raise
     except Exception as e:
         logger.warning(f"Network idle wait interrupted: {type(e).__name__}: {e}")
 
@@ -592,7 +598,14 @@ async def insert_image_via_api(
         caption: Optional caption for the image
 
     Returns:
-        Dictionary with status and details
+        Dictionary with the following keys:
+        - success: Always True on success (raises on failure)
+        - article_id: Numeric article ID
+        - article_key: Article key (e.g., "n1234567890ab")
+        - file_path: Path to the uploaded file
+        - image_url: URL of the uploaded image on note.com CDN
+        - caption: Caption text (if provided)
+        - fallback_used: True if browser UI fallback was used
 
     Raises:
         NoteAPIError: If image insertion fails
@@ -665,7 +678,9 @@ async def insert_image_via_api(
 
     # Step 5: Add caption if provided and not already added
     if caption and not fallback_used:
-        await _input_image_caption(page, caption)
+        caption_success = await _input_image_caption(page, caption)
+        if not caption_success:
+            logger.warning(f"Failed to input caption for image: {caption}")
 
     # Step 6: Save article
     if not await _save_article(page):
