@@ -418,11 +418,11 @@ class TestInsertImageViaBrowser:
 
 
 class TestInsertImageViaApi:
-    """Tests for insert_image_via_api function (Issue #111 API-based image insertion)."""
+    """Tests for insert_image_via_api function (Issue #114 API-only image insertion)."""
 
     @pytest.mark.asyncio
     async def test_insert_image_via_api_success(self, tmp_path: Path) -> None:
-        """Test successful image insertion via API + ProseMirror."""
+        """Test successful image insertion via API-only (no Playwright)."""
         from note_mcp.browser.insert_image import insert_image_via_api
         from note_mcp.models import Article, ArticleStatus, Image, ImageType
 
@@ -434,7 +434,7 @@ class TestInsertImageViaApi:
             id="12345",
             key="n12345abcdef",
             title="Test Article",
-            body="Test body",
+            body="<p>Test body</p>",
             status=ArticleStatus.DRAFT,
         )
 
@@ -446,20 +446,22 @@ class TestInsertImageViaApi:
             image_type=ImageType.BODY,
         )
 
+        mock_updated_article = Article(
+            id="12345",
+            key="n12345abcdef",
+            title="Test Article",
+            body="<p>Test body</p><figure>...</figure>",
+            status=ArticleStatus.DRAFT,
+        )
+
         with (
+            patch("note_mcp.browser.insert_image.get_article_raw_html") as mock_get,
             patch("note_mcp.browser.insert_image.upload_body_image") as mock_upload,
-            patch("note_mcp.browser.insert_image.get_article") as mock_get_article,
-            patch("note_mcp.browser.insert_image._setup_page_with_session") as mock_setup,
-            patch("note_mcp.browser.insert_image._insert_image_via_prosemirror") as mock_insert,
-            patch("note_mcp.browser.insert_image._input_image_caption") as mock_caption,
-            patch("note_mcp.browser.insert_image._save_article") as mock_save,
+            patch("note_mcp.browser.insert_image.update_article_raw_html") as mock_update,
         ):
+            mock_get.return_value = mock_article
             mock_upload.return_value = mock_image
-            mock_get_article.return_value = mock_article
-            mock_setup.return_value = AsyncMock()
-            mock_insert.return_value = True
-            mock_caption.return_value = True
-            mock_save.return_value = True
+            mock_update.return_value = mock_updated_article
 
             result = await insert_image_via_api(
                 session=session,
@@ -472,11 +474,11 @@ class TestInsertImageViaApi:
             assert result["article_id"] == "12345"
             assert result["article_key"] == "n12345abcdef"
             assert result["image_url"] == mock_image.url
+            assert result["fallback_used"] is False  # API-only mode
 
+            mock_get.assert_called_once_with(session, "12345")
             mock_upload.assert_called_once()
-            mock_get_article.assert_called_once_with(session, "12345")
-            mock_insert.assert_called_once()
-            mock_save.assert_called_once()
+            mock_update.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_insert_image_via_api_upload_fails(self, tmp_path: Path) -> None:
@@ -492,15 +494,15 @@ class TestInsertImageViaApi:
             id="12345",
             key="n12345abcdef",
             title="Test Article",
-            body="Test body",
+            body="<p>Test body</p>",
             status=ArticleStatus.DRAFT,
         )
 
         with (
-            patch("note_mcp.browser.insert_image.get_article") as mock_get_article,
+            patch("note_mcp.browser.insert_image.get_article_raw_html") as mock_get,
             patch("note_mcp.browser.insert_image.upload_body_image") as mock_upload,
         ):
-            mock_get_article.return_value = mock_article
+            mock_get.return_value = mock_article
             mock_upload.side_effect = NoteAPIError(
                 code=ErrorCode.API_ERROR,
                 message="Upload failed",
@@ -516,8 +518,8 @@ class TestInsertImageViaApi:
             assert exc_info.value.code == ErrorCode.API_ERROR
 
     @pytest.mark.asyncio
-    async def test_insert_image_via_api_prosemirror_fallback(self, tmp_path: Path) -> None:
-        """Test fallback to browser UI when ProseMirror insertion fails."""
+    async def test_insert_image_via_api_update_fails(self, tmp_path: Path) -> None:
+        """Test API insertion fails when article update fails."""
         from note_mcp.browser.insert_image import insert_image_via_api
         from note_mcp.models import Article, ArticleStatus, Image, ImageType
 
@@ -529,7 +531,7 @@ class TestInsertImageViaApi:
             id="12345",
             key="n12345abcdef",
             title="Test Article",
-            body="Test body",
+            body="<p>Test body</p>",
             status=ArticleStatus.DRAFT,
         )
 
@@ -542,36 +544,25 @@ class TestInsertImageViaApi:
         )
 
         with (
+            patch("note_mcp.browser.insert_image.get_article_raw_html") as mock_get,
             patch("note_mcp.browser.insert_image.upload_body_image") as mock_upload,
-            patch("note_mcp.browser.insert_image.get_article") as mock_get_article,
-            patch("note_mcp.browser.insert_image._setup_page_with_session") as mock_setup,
-            patch("note_mcp.browser.insert_image._insert_image_via_prosemirror") as mock_insert,
-            patch("note_mcp.browser.insert_image._click_add_image_button") as mock_click,
-            patch("note_mcp.browser.insert_image._upload_image_via_file_chooser") as mock_upload_ui,
-            patch("note_mcp.browser.insert_image._wait_for_image_insertion") as mock_wait,
-            patch("note_mcp.browser.insert_image._save_article") as mock_save,
+            patch("note_mcp.browser.insert_image.update_article_raw_html") as mock_update,
         ):
+            mock_get.return_value = mock_article
             mock_upload.return_value = mock_image
-            mock_get_article.return_value = mock_article
-            mock_page = AsyncMock()
-            mock_page.evaluate = AsyncMock(return_value=0)
-            mock_setup.return_value = mock_page
-            mock_insert.return_value = False  # ProseMirror fails
-            mock_click.return_value = True
-            mock_upload_ui.return_value = True
-            mock_wait.return_value = True
-            mock_save.return_value = True
-
-            result = await insert_image_via_api(
-                session=session,
-                article_id="12345",
-                file_path=str(file_path),
+            mock_update.side_effect = NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message="Save failed",
             )
 
-            assert result["success"] is True
-            assert result["fallback_used"] is True
-            mock_insert.assert_called_once()  # ProseMirror attempted
-            mock_click.assert_called_once()  # Fallback to browser UI
+            with pytest.raises(NoteAPIError) as exc_info:
+                await insert_image_via_api(
+                    session=session,
+                    article_id="12345",
+                    file_path=str(file_path),
+                )
+
+            assert exc_info.value.code == ErrorCode.API_ERROR
 
     @pytest.mark.asyncio
     async def test_insert_image_via_api_file_not_found(self) -> None:
@@ -599,8 +590,8 @@ class TestInsertImageViaApi:
         file_path = tmp_path / "test.jpg"
         file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
 
-        with patch("note_mcp.browser.insert_image.get_article") as mock_get_article:
-            mock_get_article.side_effect = NoteAPIError(
+        with patch("note_mcp.browser.insert_image.get_article_raw_html") as mock_get:
+            mock_get.side_effect = NoteAPIError(
                 code=ErrorCode.API_ERROR,
                 message="API request failed with status 400",
             )
@@ -615,3 +606,459 @@ class TestInsertImageViaApi:
             assert exc_info.value.code == ErrorCode.INVALID_INPUT
             assert "invalid_id" in exc_info.value.message.lower()
             assert "verify" in exc_info.value.message.lower()
+
+
+# =============================================================================
+# Issue #114: API-only Image Insertion Tests
+# =============================================================================
+
+
+class TestGenerateImageHtml:
+    """Tests for generate_image_html function (Issue #114)."""
+
+    def test_generate_basic_html(self) -> None:
+        """Test generating basic image HTML without caption."""
+        from note_mcp.api.articles import generate_image_html
+
+        result = generate_image_html(
+            image_url="https://example.com/image.jpg",
+        )
+
+        assert "<figure" in result
+        assert 'src="https://example.com/image.jpg"' in result
+        assert "<figcaption></figcaption>" in result
+        assert 'width="620"' in result
+        assert 'height="457"' in result
+        assert 'contenteditable="false"' in result
+        assert 'draggable="false"' in result
+
+    def test_generate_html_with_caption(self) -> None:
+        """Test generating image HTML with caption."""
+        from note_mcp.api.articles import generate_image_html
+
+        result = generate_image_html(
+            image_url="https://example.com/image.jpg",
+            caption="Test caption",
+        )
+
+        assert "<figcaption>Test caption</figcaption>" in result
+
+    def test_generate_html_with_custom_dimensions(self) -> None:
+        """Test generating image HTML with custom dimensions."""
+        from note_mcp.api.articles import generate_image_html
+
+        result = generate_image_html(
+            image_url="https://example.com/image.jpg",
+            width=800,
+            height=600,
+        )
+
+        assert 'width="800"' in result
+        assert 'height="600"' in result
+
+    def test_html_contains_uuid(self) -> None:
+        """Test that generated HTML contains valid UUID in name and id attributes."""
+        import re
+
+        from note_mcp.api.articles import generate_image_html
+
+        result = generate_image_html(
+            image_url="https://example.com/image.jpg",
+        )
+
+        # Extract name and id attributes
+        uuid_pattern = r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
+        name_match = re.search(rf'name="({uuid_pattern})"', result)
+        id_match = re.search(rf'id="({uuid_pattern})"', result)
+
+        assert name_match is not None, "name attribute should contain a UUID"
+        assert id_match is not None, "id attribute should contain a UUID"
+        assert name_match.group(1) == id_match.group(1), "name and id should match"
+
+    def test_html_matches_note_format(self) -> None:
+        """Test that HTML matches note.com expected format."""
+        from note_mcp.api.articles import generate_image_html
+
+        result = generate_image_html(
+            image_url="https://cdn.note.com/image.jpg",
+            caption="キャプション",
+        )
+
+        # Verify structure matches note.com format
+        assert result.startswith("<figure")
+        assert "<img " in result
+        assert result.endswith("</figure>")
+        # Check order: figure > img > figcaption > /figure
+        img_pos = result.find("<img ")
+        figcaption_pos = result.find("<figcaption>")
+        assert img_pos < figcaption_pos
+
+
+class TestAppendImageToBody:
+    """Tests for append_image_to_body function (Issue #114)."""
+
+    def test_append_to_empty_body(self) -> None:
+        """Test appending image to empty body."""
+        from note_mcp.api.articles import append_image_to_body
+
+        image_html = '<figure name="uuid" id="uuid"><img src="test.jpg"></figure>'
+        result = append_image_to_body("", image_html)
+
+        assert result == image_html
+
+    def test_append_to_existing_body(self) -> None:
+        """Test appending image to body with existing content."""
+        from note_mcp.api.articles import append_image_to_body
+
+        existing_body = "<p>Existing content</p>"
+        image_html = '<figure name="uuid" id="uuid"><img src="test.jpg"></figure>'
+        result = append_image_to_body(existing_body, image_html)
+
+        assert result == existing_body + image_html
+        assert result.startswith("<p>Existing content</p>")
+        assert result.endswith("</figure>")
+
+    def test_multiple_appends(self) -> None:
+        """Test appending multiple images sequentially."""
+        from note_mcp.api.articles import append_image_to_body
+
+        body = "<p>Start</p>"
+        image1 = '<figure id="1"><img src="img1.jpg"></figure>'
+        image2 = '<figure id="2"><img src="img2.jpg"></figure>'
+
+        body = append_image_to_body(body, image1)
+        body = append_image_to_body(body, image2)
+
+        assert "<p>Start</p>" in body
+        assert 'src="img1.jpg"' in body
+        assert 'src="img2.jpg"' in body
+        assert body.index("img1.jpg") < body.index("img2.jpg")
+
+
+class TestGetArticleRawHtml:
+    """Tests for get_article_raw_html function (Issue #114)."""
+
+    @pytest.mark.asyncio
+    async def test_get_article_returns_html_body(self) -> None:
+        """Test that get_article_raw_html returns HTML body without conversion."""
+        from note_mcp.api.articles import get_article_raw_html
+
+        session = create_mock_session()
+
+        mock_response = {
+            "data": {
+                "id": "12345",
+                "key": "n12345abcdef",
+                "name": "Test Article",
+                "body": "<p>HTML content</p><figure><img src='test.jpg'></figure>",
+                "status": "draft",
+            }
+        }
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+            mock_client.get = AsyncMock(return_value=mock_response)
+
+            result = await get_article_raw_html(session, "12345")
+
+            assert result.id == "12345"
+            assert result.key == "n12345abcdef"
+            # Body should be raw HTML, not converted to Markdown
+            assert "<p>HTML content</p>" in result.body
+            assert "<figure>" in result.body
+
+    @pytest.mark.asyncio
+    async def test_get_article_with_key_format(self) -> None:
+        """Test get_article_raw_html with key format article ID."""
+        from note_mcp.api.articles import get_article_raw_html
+
+        session = create_mock_session()
+
+        mock_response = {
+            "data": {
+                "id": "12345",
+                "key": "n12345abcdef",
+                "name": "Test Article",
+                "body": "<p>Content</p>",
+                "status": "draft",
+            }
+        }
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+            mock_client.get = AsyncMock(return_value=mock_response)
+
+            result = await get_article_raw_html(session, "n12345abcdef")
+
+            mock_client.get.assert_called_once_with("/v3/notes/n12345abcdef")
+            assert result.id == "12345"
+
+
+class TestUpdateArticleRawHtml:
+    """Tests for update_article_raw_html function (Issue #114)."""
+
+    @pytest.mark.asyncio
+    async def test_update_article_with_html_body(self) -> None:
+        """Test that update_article_raw_html saves HTML body without conversion."""
+        from note_mcp.api.articles import update_article_raw_html
+
+        session = create_mock_session()
+
+        html_body = "<p>Updated content</p><figure><img src='new.jpg'></figure>"
+
+        mock_response = {
+            "data": {
+                "id": "12345",
+                "key": "n12345abcdef",
+                "name": "Updated Title",
+                "body": html_body,
+                "status": "draft",
+            }
+        }
+
+        with (
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
+        ):
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_resolve.return_value = "12345"
+
+            result = await update_article_raw_html(
+                session=session,
+                article_id="12345",
+                title="Updated Title",
+                html_body=html_body,
+            )
+
+            # Verify API was called with raw HTML body
+            call_args = mock_client.post.call_args
+            payload = call_args.kwargs.get("json") or call_args[1].get("json")
+            assert payload["body"] == html_body
+            assert payload["name"] == "Updated Title"
+            assert result.id == "12345"
+
+    @pytest.mark.asyncio
+    async def test_update_article_with_tags(self) -> None:
+        """Test update_article_raw_html with tags."""
+        from note_mcp.api.articles import update_article_raw_html
+
+        session = create_mock_session()
+
+        mock_response = {
+            "data": {
+                "id": "12345",
+                "key": "n12345abcdef",
+                "name": "Title",
+                "body": "<p>Content</p>",
+                "status": "draft",
+            }
+        }
+
+        with (
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
+        ):
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_resolve.return_value = "12345"
+
+            await update_article_raw_html(
+                session=session,
+                article_id="12345",
+                title="Title",
+                html_body="<p>Content</p>",
+                tags=["tag1", "#tag2"],
+            )
+
+            call_args = mock_client.post.call_args
+            payload = call_args.kwargs.get("json") or call_args[1].get("json")
+            # Tags should be normalized (# removed)
+            assert payload["hashtags"] == [
+                {"hashtag": {"name": "tag1"}},
+                {"hashtag": {"name": "tag2"}},
+            ]
+
+
+class TestInsertImageViaApiOnly:
+    """Tests for new API-only insert_image_via_api function (Issue #114)."""
+
+    @pytest.mark.asyncio
+    async def test_api_only_insertion_success(self, tmp_path: Path) -> None:
+        """Test successful API-only image insertion without Playwright."""
+        from note_mcp.browser.insert_image import insert_image_via_api
+        from note_mcp.models import Article, ArticleStatus, Image, ImageType
+
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        mock_article = Article(
+            id="12345",
+            key="n12345abcdef",
+            title="Test Article",
+            body="<p>Existing content</p>",
+            status=ArticleStatus.DRAFT,
+        )
+
+        mock_image = Image(
+            key="image_key_123",
+            url="https://cdn.note.com/images/123.jpg",
+            original_path=str(file_path),
+            uploaded_at=1234567890,
+            image_type=ImageType.BODY,
+        )
+
+        mock_updated_article = Article(
+            id="12345",
+            key="n12345abcdef",
+            title="Test Article",
+            body="<p>Existing content</p><figure><img src='...'></figure>",
+            status=ArticleStatus.DRAFT,
+        )
+
+        with (
+            patch("note_mcp.browser.insert_image.get_article_raw_html") as mock_get,
+            patch("note_mcp.browser.insert_image.upload_body_image") as mock_upload,
+            patch("note_mcp.browser.insert_image.generate_image_html") as mock_gen,
+            patch("note_mcp.browser.insert_image.append_image_to_body") as mock_append,
+            patch("note_mcp.browser.insert_image.update_article_raw_html") as mock_update,
+        ):
+            mock_get.return_value = mock_article
+            mock_upload.return_value = mock_image
+            mock_gen.return_value = "<figure><img src='test'></figure>"
+            mock_append.return_value = "<p>Existing content</p><figure><img src='test'></figure>"
+            mock_update.return_value = mock_updated_article
+
+            result = await insert_image_via_api(
+                session=session,
+                article_id="12345",
+                file_path=str(file_path),
+                caption="Test caption",
+            )
+
+            assert result["success"] is True
+            assert result["article_id"] == "12345"
+            assert result["article_key"] == "n12345abcdef"
+            assert result["image_url"] == mock_image.url
+            assert result["fallback_used"] is False
+
+            # Verify API-only flow was used
+            mock_get.assert_called_once()
+            mock_upload.assert_called_once()
+            mock_gen.assert_called_once()
+            mock_append.assert_called_once()
+            mock_update.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_api_only_no_playwright_dependency(self, tmp_path: Path) -> None:
+        """Verify no Playwright/browser calls are made in API-only mode."""
+        from note_mcp.browser.insert_image import insert_image_via_api
+        from note_mcp.models import Article, ArticleStatus, Image, ImageType
+
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        mock_article = Article(
+            id="12345",
+            key="n12345abcdef",
+            title="Test Article",
+            body="<p>Content</p>",
+            status=ArticleStatus.DRAFT,
+        )
+
+        mock_image = Image(
+            key="image_key_123",
+            url="https://cdn.note.com/images/123.jpg",
+            original_path=str(file_path),
+            uploaded_at=1234567890,
+            image_type=ImageType.BODY,
+        )
+
+        with (
+            patch("note_mcp.browser.insert_image.get_article_raw_html") as mock_get,
+            patch("note_mcp.browser.insert_image.upload_body_image") as mock_upload,
+            patch("note_mcp.browser.insert_image.update_article_raw_html") as mock_update,
+        ):
+            mock_get.return_value = mock_article
+            mock_upload.return_value = mock_image
+            mock_update.return_value = mock_article
+
+            result = await insert_image_via_api(
+                session=session,
+                article_id="12345",
+                file_path=str(file_path),
+            )
+
+            # API-only mode: no Playwright, no fallback
+            assert result["success"] is True
+            assert result["fallback_used"] is False
+
+            # All API functions should be called
+            mock_get.assert_called_once()
+            mock_upload.assert_called_once()
+            mock_update.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_api_only_with_caption(self, tmp_path: Path) -> None:
+        """Test API-only insertion passes caption to generate_image_html."""
+        from note_mcp.browser.insert_image import insert_image_via_api
+        from note_mcp.models import Article, ArticleStatus, Image, ImageType
+
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        mock_article = Article(
+            id="12345",
+            key="n12345abcdef",
+            title="Test Article",
+            body="<p>Content</p>",
+            status=ArticleStatus.DRAFT,
+        )
+
+        mock_image = Image(
+            key="image_key_123",
+            url="https://cdn.note.com/images/123.jpg",
+            original_path=str(file_path),
+            uploaded_at=1234567890,
+            image_type=ImageType.BODY,
+        )
+
+        with (
+            patch("note_mcp.browser.insert_image.get_article_raw_html") as mock_get,
+            patch("note_mcp.browser.insert_image.upload_body_image") as mock_upload,
+            patch("note_mcp.browser.insert_image.generate_image_html") as mock_gen,
+            patch("note_mcp.browser.insert_image.append_image_to_body") as mock_append,
+            patch("note_mcp.browser.insert_image.update_article_raw_html") as mock_update,
+        ):
+            mock_get.return_value = mock_article
+            mock_upload.return_value = mock_image
+            mock_gen.return_value = "<figure><img><figcaption>My Caption</figcaption></figure>"
+            mock_append.return_value = "<p>Content</p><figure>...</figure>"
+            mock_update.return_value = mock_article
+
+            await insert_image_via_api(
+                session=session,
+                article_id="12345",
+                file_path=str(file_path),
+                caption="My Caption",
+            )
+
+            # Verify caption was passed to generate_image_html
+            mock_gen.assert_called_once()
+            call_kwargs = mock_gen.call_args.kwargs
+            assert call_kwargs.get("caption") == "My Caption"

@@ -5,6 +5,7 @@ Provides functions for creating, updating, and managing articles.
 
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING, Any
 
 from note_mcp.api.client import NoteAPIClient
@@ -21,6 +22,138 @@ from note_mcp.utils import markdown_to_html
 
 if TYPE_CHECKING:
     pass
+
+
+# =============================================================================
+# Issue #114: API-only Image Insertion Helper Functions
+# =============================================================================
+
+
+def generate_image_html(
+    image_url: str,
+    caption: str = "",
+    width: int = 620,
+    height: int = 457,
+) -> str:
+    """Generate note.com figure HTML for an image.
+
+    Creates HTML in the format expected by note.com's editor.
+    The default dimensions (620x457) match note.com's standard image size.
+
+    Args:
+        image_url: CDN URL of the uploaded image
+        caption: Optional caption text (default: empty)
+        width: Image width in pixels (default: 620)
+        height: Image height in pixels (default: 457)
+
+    Returns:
+        HTML string: <figure name="..." id="..."><img ...><figcaption>...</figcaption></figure>
+    """
+    element_id = str(uuid.uuid4())
+    return (
+        f'<figure name="{element_id}" id="{element_id}">'
+        f'<img src="{image_url}" alt="" width="{width}" height="{height}" '
+        f'contenteditable="false" draggable="false">'
+        f"<figcaption>{caption}</figcaption></figure>"
+    )
+
+
+def append_image_to_body(existing_body: str, image_html: str) -> str:
+    """Append image HTML to article body.
+
+    Simply appends the image HTML to the end of the existing body.
+    Use this when inserting images via API without browser automation.
+
+    Args:
+        existing_body: Current HTML body of the article
+        image_html: Generated figure HTML to append
+
+    Returns:
+        Updated HTML body with image appended at the end
+    """
+    return existing_body + image_html
+
+
+async def get_article_raw_html(
+    session: Session,
+    article_id: str,
+) -> Article:
+    """Get article with raw HTML body (no conversion to Markdown).
+
+    Unlike get_article(), this returns the HTML body as-is without
+    converting to Markdown. Use this when you need to manipulate
+    the HTML content directly (e.g., appending image HTML).
+
+    Args:
+        session: Authenticated session
+        article_id: ID of the article (numeric or key format)
+
+    Returns:
+        Article object with raw HTML body
+
+    Raises:
+        NoteAPIError: If API request fails
+    """
+    async with NoteAPIClient(session) as client:
+        response = await client.get(f"/v3/notes/{article_id}")
+
+    # Parse response - body remains as raw HTML
+    article_data = response.get("data", {})
+    return from_api_response(article_data)
+
+
+async def update_article_raw_html(
+    session: Session,
+    article_id: str,
+    title: str,
+    html_body: str,
+    tags: list[str] | None = None,
+) -> Article:
+    """Update article with raw HTML body (no Markdown conversion).
+
+    Unlike update_article(), this saves the HTML body directly without
+    converting from Markdown. Use this when the body is already in HTML
+    format (e.g., after appending image HTML).
+
+    Args:
+        session: Authenticated session
+        article_id: ID of the article to update
+        title: Article title
+        html_body: HTML body content (not Markdown)
+        tags: Optional list of tags
+
+    Returns:
+        Updated Article object
+
+    Raises:
+        NoteAPIError: If API request fails
+    """
+    # Resolve to numeric ID (API requirement)
+    numeric_id = await _resolve_numeric_note_id(session, article_id)
+
+    # Build payload with raw HTML body (no conversion)
+    payload: dict[str, Any] = {
+        "name": title,
+        "body": html_body,
+        "body_length": len(html_body),
+        "index": False,
+        "is_lead_form": False,
+    }
+
+    # Add tags if provided
+    hashtags = _normalize_tags(tags)
+    if hashtags:
+        payload["hashtags"] = hashtags
+
+    async with NoteAPIClient(session) as client:
+        response = await client.post(
+            f"/v1/text_notes/draft_save?id={numeric_id}&is_temp_saved=true",
+            json=payload,
+        )
+
+    # Parse response
+    article_data = response.get("data", {})
+    return from_api_response(article_data)
 
 
 def _normalize_tags(tags: list[str] | None) -> list[dict[str, Any]] | None:

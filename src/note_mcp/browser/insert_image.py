@@ -11,10 +11,14 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from note_mcp.api.articles import get_article
+from note_mcp.api.articles import (
+    append_image_to_body,
+    generate_image_html,
+    get_article_raw_html,
+    update_article_raw_html,
+)
 from note_mcp.api.images import upload_body_image, validate_image_file
 from note_mcp.browser.manager import BrowserManager
-from note_mcp.browser.typing_helpers import _insert_image_via_prosemirror
 from note_mcp.browser.url_helpers import validate_article_edit_url
 from note_mcp.models import ErrorCode, NoteAPIError
 
@@ -584,12 +588,18 @@ async def insert_image_via_api(
     file_path: str,
     caption: str | None = None,
 ) -> dict[str, Any]:
-    """Insert an image into an article via API + ProseMirror (Issue #111).
+    """Insert an image into an article via API (Issue #114).
 
-    This function uses a hybrid approach:
-    1. Upload image via API (faster, more reliable)
-    2. Insert into editor via ProseMirror JavaScript (no UI automation)
-    3. Fallback to browser UI if ProseMirror fails
+    Fully API-based implementation without Playwright dependency.
+    This is faster and more reliable than browser-based insertion.
+
+    Flow:
+    1. Validate image file
+    2. Get article with raw HTML body
+    3. Upload image to S3 via API
+    4. Generate figure HTML
+    5. Append to existing body
+    6. Update article via draft_save API
 
     Args:
         session: Authenticated session
@@ -605,19 +615,18 @@ async def insert_image_via_api(
         - file_path: Path to the uploaded file
         - image_url: URL of the uploaded image on note.com CDN
         - caption: Caption text (if provided)
-        - fallback_used: True if browser UI fallback was used
+        - fallback_used: Always False (no browser fallback in API-only mode)
 
     Raises:
         NoteAPIError: If image insertion fails
     """
-    # Validate file (existence, extension, and size)
+    # Step 1: Validate file (existence, extension, and size)
     validate_image_file(file_path)
-    path = Path(file_path)
 
-    # Step 1: Validate article ID and get article info FIRST
-    # This catches invalid IDs early with a clear error message
+    # Step 2: Get article with raw HTML body
+    # Use get_article_raw_html to preserve HTML (no Markdown conversion)
     try:
-        article = await get_article(session, article_id)
+        article = await get_article_raw_html(session, article_id)
     except NoteAPIError as e:
         raise NoteAPIError(
             code=ErrorCode.INVALID_INPUT,
@@ -629,66 +638,29 @@ async def insert_image_via_api(
     numeric_id = article.id
     logger.debug(f"Article validated: key={article_key}, numeric_id={numeric_id}")
 
-    # Step 2: Upload image via API (use numeric ID for consistency)
+    # Step 3: Upload image via API
     image = await upload_body_image(session, file_path, numeric_id)
     logger.info(f"Image uploaded via API: {image.url[:50]}...")
 
-    # Step 3: Setup page and navigate to editor
-    page = await _setup_page_with_session(session, article_key)
+    # Step 4: Generate image HTML in note.com format
+    image_html = generate_image_html(
+        image_url=image.url,
+        caption=caption or "",
+    )
+    logger.debug(f"Generated image HTML: {image_html[:100]}...")
 
-    # Step 4: Try ProseMirror insertion first
-    fallback_used = False
-    inserted = await _insert_image_via_prosemirror(page, image.url, caption or "")
+    # Step 5: Append image to existing body
+    new_body_html = append_image_to_body(article.body or "", image_html)
+    logger.debug(f"New body length: {len(new_body_html)} chars")
 
-    if inserted:
-        logger.info("Image inserted via ProseMirror")
-    else:
-        # Fallback to browser UI
-        logger.info("ProseMirror insertion failed, falling back to browser UI")
-        fallback_used = True
-
-        # Get initial image count
-        initial_img_count = await page.evaluate(
-            "() => document.querySelectorAll('.ProseMirror figure img, .ProseMirror img').length"
-        )
-
-        # Click add image button
-        if not await _click_add_image_button(page):
-            raise NoteAPIError(
-                code=ErrorCode.API_ERROR,
-                message="Failed to click add image button (fallback)",
-                details={"article_id": numeric_id, "article_key": article_key},
-            )
-
-        # Upload image via file chooser
-        if not await _upload_image_via_file_chooser(page, str(path.absolute())):
-            raise NoteAPIError(
-                code=ErrorCode.API_ERROR,
-                message="Failed to upload image via file chooser (fallback)",
-                details={"article_id": numeric_id, "article_key": article_key, "file_path": file_path},
-            )
-
-        # Wait for image insertion
-        if not await _wait_for_image_insertion(page, initial_img_count, caption):
-            raise NoteAPIError(
-                code=ErrorCode.API_ERROR,
-                message="Image insertion failed (fallback)",
-                details={"article_id": numeric_id, "article_key": article_key, "file_path": file_path},
-            )
-
-    # Step 5: Add caption if provided and not already added
-    if caption and not fallback_used:
-        caption_success = await _input_image_caption(page, caption)
-        if not caption_success:
-            logger.warning(f"Failed to input caption for image: {caption}")
-
-    # Step 6: Save article
-    if not await _save_article(page):
-        raise NoteAPIError(
-            code=ErrorCode.API_ERROR,
-            message="Failed to save article after image insertion",
-            details={"article_id": numeric_id, "article_key": article_key, "file_path": file_path},
-        )
+    # Step 6: Update article via API (draft_save)
+    await update_article_raw_html(
+        session=session,
+        article_id=numeric_id,
+        title=article.title,
+        html_body=new_body_html,
+    )
+    logger.info("Article updated via API")
 
     return {
         "success": True,
@@ -697,5 +669,5 @@ async def insert_image_via_api(
         "file_path": file_path,
         "image_url": image.url,
         "caption": caption,
-        "fallback_used": fallback_used,
+        "fallback_used": False,  # No fallback in API-only mode
     }
