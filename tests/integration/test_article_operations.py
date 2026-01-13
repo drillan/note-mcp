@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from note_mcp.api.articles import create_draft, get_article, list_articles, publish_article, update_article
-from note_mcp.models import ArticleInput, ArticleStatus, Session
+from note_mcp.models import Article, ArticleInput, ArticleStatus, Session
 
 if TYPE_CHECKING:
     pass
@@ -617,17 +617,30 @@ class TestUpdateArticleWithEmbeds:
             }
         }
 
+        # Mock article for get_article_via_api (called when numeric ID + embeds)
+        mock_fetched_article = Article(
+            id="123456",
+            key="n1234567890ab",
+            title="",
+            body="",
+            status=ArticleStatus.DRAFT,
+        )
+
         with (
             patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
             patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
             patch("note_mcp.api.articles.resolve_embed_keys") as mock_resolve_embeds,
+            patch(
+                "note_mcp.api.articles.get_article_via_api",
+                new_callable=AsyncMock,
+                return_value=mock_fetched_article,
+            ),
         ):
             mock_client = AsyncMock()
             mock_client_class.return_value = mock_client
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_save_response)
-            mock_client.get = AsyncMock(return_value={"data": {"key": "n1234567890ab"}})
 
             mock_resolve.return_value = "123456"
             mock_resolve_embeds.return_value = twitter_embed_html
