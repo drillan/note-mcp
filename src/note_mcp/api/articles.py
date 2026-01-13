@@ -335,28 +335,47 @@ async def update_article(
     Raises:
         NoteAPIError: If API request fails
     """
+    from note_mcp.api.embeds import _EMBED_FIGURE_PATTERN
+
     # Resolve to numeric ID (API requirement)
     numeric_id = await _resolve_numeric_note_id(session, article_id)
-
-    # Determine article key for embed resolution
-    # Key format: starts with "n" followed by alphanumeric characters
-    if article_id.startswith("n") and not article_id.isdigit():
-        article_key = article_id
-    else:
-        # Fetch article to get the key
-        async with NoteAPIClient(session) as client:
-            response = await client.get(f"/v3/notes/{article_id}")
-        article_key = response.get("data", {}).get("key", article_id)
 
     # Convert Markdown to HTML for API (embeds get random keys initially)
     html_body = markdown_to_html(article_input.body)
 
-    # Resolve embed keys via API
-    # Replace random keys with server-registered keys for iframe rendering
-    resolved_html = await resolve_embed_keys(session, html_body, str(article_key))
+    # Check if HTML contains embeds that need key resolution
+    # Issue #146: Only fetch article key when embeds are present
+    has_embeds = bool(_EMBED_FIGURE_PATTERN.search(html_body))
 
-    # Build payload using helper with resolved HTML
-    payload = _build_article_payload(article_input, resolved_html)
+    if has_embeds:
+        # Determine article key for embed resolution
+        # Key format: starts with "n" followed by alphanumeric characters
+        if article_id.startswith("n") and not article_id.isdigit():
+            article_key = article_id
+        else:
+            # Numeric ID: need to get key from draft_save response
+            # First save without embed resolution, then resolve and save again
+            payload = _build_article_payload(article_input, html_body)
+            async with NoteAPIClient(session) as client:
+                response = await client.post(
+                    f"/v1/text_notes/draft_save?id={numeric_id}&is_temp_saved=true",
+                    json=payload,
+                )
+            article_data = response.get("data", {})
+            article_key = article_data.get("key", "")
+
+            if not article_key:
+                # Fallback: proceed without embed resolution if key not available
+                return from_api_response(article_data)
+
+        # Resolve embed keys via API
+        # Replace random keys with server-registered keys for iframe rendering
+        resolved_html = await resolve_embed_keys(session, html_body, str(article_key))
+        payload = _build_article_payload(article_input, resolved_html)
+    else:
+        # No embeds - proceed without key resolution
+        # Issue #146: This avoids the 400 error when numeric ID is passed
+        payload = _build_article_payload(article_input, html_body)
 
     async with NoteAPIClient(session) as client:
         # Use draft_save endpoint with POST (not PUT)
