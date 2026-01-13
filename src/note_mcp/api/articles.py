@@ -6,6 +6,7 @@ Provides functions for creating, updating, and managing articles.
 from __future__ import annotations
 
 import html
+import logging
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -30,6 +31,8 @@ from note_mcp.utils import markdown_to_html
 
 if TYPE_CHECKING:
     pass
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -362,10 +365,22 @@ async def update_article(
                     json=payload,
                 )
             article_data = response.get("data", {})
+            if not article_data or not article_data.get("id"):
+                raise NoteAPIError(
+                    code=ErrorCode.API_ERROR,
+                    message="Article update failed: API returned empty response during initial save",
+                    details={"article_id": article_id, "response": response},
+                )
             article_key = article_data.get("key", "")
 
             if not article_key:
                 # Fallback: proceed without embed resolution if key not available
+                logger.warning(
+                    "Embed resolution skipped: draft_save response did not include article key. "
+                    "Embeds in article %s may not render correctly.",
+                    article_id,
+                    extra={"article_id": article_id, "response": response},
+                )
                 return from_api_response(article_data)
 
         # Resolve embed keys via API
@@ -384,8 +399,14 @@ async def update_article(
             json=payload,
         )
 
-    # Parse response
+    # Parse and validate response
     article_data = response.get("data", {})
+    if not article_data or not article_data.get("id"):
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Article update failed: API returned empty response after save",
+            details={"article_id": article_id, "response": response},
+        )
     return from_api_response(article_data)
 
 
