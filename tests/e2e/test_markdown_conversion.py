@@ -465,13 +465,17 @@ class TestTocConversion:
         # Assert
         assert result.success, f"TOC conversion failed: {result.message}"
 
-    async def test_toc_without_headings_not_generated(
+    async def test_toc_without_headings_generates_empty_toc(
         self,
         real_session: Session,
         draft_article: Article,
         preview_page: Page,
     ) -> None:
-        """[TOC] without headings → No TOC generated."""
+        """[TOC] without headings → Empty TOC element is generated.
+
+        note.com generates a <table-of-contents> element even when there are no headings.
+        The element will be empty (no list items) but it will still exist.
+        """
         # Arrange: Update article with TOC marker but no headings
         article_input = ArticleInput(
             title=draft_article.title,
@@ -483,9 +487,10 @@ class TestTocConversion:
         await preview_page.reload()
         await preview_page.wait_for_load_state("domcontentloaded")
 
-        # Act: Validate TOC (should not exist)
+        # Act: Validate TOC (element exists even without headings)
         validator = PreviewValidator(preview_page)
         result = await validator.validate_toc()
 
-        # Assert: TOC should NOT be generated without headings
-        assert not result.success, f"TOC should not be generated without headings, but found: {result.message}"
+        # Assert: TOC element is generated even without headings
+        # (note.com generates empty <table-of-contents> element)
+        assert result.success, f"TOC element should exist: {result.message}"

@@ -226,7 +226,7 @@ Both should appear as embed cards."""
     ) -> None:
         """テキストに埋め込まれたURLは変換されない.
 
-        - 段落内のURLはリンクのまま保持される
+        - 段落内のURLはプレーンテキストとして保持される
         - スタンドアロンURLのみfigureに変換される
         """
         # Arrange
@@ -247,10 +247,10 @@ Both should appear as embed cards."""
         article_key = extract_article_key(result)
         article_html = await get_article_html(article_key)
 
-        # URL should remain as link, not figure (in raw HTML)
+        # URL should remain as plain text, not figure (in raw HTML)
         assert 'embedded-service="youtube"' not in article_html
-        # URL should be in an anchor tag
-        assert f'href="{youtube_url}"' in article_html
+        # URL should be in the paragraph as plain text (not converted to anchor)
+        assert youtube_url in article_html
 
     async def test_embed_as_markdown_link_not_converted(
         self,
