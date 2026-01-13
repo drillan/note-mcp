@@ -216,6 +216,29 @@ docker compose up --build
 
 開発原則の詳細は **Constitution** を参照してください。以下は主要な原則の概要です：
 
+### Issue Workflow
+
+issue対応の指示を受けた場合は、作業開始前に適切なブランチに切り替えること。
+
+**ブランチ命名規則:**
+- 機能追加: `feat/<issue番号>-<説明>`
+- バグ修正: `fix/<issue番号>-<説明>`
+- リファクタリング: `refactor/<issue番号>-<説明>`
+- ドキュメント: `docs/<issue番号>-<説明>`
+
+**例:**
+```bash
+# Issue #123 の機能追加
+git checkout -b feat/123-add-user-authentication
+
+# Issue #456 のバグ修正
+git checkout -b fix/456-fix-login-error
+```
+
+**注意:**
+- 既存のブランチがある場合はそちらを使用
+- `<説明>`は英語で、ハイフン区切りの短い説明（2-4語）
+
 ### Test-Driven Development (Article 1)
 
 1. ユニットテストを先に作成
@@ -292,6 +315,7 @@ docker compose up --build
 
 ## Recent Changes
 
+- 2026-01-13: Added Issue Workflow section with branch naming conventions
 - 2025-12-31: Added Available Skills section with api-investigator導線
 - 001-note-mcp: Added Python 3.11+
 - 2025-12-20: Updated CLAUDE.md based on Constitution v1.0.0
