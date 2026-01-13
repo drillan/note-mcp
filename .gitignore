@@ -232,5 +232,6 @@ __marimo__/
 # Investigation output files
 /output
 
-# Local-specific Claude commands (contain machine-specific paths)
+# Local-specific Claude settings and commands (machine-specific)
+.claude/settings.local.json
 .claude/commands/ralph-loop.md
