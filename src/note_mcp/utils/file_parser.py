@@ -57,6 +57,10 @@ IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 # Patterns that indicate a URL (not a local file)
 URL_PREFIXES = ("http://", "https://", "data:")
 
+# Patterns to match H1 and H2 title headings
+_H1_TITLE_PATTERN = re.compile(r"^#\s+(.+)$", re.MULTILINE)
+_H2_TITLE_PATTERN = re.compile(r"^##\s+(.+)$", re.MULTILINE)
+
 
 def parse_markdown_file(file_path: Path | str) -> ParsedArticle:
     """Parse a Markdown file and extract article components.
@@ -184,12 +188,12 @@ def _get_title(frontmatter: dict[str, Any], body: str) -> str | None:
         return str(frontmatter["title"]).strip()
 
     # Try H1 heading
-    h1_match = re.search(r"^#\s+(.+)$", body, re.MULTILINE)
+    h1_match = _H1_TITLE_PATTERN.search(body)
     if h1_match:
         return h1_match.group(1).strip()
 
     # Try H2 heading as fallback
-    h2_match = re.search(r"^##\s+(.+)$", body, re.MULTILINE)
+    h2_match = _H2_TITLE_PATTERN.search(body)
     if h2_match:
         return h2_match.group(1).strip()
 
