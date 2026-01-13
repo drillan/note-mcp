@@ -5,6 +5,8 @@ Uses markdown-it-py for CommonMark-compliant conversion.
 
 import re
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from markdown_it import MarkdownIt
 
@@ -70,6 +72,58 @@ _TEXT_ALIGN_LEFT_PATTERN = re.compile(r"^<-(.+)$", re.MULTILINE)
 
 # Pattern to find URLs that are alone on a line (potential embed URLs)
 _STANDALONE_URL_PATTERN = re.compile(r"^(https?://\S+)$", re.MULTILINE)
+
+
+@contextmanager
+def _protect_code_blocks(content: str, prefix: str = "CODE_BLOCK") -> Iterator[tuple[str, list[tuple[str, str]]]]:
+    """Context manager for protecting code blocks during content processing.
+
+    Temporarily replaces fenced (```) and inline (`) code blocks with placeholders.
+    This prevents code block content from being processed by other transformations.
+
+    Args:
+        content: Content to protect code blocks in.
+        prefix: Prefix for placeholder names. Use unique prefixes to avoid conflicts.
+
+    Yields:
+        Tuple of (protected_content, code_blocks_list) where:
+        - protected_content: Content with code blocks replaced by placeholders
+        - code_blocks_list: List of (placeholder, original_code) tuples for restoration
+
+    Example:
+        with _protect_code_blocks(content, "ALIGN") as (protected, blocks):
+            # Process the protected content (reassign to protected)
+            protected = some_pattern.sub(replacement, protected)
+        return _restore_code_blocks(protected, blocks)
+    """
+    code_blocks: list[tuple[str, str]] = []
+
+    def protect(match: re.Match[str]) -> str:
+        placeholder = f"__{prefix}_{len(code_blocks)}__"
+        code_blocks.append((placeholder, match.group(0)))
+        return placeholder
+
+    # Protect fenced code blocks first (```)
+    protected = re.sub(r"```[\s\S]*?```", protect, content)
+    # Then protect inline code (`)
+    protected = re.sub(r"`[^`]+`", protect, protected)
+
+    yield protected, code_blocks
+
+
+def _restore_code_blocks(content: str, blocks: list[tuple[str, str]]) -> str:
+    """Restore code blocks from placeholders.
+
+    Args:
+        content: Content with placeholders.
+        blocks: List of (placeholder, original) tuples from _protect_code_blocks.
+
+    Returns:
+        Content with placeholders replaced by original code blocks.
+    """
+    for placeholder, original in blocks:
+        content = content.replace(placeholder, original)
+    return content
 
 
 def has_embed_url(content: str) -> bool:
@@ -206,29 +260,14 @@ def _convert_text_alignment(content: str) -> str:
     Returns:
         Content with alignment markers converted to placeholders
     """
-    # Protect code blocks from alignment processing
-    code_blocks: list[tuple[str, str]] = []
+    with _protect_code_blocks(content, "ALIGN") as (protected, blocks):
+        # Convert alignment markers to placeholders
+        # Order matters: center first (more specific), then right/left
+        protected = _TEXT_ALIGN_CENTER_PATTERN.sub(r"§§ALIGN_CENTER§§\1§§/ALIGN§§", protected)
+        protected = _TEXT_ALIGN_RIGHT_PATTERN.sub(r"§§ALIGN_RIGHT§§\1§§/ALIGN§§", protected)
+        protected = _TEXT_ALIGN_LEFT_PATTERN.sub(r"§§ALIGN_LEFT§§\1§§/ALIGN§§", protected)
 
-    def protect_code_block(match: re.Match[str]) -> str:
-        placeholder = f"__CODE_BLOCK_ALIGN_{len(code_blocks)}__"
-        code_blocks.append((placeholder, match.group(0)))
-        return placeholder
-
-    # Temporarily replace code blocks (fenced and inline)
-    protected = re.sub(r"```[\s\S]*?```", protect_code_block, content)
-    protected = re.sub(r"`[^`]+`", protect_code_block, protected)
-
-    # Convert alignment markers to placeholders
-    # Order matters: center first (more specific), then right/left
-    protected = _TEXT_ALIGN_CENTER_PATTERN.sub(r"§§ALIGN_CENTER§§\1§§/ALIGN§§", protected)
-    protected = _TEXT_ALIGN_RIGHT_PATTERN.sub(r"§§ALIGN_RIGHT§§\1§§/ALIGN§§", protected)
-    protected = _TEXT_ALIGN_LEFT_PATTERN.sub(r"§§ALIGN_LEFT§§\1§§/ALIGN§§", protected)
-
-    # Restore code blocks
-    for placeholder, original in code_blocks:
-        protected = protected.replace(placeholder, original)
-
-    return protected
+    return _restore_code_blocks(protected, blocks)
 
 
 def _apply_text_alignment_to_html(html: str) -> str:
@@ -531,35 +570,20 @@ def _convert_toc_to_placeholder(content: str) -> str:
     Returns:
         Content with [TOC] converted to placeholder.
     """
-    # Protect code blocks from TOC processing
-    code_blocks: list[tuple[str, str]] = []
+    with _protect_code_blocks(content, "TOC") as (protected, blocks):
+        # Convert only the first [TOC] to placeholder
+        first_replaced = False
 
-    def protect_code_block(match: re.Match[str]) -> str:
-        placeholder = f"__CODE_BLOCK_{len(code_blocks)}__"
-        code_blocks.append((placeholder, match.group(0)))
-        return placeholder
+        def replace_toc(match: re.Match[str]) -> str:
+            nonlocal first_replaced
+            if not first_replaced:
+                first_replaced = True
+                return _TOC_PLACEHOLDER
+            return ""  # Remove subsequent [TOC]s
 
-    # Temporarily replace code blocks
-    protected = re.sub(r"```[\s\S]*?```", protect_code_block, content)
-    protected = re.sub(r"`[^`]+`", protect_code_block, protected)
+        result = _TOC_PATTERN.sub(replace_toc, protected)
 
-    # Convert only the first [TOC] to placeholder
-    first_replaced = False
-
-    def replace_toc(match: re.Match[str]) -> str:
-        nonlocal first_replaced
-        if not first_replaced:
-            first_replaced = True
-            return _TOC_PLACEHOLDER
-        return ""  # Remove subsequent [TOC]s
-
-    result = _TOC_PATTERN.sub(replace_toc, protected)
-
-    # Restore code blocks
-    for placeholder, original in code_blocks:
-        result = result.replace(placeholder, original)
-
-    return result
+    return _restore_code_blocks(result, blocks)
 
 
 def _convert_toc_placeholder_to_html(html: str) -> str:
