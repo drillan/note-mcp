@@ -31,6 +31,7 @@ from tests.e2e.helpers.constants import (
     NOTE_EDITOR_URL,
 )
 from tests.e2e.helpers.html_validator import HtmlValidator
+from tests.e2e.helpers.retry import with_retry
 
 if TYPE_CHECKING:
     from playwright._impl._api_structures import SetCookieParam
@@ -39,6 +40,9 @@ if TYPE_CHECKING:
 
 # Test article prefix for identification and cleanup
 E2E_TEST_PREFIX = "[E2E-TEST-"
+
+# Inter-test delay for rate limiting (configurable via environment variable)
+E2E_INTER_TEST_DELAY = float(os.environ.get("NOTE_MCP_E2E_DELAY", "0.5"))
 
 
 # Alias for backward compatibility with existing test code
@@ -68,6 +72,21 @@ async def cleanup_browser_manager() -> AsyncGenerator[None]:
     # Clean up BrowserManager singleton if it was used
     if BrowserManager._instance is not None:
         await BrowserManager.get_instance().close()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def inter_test_delay() -> AsyncGenerator[None]:
+    """Add delay between tests to avoid API rate limiting.
+
+    Configurable via NOTE_MCP_E2E_DELAY environment variable.
+    Default: 0.5 seconds. Set to 0 to disable.
+
+    This helps prevent 403 (Access denied) errors during bulk
+    E2E test execution (Issue #166).
+    """
+    yield
+    if E2E_INTER_TEST_DELAY > 0:
+        await asyncio.sleep(E2E_INTER_TEST_DELAY)
 
 
 @pytest.fixture(scope="session")
@@ -141,6 +160,9 @@ async def draft_article(
     Creates a draft with the [E2E-TEST-{timestamp}] prefix for identification.
     Attempts cleanup after test completion (best-effort).
 
+    Uses retry logic to handle transient 403 (Access denied) errors that
+    may occur during bulk E2E test execution due to rate limiting.
+
     Args:
         real_session: Authenticated session fixture
 
@@ -155,7 +177,11 @@ async def draft_article(
         tags=["e2e-test"],
     )
 
-    article = await create_draft(real_session, article_input)
+    # Use retry wrapper to handle transient 403 errors (Issue #166)
+    article = await with_retry(
+        lambda: create_draft(real_session, article_input),
+        backoff_base=2.0,  # Longer delay for rate limiting
+    )
 
     yield article
 
