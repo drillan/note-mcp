@@ -44,12 +44,14 @@ def _is_headless_test() -> bool:
     """Check if tests should run in headless mode.
 
     Uses NOTE_MCP_TEST_HEADLESS environment variable.
-    Default: False (headed mode for visibility during development)
+    Default: True (headless mode for CI/CD stability)
+
+    Set NOTE_MCP_TEST_HEADLESS=false to show browser window for debugging.
 
     Returns:
-        True if headless mode is enabled
+        True if headless mode is enabled (default)
     """
-    return os.environ.get("NOTE_MCP_TEST_HEADLESS", "false").lower() == "true"
+    return os.environ.get("NOTE_MCP_TEST_HEADLESS", "true").lower() != "false"
 
 
 def _generate_test_article_title() -> str:

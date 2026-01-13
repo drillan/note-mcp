@@ -10,6 +10,7 @@ instead of navigating through the editor UI.
 from __future__ import annotations
 
 import logging
+import os
 import warnings
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -32,6 +33,20 @@ if TYPE_CHECKING:
     from note_mcp.models import Session
 
 logger = logging.getLogger(__name__)
+
+
+def _get_headless_default() -> bool:
+    """Get default headless mode from environment variable.
+
+    Uses NOTE_MCP_TEST_HEADLESS environment variable.
+    Default: True (headless mode for CI/CD stability)
+
+    Set NOTE_MCP_TEST_HEADLESS=false to show browser window for debugging.
+
+    Returns:
+        True if headless mode is enabled (default)
+    """
+    return os.environ.get("NOTE_MCP_TEST_HEADLESS", "true").lower() != "false"
 
 
 async def open_preview_via_api(
@@ -167,7 +182,7 @@ async def preview_page_context(
     session: Session,
     article_key: str,
     *,
-    headless: bool = False,
+    headless: bool | None = None,
 ) -> AsyncGenerator[Page]:
     """Open preview page with automatic browser lifecycle management.
 
@@ -178,7 +193,9 @@ async def preview_page_context(
     Args:
         session: Authenticated Session object with cookies
         article_key: Article key (e.g., "n1234567890ab")
-        headless: Whether to run browser in headless mode
+        headless: Whether to run browser in headless mode.
+            Default: True (from NOTE_MCP_TEST_HEADLESS env var).
+            Set NOTE_MCP_TEST_HEADLESS=false to show browser window.
 
     Yields:
         Playwright Page for the preview
@@ -192,6 +209,9 @@ async def preview_page_context(
             validator = PreviewValidator(preview_page)
             result = await validator.validate_toc()
     """
+    if headless is None:
+        headless = _get_headless_default()
+
     playwright = await async_playwright().start()
     browser = await playwright.chromium.launch(headless=headless)
     context = await browser.new_context()
