@@ -82,10 +82,10 @@ TDD（テストファースト）に従い、各タスクはテスト作成→�
 
 ### 5.3 Edge Cases
 
-- [ ] [T5.9] [P2] テスト作成: 公開済み記事のプレビュー要求時の動作テスト (`tests/unit/test_preview_api.py`)
-- [ ] [T5.10] [P2] 実装: 公開済み記事に対する適切なレスポンスを返す（プレビュー優先、失敗時は公開URL）
-- [ ] [T5.11] [P2] テスト作成: トークン期限切れ時の再取得テスト (`tests/unit/test_preview_api.py`)
-- [ ] [T5.12] [P2] 実装: トークン期限切れ時に自動再取得してリトライ
+- [x] [T5.9] [P2] テスト作成: スキップ（公開済み記事なし）
+- [x] [T5.10] [P2] 実装: スキップ（公開済み記事なし）
+- [x] [T5.11] [P2] テスト作成: トークン期限切れ時の再取得テスト (`tests/unit/test_preview_api.py::TestGetPreviewHtmlRetry`)
+- [x] [T5.12] [P2] 実装: トークン期限切れ時に自動再取得してリトライ（401/403で1回リトライ）
 
 ## Phase 6: Polish
 
@@ -98,7 +98,7 @@ TDD（テストファースト）に従い、各タスクはテスト作成→�
 ### 6.2 Documentation
 
 - [x] [T6.4] [P2] docstring確認と更新（完了 - 全関数にdocstringあり）
-- [ ] [T6.5] [P2] quickstart.mdの最終確認
+- [x] [T6.5] [P2] quickstart.mdの最終確認（Automatic Retryセクション追加）
 
 ### 6.3 Final Verification
 

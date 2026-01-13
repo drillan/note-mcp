@@ -210,6 +210,17 @@ print(f"Token: {token[:8]}...")
 | note_get_preview_html | < 5秒 | ツール呼び出し〜HTML返却 |
 | get_preview_access_token | < 500ms | API呼び出し〜レスポンス |
 
+## Automatic Retry
+
+`get_preview_html`は認証エラー（401/403）発生時に自動リトライします：
+
+1. プレビューアクセストークンを取得
+2. HTMLを取得（失敗時）
+3. 401/403の場合、新しいトークンを再取得して1回リトライ
+4. それでも失敗した場合はエラーを返す
+
+これにより、トークン期限切れ時も自動的に復旧します。
+
 ## Troubleshooting
 
 ### 認証エラー

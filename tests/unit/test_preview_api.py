@@ -212,6 +212,186 @@ class TestGetPreviewHtml:
             assert exc_info.value.code == ErrorCode.API_ERROR
 
 
+class TestGetPreviewHtmlRetry:
+    """Tests for get_preview_html retry functionality on token expiration."""
+
+    @pytest.mark.asyncio
+    async def test_retry_on_401_fetches_new_token(self, mock_session: Session) -> None:
+        """get_preview_html should retry with new token on 401 response."""
+        from note_mcp.api.preview import get_preview_html
+
+        mock_html = "<html><body>Success</body></html>"
+        call_count = {"token": 0, "get": 0}
+
+        async def mock_get_token(session: Session, article_key: str) -> str:
+            call_count["token"] += 1
+            return f"token_{call_count['token']}"
+
+        with (
+            patch(
+                "note_mcp.api.preview.get_preview_access_token",
+                side_effect=mock_get_token,
+            ),
+            patch("note_mcp.api.preview.build_preview_url") as mock_build_url,
+            patch("httpx.AsyncClient") as mock_client_class,
+        ):
+            mock_build_url.side_effect = lambda key, token: f"https://note.com/preview/{key}?prev_access_key={token}"
+
+            # First call returns 401 (token expired), second call succeeds
+            mock_response_401 = MagicMock()
+            mock_response_401.status_code = 401
+            mock_response_401.is_success = False
+
+            mock_response_200 = MagicMock()
+            mock_response_200.status_code = 200
+            mock_response_200.text = mock_html
+            mock_response_200.is_success = True
+
+            mock_client = AsyncMock()
+
+            def mock_get(*args: object, **kwargs: object) -> MagicMock:
+                call_count["get"] += 1
+                if call_count["get"] == 1:
+                    return mock_response_401
+                return mock_response_200
+
+            mock_client.get.side_effect = mock_get
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            html = await get_preview_html(mock_session, "n1234567890ab")
+
+            # Verify retry happened
+            assert call_count["token"] == 2, "Should have fetched token twice"
+            assert call_count["get"] == 2, "Should have made two HTTP requests"
+            assert html == mock_html
+
+    @pytest.mark.asyncio
+    async def test_retry_on_403_fetches_new_token(self, mock_session: Session) -> None:
+        """get_preview_html should retry with new token on 403 response."""
+        from note_mcp.api.preview import get_preview_html
+
+        mock_html = "<html><body>Success</body></html>"
+        call_count = {"token": 0, "get": 0}
+
+        async def mock_get_token(session: Session, article_key: str) -> str:
+            call_count["token"] += 1
+            return f"token_{call_count['token']}"
+
+        with (
+            patch(
+                "note_mcp.api.preview.get_preview_access_token",
+                side_effect=mock_get_token,
+            ),
+            patch("note_mcp.api.preview.build_preview_url") as mock_build_url,
+            patch("httpx.AsyncClient") as mock_client_class,
+        ):
+            mock_build_url.side_effect = lambda key, token: f"https://note.com/preview/{key}?prev_access_key={token}"
+
+            # First call returns 403, second call succeeds
+            mock_response_403 = MagicMock()
+            mock_response_403.status_code = 403
+            mock_response_403.is_success = False
+
+            mock_response_200 = MagicMock()
+            mock_response_200.status_code = 200
+            mock_response_200.text = mock_html
+            mock_response_200.is_success = True
+
+            mock_client = AsyncMock()
+
+            def mock_get(*args: object, **kwargs: object) -> MagicMock:
+                call_count["get"] += 1
+                if call_count["get"] == 1:
+                    return mock_response_403
+                return mock_response_200
+
+            mock_client.get.side_effect = mock_get
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            html = await get_preview_html(mock_session, "n1234567890ab")
+
+            # Verify retry happened
+            assert call_count["token"] == 2, "Should have fetched token twice"
+            assert html == mock_html
+
+    @pytest.mark.asyncio
+    async def test_no_retry_on_other_errors(self, mock_session: Session) -> None:
+        """get_preview_html should not retry on non-auth errors (e.g., 500)."""
+        from note_mcp.api.preview import get_preview_html
+
+        call_count = {"token": 0}
+
+        async def mock_get_token(session: Session, article_key: str) -> str:
+            call_count["token"] += 1
+            return "token123"
+
+        with (
+            patch(
+                "note_mcp.api.preview.get_preview_access_token",
+                side_effect=mock_get_token,
+            ),
+            patch("note_mcp.api.preview.build_preview_url", return_value="https://note.com/preview/test"),
+            patch("httpx.AsyncClient") as mock_client_class,
+        ):
+            mock_response_500 = MagicMock()
+            mock_response_500.status_code = 500
+            mock_response_500.is_success = False
+
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response_500
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await get_preview_html(mock_session, "n1234567890ab")
+
+            # Should only try once for non-auth errors
+            assert call_count["token"] == 1, "Should have fetched token only once"
+            assert exc_info.value.code == ErrorCode.API_ERROR
+
+    @pytest.mark.asyncio
+    async def test_raises_after_retry_fails(self, mock_session: Session) -> None:
+        """get_preview_html should raise error if retry also fails."""
+        from note_mcp.api.preview import get_preview_html
+
+        call_count = {"token": 0}
+
+        async def mock_get_token(session: Session, article_key: str) -> str:
+            call_count["token"] += 1
+            return f"token_{call_count['token']}"
+
+        with (
+            patch(
+                "note_mcp.api.preview.get_preview_access_token",
+                side_effect=mock_get_token,
+            ),
+            patch("note_mcp.api.preview.build_preview_url", return_value="https://note.com/preview/test"),
+            patch("httpx.AsyncClient") as mock_client_class,
+        ):
+            # Both attempts return 401
+            mock_response_401 = MagicMock()
+            mock_response_401.status_code = 401
+            mock_response_401.is_success = False
+
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response_401
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await get_preview_html(mock_session, "n1234567890ab")
+
+            # Should have retried once
+            assert call_count["token"] == 2, "Should have fetched token twice"
+            assert exc_info.value.code == ErrorCode.API_ERROR
+
+
 class TestNoteGetPreviewHtmlTool:
     """Tests for note_get_preview_html MCP tool."""
 
