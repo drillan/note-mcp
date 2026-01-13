@@ -162,7 +162,11 @@ async def note_create_draft(
         tags=tags or [],
     )
 
-    article = await create_draft(session, article_input)
+    try:
+        article = await create_draft(session, article_input)
+    except NoteAPIError as e:
+        return f"記事作成に失敗しました: {e}"
+
     tag_info = f"、タグ: {', '.join(article.tags)}" if article.tags else ""
     return f"下書きを作成しました。ID: {article.id}、キー: {article.key}{tag_info}"
 
@@ -238,7 +242,11 @@ async def note_update_article(
         tags=tags or [],
     )
 
-    article = await update_article(session, article_id, article_input)
+    try:
+        article = await update_article(session, article_id, article_input)
+    except NoteAPIError as e:
+        return f"記事更新に失敗しました: {e}"
+
     tag_info = f"、タグ: {', '.join(article.tags)}" if article.tags else ""
     return f"記事を更新しました。ID: {article.id}{tag_info}"
 
@@ -414,19 +422,22 @@ async def note_publish_article(
         return "セッションが無効です。note_loginでログインしてください。"
 
     # Determine whether to publish existing or create new
-    if article_id is not None:
-        # Publish existing draft
-        article = await publish_article(session, article_id=article_id)
-    elif title is not None and body is not None:
-        # Create and publish new article
-        article_input = ArticleInput(
-            title=title,
-            body=body,
-            tags=tags or [],
-        )
-        article = await publish_article(session, article_input=article_input)
-    else:
-        return "article_idまたは（titleとbody）のいずれかを指定してください。"
+    try:
+        if article_id is not None:
+            # Publish existing draft
+            article = await publish_article(session, article_id=article_id)
+        elif title is not None and body is not None:
+            # Create and publish new article
+            article_input = ArticleInput(
+                title=title,
+                body=body,
+                tags=tags or [],
+            )
+            article = await publish_article(session, article_input=article_input)
+        else:
+            return "article_idまたは（titleとbody）のいずれかを指定してください。"
+    except NoteAPIError as e:
+        return f"記事公開に失敗しました: {e}"
 
     url_info = f"、URL: {article.url}" if article.url else ""
     return f"記事を公開しました。ID: {article.id}{url_info}"
@@ -462,7 +473,10 @@ async def note_list_articles(
         except ValueError:
             return f"無効なステータスです: {status}。draft/published/allのいずれかを指定してください。"
 
-    result = await list_articles(session, status=status_filter, page=page, limit=limit)
+    try:
+        result = await list_articles(session, status=status_filter, page=page, limit=limit)
+    except NoteAPIError as e:
+        return f"記事一覧の取得に失敗しました: {e}"
 
     if not result.articles:
         return "記事が見つかりませんでした。"
