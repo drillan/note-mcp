@@ -10,7 +10,7 @@ Modules:
     image_utils: Test image creation and image validation utilities
 """
 
-from .article_helpers import extract_article_id, extract_article_key
+from .article_helpers import extract_article_id, extract_article_key, get_article_html
 from .constants import (
     DEFAULT_ELEMENT_WAIT_TIMEOUT_MS,
     DEFAULT_NAVIGATION_TIMEOUT_MS,
@@ -29,6 +29,7 @@ __all__ = [
     "DEFAULT_NAVIGATION_TIMEOUT_MS",
     "extract_article_id",
     "extract_article_key",
+    "get_article_html",
     "HtmlValidator",
     "ImageValidationResult",
     "ImageValidator",
