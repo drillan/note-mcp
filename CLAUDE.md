@@ -130,18 +130,14 @@ note.comのエディタ（ProseMirror）でMarkdownパターンをHTMLに変換�
 | `~~text~~.` (句読点) | ❌ 変換されない |
 | `~~text~~` (トリガーなし) | ❌ 変換されない |
 
-**実装パターン（`typing_helpers.py`）:**
-```python
-# ~~text~~ をタイプ後、スペースで変換をトリガー
-await page.keyboard.type(f"~~{content}~~")
-await page.keyboard.type(" ")  # 変換トリガー
-await asyncio.sleep(0.1)       # 変換待機
-# 不要なスペースはバックスペースで削除
-if has_more_content:
-    await page.keyboard.press("Backspace")
-```
+**現在のアーキテクチャ:**
 
-**注意**: タイピング速度やdelay引数は変換に影響しません。スペースがトリガーです。
+note.comへのコンテンツ送信はAPI経由（`markdown_to_html.py`）で行われます。
+ブラウザ自動化によるタイピング（旧`typing_helpers.py`）は削除されました。
+
+上記のトリガーパターンは、**ブラウザエディタでの手動入力時の挙動**として
+参考情報として残しています。API経由での送信では、HTMLを直接生成するため
+これらのトリガーパターンは関係しません。
 
 ### Link Insertion (UI Required)
 

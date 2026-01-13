@@ -4,8 +4,8 @@ This module provides functions to insert embeds (YouTube, Twitter, note.com arti
 at placeholder positions in the note.com ProseMirror editor.
 
 Workflow:
-1. typing_helpers.py detects embed URLs and inserts placeholders (§§EMBED:url§§)
-2. This module finds all placeholders and replaces them with actual embeds
+1. markdown_to_html.py converts embed URLs to native figure elements via API
+2. This module handles legacy placeholder-based embeds (§§EMBED:url§§) if present
 3. insert_embed.py handles the browser automation for embed insertion
 """
 
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # note.com editor selectors
 _EDITOR_SELECTOR = ".ProseMirror"
 
-# Placeholder markers (must match typing_helpers.py)
+# Placeholder markers used for embed insertion
 _EMBED_PLACEHOLDER_START = "§§EMBED:"
 _EMBED_PLACEHOLDER_END = "§§"
 

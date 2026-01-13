@@ -14,11 +14,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from tests.e2e.helpers import (
-    PreviewValidator,
-    save_and_open_preview,
-    type_markdown_pattern,
-)
+from note_mcp.api.articles import update_article
+from note_mcp.models import ArticleInput
+from tests.e2e.helpers import PreviewValidator
 
 if TYPE_CHECKING:
     from playwright.async_api import Page
@@ -43,7 +41,7 @@ class TestBlockquoteContentStructure:
         self,
         real_session: Session,
         draft_article: Article,
-        editor_page: Page,
+        preview_page: Page,
     ) -> None:
         """引用ブロック後のコンテンツが引用外に配置される。
 
@@ -59,17 +57,21 @@ class TestBlockquoteContentStructure:
         citation = "テストドキュメント"
         heading_text = "引用後の見出し"
 
-        # Act: 引用ブロックと出典、その後に見出しを入力
-        # Markdown形式: > 引用\n> — 出典\n\n## 見出し
+        # Create article with blockquote, citation, and heading after
         markdown_content = f"""> {quote_text}
 > — {citation}
 
 ## {heading_text}"""
 
-        await type_markdown_pattern(editor_page, markdown_content)
+        article_input = ArticleInput(
+            title=draft_article.title,
+            body=markdown_content,
+        )
+        await update_article(real_session, draft_article.id, article_input)
 
-        # Save and open preview
-        preview_page = await save_and_open_preview(editor_page)
+        # Refresh preview
+        await preview_page.reload()
+        await preview_page.wait_for_load_state("domcontentloaded")
 
         # Assert: 引用ブロックと見出しの検証
         validator = PreviewValidator(preview_page)
@@ -95,7 +97,7 @@ class TestBlockquoteContentStructure:
         self,
         real_session: Session,
         draft_article: Article,
-        editor_page: Page,
+        preview_page: Page,
     ) -> None:
         """引用ブロック後の段落が引用外に配置される。
 
@@ -106,16 +108,21 @@ class TestBlockquoteContentStructure:
         citation = "出典"
         paragraph_text = "これは引用後の段落です"
 
-        # Act: 引用ブロックと出典、その後に段落を入力
+        # Create article with blockquote, citation, and paragraph after
         markdown_content = f"""> {quote_text}
 > — {citation}
 
 {paragraph_text}"""
 
-        await type_markdown_pattern(editor_page, markdown_content)
+        article_input = ArticleInput(
+            title=draft_article.title,
+            body=markdown_content,
+        )
+        await update_article(real_session, draft_article.id, article_input)
 
-        # Save and open preview
-        preview_page = await save_and_open_preview(editor_page)
+        # Refresh preview
+        await preview_page.reload()
+        await preview_page.wait_for_load_state("domcontentloaded")
 
         # Assert
         validator = PreviewValidator(preview_page)

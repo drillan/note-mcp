@@ -15,14 +15,32 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+from playwright.async_api import Page
 
 from note_mcp.browser.insert_link import LinkResult, insert_link_at_cursor
-from tests.e2e.helpers import PreviewValidator, save_and_open_preview
+from tests.e2e.helpers import PreviewValidator
+from tests.e2e.helpers.preview_helpers import open_preview_for_article_key
 
 if TYPE_CHECKING:
-    from playwright.async_api import Page
-
     from note_mcp.models import Article, Session
+
+
+async def _save_and_open_preview(editor_page: Page) -> Page:
+    """Save article and open preview (local helper).
+
+    This helper is local to test_insert_link.py because it tests
+    UI-based link insertion that requires editor_page.
+    """
+    # Save with Ctrl+S
+    await editor_page.keyboard.press("Control+s")
+    await editor_page.wait_for_timeout(1000)
+
+    # Get article key from URL and open preview
+    url = editor_page.url
+    # URL format: .../notes/{key}/edit/
+    key = url.split("/")[-2]
+    return await open_preview_for_article_key(editor_page, key)
+
 
 pytestmark = [
     pytest.mark.e2e,
@@ -179,7 +197,7 @@ class TestInsertLinkPreview:
         assert result == LinkResult.SUCCESS, f"Link insertion failed: {debug}"
 
         # Save and open preview
-        preview_page = await save_and_open_preview(editor_page)
+        preview_page = await _save_and_open_preview(editor_page)
 
         # Assert: Validate on preview page
         validator = PreviewValidator(preview_page)

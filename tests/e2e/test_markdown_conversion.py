@@ -207,3 +207,304 @@ class TestTextAlignment:
 
         # Assert
         assert result.success, f"Right alignment failed: {result.message}"
+
+
+class TestBoldConversion:
+    """Tests for bold text conversion."""
+
+    async def test_bold_conversion(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        preview_page: Page,
+    ) -> None:
+        """**text** → <strong>text</strong>"""
+        # Arrange: Update article with bold text
+        test_text = "太字テキスト"
+        article_input = ArticleInput(
+            title=draft_article.title,
+            body=f"通常テキスト **{test_text}** 後続テキスト",
+        )
+        await update_article(real_session, draft_article.id, article_input)
+
+        # Refresh preview
+        await preview_page.reload()
+        await preview_page.wait_for_load_state("domcontentloaded")
+
+        # Act: Validate bold
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_bold(test_text)
+
+        # Assert
+        assert result.success, f"Bold conversion failed: {result.message}"
+
+
+class TestBlockquoteConversion:
+    """Tests for blockquote conversion."""
+
+    async def test_blockquote_conversion(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        preview_page: Page,
+    ) -> None:
+        """> text → <blockquote>text</blockquote>"""
+        # Arrange: Update article with blockquote
+        quote_text = "引用テキストです"
+        article_input = ArticleInput(
+            title=draft_article.title,
+            body=f"> {quote_text}\n\n後続テキスト",
+        )
+        await update_article(real_session, draft_article.id, article_input)
+
+        # Refresh preview
+        await preview_page.reload()
+        await preview_page.wait_for_load_state("domcontentloaded")
+
+        # Act: Validate blockquote
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_blockquote(quote_text)
+
+        # Assert
+        assert result.success, f"Blockquote conversion failed: {result.message}"
+
+    async def test_blockquote_with_citation(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        preview_page: Page,
+    ) -> None:
+        """> text\\n> — source → <blockquote> with <figcaption>"""
+        # Arrange: Update article with blockquote and citation
+        quote_text = "これは引用テキストです"
+        citation = "テストドキュメント"
+        article_input = ArticleInput(
+            title=draft_article.title,
+            body=f"> {quote_text}\n> — {citation}\n\n後続テキスト",
+        )
+        await update_article(real_session, draft_article.id, article_input)
+
+        # Refresh preview
+        await preview_page.reload()
+        await preview_page.wait_for_load_state("domcontentloaded")
+
+        # Act: Validate blockquote (citation is inside figcaption)
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_blockquote(quote_text)
+
+        # Assert
+        assert result.success, f"Blockquote with citation failed: {result.message}"
+
+
+class TestListConversion:
+    """Tests for list conversion."""
+
+    async def test_unordered_list_single_item(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        preview_page: Page,
+    ) -> None:
+        """- item → <ul><li>item</li></ul>"""
+        # Arrange: Update article with single unordered list item
+        items = ["単一項目"]
+        body = "\n".join(f"- {item}" for item in items) + "\n\n後続テキスト"
+        article_input = ArticleInput(title=draft_article.title, body=body)
+        await update_article(real_session, draft_article.id, article_input)
+
+        # Refresh preview
+        await preview_page.reload()
+        await preview_page.wait_for_load_state("domcontentloaded")
+
+        # Act: Validate unordered list
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_unordered_list(items)
+
+        # Assert
+        assert result.success, f"Unordered list failed: {result.message}"
+
+    async def test_unordered_list_multiple_items(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        preview_page: Page,
+    ) -> None:
+        """Multiple - items → <ul><li>...</li><li>...</li></ul>"""
+        # Arrange: Update article with multiple unordered list items
+        items = ["項目1", "項目2", "項目3"]
+        body = "\n".join(f"- {item}" for item in items) + "\n\n後続テキスト"
+        article_input = ArticleInput(title=draft_article.title, body=body)
+        await update_article(real_session, draft_article.id, article_input)
+
+        # Refresh preview
+        await preview_page.reload()
+        await preview_page.wait_for_load_state("domcontentloaded")
+
+        # Act: Validate unordered list
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_unordered_list(items)
+
+        # Assert
+        assert result.success, f"Unordered list with multiple items failed: {result.message}"
+
+    async def test_ordered_list_single_item(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        preview_page: Page,
+    ) -> None:
+        """1. item → <ol><li>item</li></ol>"""
+        # Arrange: Update article with single ordered list item
+        items = ["番号付き単一項目"]
+        body = "\n".join(f"{i + 1}. {item}" for i, item in enumerate(items)) + "\n\n後続"
+        article_input = ArticleInput(title=draft_article.title, body=body)
+        await update_article(real_session, draft_article.id, article_input)
+
+        # Refresh preview
+        await preview_page.reload()
+        await preview_page.wait_for_load_state("domcontentloaded")
+
+        # Act: Validate ordered list
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_ordered_list(items)
+
+        # Assert
+        assert result.success, f"Ordered list failed: {result.message}"
+
+    async def test_ordered_list_multiple_items(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        preview_page: Page,
+    ) -> None:
+        """Multiple numbered items → <ol><li>...</li><li>...</li></ol>"""
+        # Arrange: Update article with multiple ordered list items
+        items = ["最初の項目", "2番目の項目", "3番目の項目"]
+        body = "\n".join(f"{i + 1}. {item}" for i, item in enumerate(items)) + "\n\n後続"
+        article_input = ArticleInput(title=draft_article.title, body=body)
+        await update_article(real_session, draft_article.id, article_input)
+
+        # Refresh preview
+        await preview_page.reload()
+        await preview_page.wait_for_load_state("domcontentloaded")
+
+        # Act: Validate ordered list
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_ordered_list(items)
+
+        # Assert
+        assert result.success, f"Ordered list with multiple items failed: {result.message}"
+
+
+class TestHorizontalLineConversion:
+    """Tests for horizontal line conversion."""
+
+    async def test_horizontal_line(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        preview_page: Page,
+    ) -> None:
+        """--- → <hr>"""
+        # Arrange: Update article with horizontal line
+        article_input = ArticleInput(
+            title=draft_article.title,
+            body="前のテキスト\n\n---\n\n後のテキスト",
+        )
+        await update_article(real_session, draft_article.id, article_input)
+
+        # Refresh preview
+        await preview_page.reload()
+        await preview_page.wait_for_load_state("domcontentloaded")
+
+        # Act: Validate horizontal line
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_horizontal_line()
+
+        # Assert
+        assert result.success, f"Horizontal line conversion failed: {result.message}"
+
+
+class TestLinkConversion:
+    """Tests for link conversion."""
+
+    async def test_link_conversion(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        preview_page: Page,
+    ) -> None:
+        """[text](url) → <a href="url">text</a>"""
+        # Arrange: Update article with link
+        link_text = "リンクテキスト"
+        link_url = "https://example.com"
+        article_input = ArticleInput(
+            title=draft_article.title,
+            body=f"テキスト [{link_text}]({link_url}) 後続",
+        )
+        await update_article(real_session, draft_article.id, article_input)
+
+        # Refresh preview
+        await preview_page.reload()
+        await preview_page.wait_for_load_state("domcontentloaded")
+
+        # Act: Validate link
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_link(link_text, link_url)
+
+        # Assert
+        assert result.success, f"Link conversion failed: {result.message}"
+
+
+class TestTocConversion:
+    """Tests for TOC (Table of Contents) conversion."""
+
+    async def test_toc_with_headings(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        preview_page: Page,
+    ) -> None:
+        """[TOC] with headings → TOC element."""
+        # Arrange: Update article with TOC marker and headings
+        article_input = ArticleInput(
+            title=draft_article.title,
+            body="[TOC]\n\n## 見出し1\n\n本文1\n\n## 見出し2\n\n本文2",
+        )
+        await update_article(real_session, draft_article.id, article_input)
+
+        # Refresh preview
+        await preview_page.reload()
+        await preview_page.wait_for_load_state("domcontentloaded")
+
+        # Act: Validate TOC
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_toc()
+
+        # Assert
+        assert result.success, f"TOC conversion failed: {result.message}"
+
+    async def test_toc_without_headings_not_generated(
+        self,
+        real_session: Session,
+        draft_article: Article,
+        preview_page: Page,
+    ) -> None:
+        """[TOC] without headings → No TOC generated."""
+        # Arrange: Update article with TOC marker but no headings
+        article_input = ArticleInput(
+            title=draft_article.title,
+            body="[TOC]\n\n本文テキストのみ、見出しなし",
+        )
+        await update_article(real_session, draft_article.id, article_input)
+
+        # Refresh preview
+        await preview_page.reload()
+        await preview_page.wait_for_load_state("domcontentloaded")
+
+        # Act: Validate TOC (should not exist)
+        validator = PreviewValidator(preview_page)
+        result = await validator.validate_toc()
+
+        # Assert: TOC should NOT be generated without headings
+        assert not result.success, f"TOC should not be generated without headings, but found: {result.message}"

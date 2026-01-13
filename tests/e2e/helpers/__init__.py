@@ -10,7 +10,6 @@ Modules:
     validation: ValidationResult dataclass and PreviewValidator class
     prosemirror: ProseMirrorStabilizer for reliable editor interactions
     image_utils: Test image creation and image validation utilities
-    typing_helpers: Keyboard input helpers for ProseMirror
 """
 
 from .article_helpers import extract_article_id, extract_article_key
@@ -24,18 +23,6 @@ from .image_utils import ImageValidationResult, ImageValidator, create_test_png
 from .preview_helpers import open_preview_for_article_key, preview_page_context
 from .prosemirror import ProseMirrorStabilizer
 from .retry import with_retry
-from .typing_helpers import (
-    insert_toc_placeholder,
-    save_and_open_preview,
-    type_alignment,
-    type_blockquote,
-    type_code_block,
-    type_horizontal_line,
-    type_link,
-    type_markdown_pattern,
-    type_ordered_list,
-    type_unordered_list,
-)
 from .validation import PreviewValidator, ValidationResult
 
 __all__ = [
@@ -46,7 +33,6 @@ __all__ = [
     "extract_article_key",
     "ImageValidationResult",
     "ImageValidator",
-    "insert_toc_placeholder",
     "LOGIN_TIMEOUT_SECONDS",
     "NOTE_EDITOR_URL",
     "open_preview_for_article_key",
@@ -54,14 +40,5 @@ __all__ = [
     "PreviewValidator",
     "ProseMirrorStabilizer",
     "ValidationResult",
-    "save_and_open_preview",
-    "type_alignment",
-    "type_blockquote",
-    "type_code_block",
-    "type_horizontal_line",
-    "type_link",
-    "type_markdown_pattern",
-    "type_ordered_list",
-    "type_unordered_list",
     "with_retry",
 ]
