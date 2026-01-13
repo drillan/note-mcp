@@ -9,13 +9,52 @@ import httpx
 import pytest
 from playwright.async_api import Error as PlaywrightError
 
+from note_mcp.models import ErrorCode, NoteAPIError
 from tests.e2e.helpers.retry import (
     DEFAULT_BACKOFF_BASE,
     DEFAULT_MAX_ATTEMPTS,
     RETRYABLE_EXCEPTIONS,
+    is_access_denied_error,
     is_retryable,
     with_retry,
 )
+
+
+class TestIsAccessDeniedError:
+    """Tests for is_access_denied_error function."""
+
+    def test_403_note_api_error_returns_true(self) -> None:
+        """NoteAPIError with status_code 403 should return True."""
+        error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Access denied.",
+            details={"status_code": 403, "response": ""},
+        )
+        assert is_access_denied_error(error) is True
+
+    def test_non_403_note_api_error_returns_false(self) -> None:
+        """NoteAPIError with non-403 status_code should return False."""
+        error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Server error.",
+            details={"status_code": 500, "response": ""},
+        )
+        assert is_access_denied_error(error) is False
+
+    def test_note_api_error_without_status_code_returns_false(self) -> None:
+        """NoteAPIError without status_code in details should return False."""
+        error = NoteAPIError(
+            code=ErrorCode.INVALID_INPUT,
+            message="Invalid input.",
+            details={},
+        )
+        assert is_access_denied_error(error) is False
+
+    def test_other_exception_returns_false(self) -> None:
+        """Non-NoteAPIError exceptions should return False."""
+        assert is_access_denied_error(ValueError("error")) is False
+        assert is_access_denied_error(TimeoutError("timeout")) is False
+        assert is_access_denied_error(RuntimeError("runtime")) is False
 
 
 class TestIsRetryable:
@@ -69,6 +108,24 @@ class TestIsRetryable:
     def test_runtime_error_not_retryable(self) -> None:
         """RuntimeError should not be retryable."""
         assert not is_retryable(RuntimeError("error"))
+
+    def test_note_api_error_403_is_retryable(self) -> None:
+        """NoteAPIError with 403 status should be retryable."""
+        error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Access denied.",
+            details={"status_code": 403, "response": ""},
+        )
+        assert is_retryable(error)
+
+    def test_note_api_error_non_403_not_retryable(self) -> None:
+        """NoteAPIError with non-403 status should not be retryable."""
+        error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Server error.",
+            details={"status_code": 500, "response": ""},
+        )
+        assert not is_retryable(error)
 
 
 class TestWithRetry:
@@ -263,6 +320,37 @@ class TestWithRetry:
 
         assert "connection timed out" in caplog.text
         assert "Attempt 1/3 failed" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_retry_on_note_api_error_403(self) -> None:
+        """Should retry on NoteAPIError with 403 status and succeed."""
+        access_denied_error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Access denied.",
+            details={"status_code": 403, "response": ""},
+        )
+        mock_func = AsyncMock(side_effect=[access_denied_error, "success"])
+
+        with patch("tests.e2e.helpers.retry.asyncio.sleep", new_callable=AsyncMock):
+            result = await with_retry(mock_func)
+
+        assert result == "success"
+        assert mock_func.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_no_retry_on_note_api_error_non_403(self) -> None:
+        """Should not retry on NoteAPIError with non-403 status."""
+        server_error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Server error.",
+            details={"status_code": 500, "response": ""},
+        )
+        mock_func = AsyncMock(side_effect=server_error)
+
+        with pytest.raises(NoteAPIError, match="Server error."):
+            await with_retry(mock_func)
+
+        assert mock_func.call_count == 1
 
 
 class TestConstants:

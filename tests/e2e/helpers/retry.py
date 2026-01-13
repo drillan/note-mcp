@@ -14,6 +14,8 @@ from collections.abc import Awaitable, Callable
 import httpx
 from playwright.async_api import Error as PlaywrightError
 
+from note_mcp.models import NoteAPIError
+
 logger = logging.getLogger(__name__)
 
 # Retryable exception types
@@ -26,6 +28,21 @@ RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
 
 DEFAULT_MAX_ATTEMPTS: int = 3
 DEFAULT_BACKOFF_BASE: float = 1.0
+
+
+def is_access_denied_error(exception: Exception) -> bool:
+    """Check if exception is an Access Denied (403) error.
+
+    Args:
+        exception: The exception to check.
+
+    Returns:
+        True if the exception is a NoteAPIError with status_code 403.
+    """
+    if isinstance(exception, NoteAPIError):
+        status_code = exception.details.get("status_code")
+        return status_code == 403
+    return False
 
 
 def is_retryable(exception: Exception) -> bool:
@@ -46,7 +63,8 @@ def is_retryable(exception: Exception) -> bool:
         msg = str(exception).lower()
         return "timeout" in msg or "timed out" in msg
 
-    return False
+    # Access Denied (403) error - may be transient due to rate limiting
+    return is_access_denied_error(exception)
 
 
 async def with_retry[T](
