@@ -223,7 +223,7 @@ class TestNoteShowPreviewToolE2E:
         article_key = "n1234567890ab"
 
         with (
-            patch("note_mcp.server._session_manager.load", return_value=session),
+            patch("note_mcp.decorators._session_manager.load", return_value=session),
             patch(
                 "note_mcp.server.show_preview",
                 new_callable=AsyncMock,
@@ -250,7 +250,7 @@ class TestNoteGetPreviewHtmlToolE2E:
         mock_html = "<html><body><h1>Test Article</h1></body></html>"
 
         with (
-            patch("note_mcp.server._session_manager.load", return_value=session),
+            patch("note_mcp.decorators._session_manager.load", return_value=session),
             patch(
                 "note_mcp.server.get_preview_html",
                 new_callable=AsyncMock,

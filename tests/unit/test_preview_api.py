@@ -404,7 +404,7 @@ class TestNoteGetPreviewHtmlTool:
 
         with (
             patch(
-                "note_mcp.server._session_manager.load",
+                "note_mcp.decorators._session_manager.load",
                 return_value=mock_session,
             ),
             patch(
@@ -423,7 +423,7 @@ class TestNoteGetPreviewHtmlTool:
         """Tool should return error message when not logged in."""
         from note_mcp.server import note_get_preview_html
 
-        with patch("note_mcp.server._session_manager.load", return_value=None):
+        with patch("note_mcp.decorators._session_manager.load", return_value=None):
             fn = note_get_preview_html.fn
             result = await fn("n1234567890ab")
             assert "ログイン" in result
@@ -442,7 +442,7 @@ class TestNoteGetPreviewHtmlTool:
         )
 
         with patch(
-            "note_mcp.server._session_manager.load",
+            "note_mcp.decorators._session_manager.load",
             return_value=expired_session,
         ):
             fn = note_get_preview_html.fn
@@ -461,7 +461,7 @@ class TestNoteGetPreviewHtmlTool:
 
         with (
             patch(
-                "note_mcp.server._session_manager.load",
+                "note_mcp.decorators._session_manager.load",
                 return_value=mock_session,
             ),
             patch(
