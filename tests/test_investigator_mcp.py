@@ -85,7 +85,7 @@ class TestCaptureSessionManagerIntegration:
     """Integration tests for CaptureSessionManager."""
 
     @pytest.fixture(autouse=True)
-    def reset_manager(self) -> Generator[None, None, None]:
+    def reset_manager(self) -> Generator[None]:
         """Reset singleton state before and after each test."""
         # Reset before test
         CaptureSessionManager._instance = None
@@ -178,7 +178,7 @@ class TestDockerOnlyWorkflow:
     """
 
     @pytest.fixture(autouse=True)
-    async def cleanup(self) -> AsyncGenerator[None, None]:
+    async def cleanup(self) -> AsyncGenerator[None]:
         """Clean up session after test."""
         yield
         await CaptureSessionManager.close()

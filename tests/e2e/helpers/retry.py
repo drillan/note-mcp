@@ -10,14 +10,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from typing import TypeVar
 
 import httpx
 from playwright.async_api import Error as PlaywrightError
 
 logger = logging.getLogger(__name__)
-
-T = TypeVar("T")
 
 # Retryable exception types
 RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
@@ -52,7 +49,7 @@ def is_retryable(exception: Exception) -> bool:
     return False
 
 
-async def with_retry(
+async def with_retry[T](
     func: Callable[[], Awaitable[T]],
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     backoff_base: float = DEFAULT_BACKOFF_BASE,
