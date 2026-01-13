@@ -18,10 +18,9 @@ from note_mcp.api.articles import (
     publish_article,
     update_article,
 )
-from note_mcp.api.images import upload_body_image, upload_eyecatch_image
+from note_mcp.api.images import insert_image_via_api, upload_body_image, upload_eyecatch_image
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
-from note_mcp.browser.insert_image import insert_image_via_api
 from note_mcp.browser.preview import show_preview
 from note_mcp.investigator import register_investigator_tools
 from note_mcp.models import ArticleInput, ArticleStatus, NoteAPIError

@@ -1,14 +1,12 @@
 """Helper modules for E2E testing.
 
 This package provides utilities for validating Markdown-to-HTML
-conversion on note.com's preview pages, and for stable ProseMirror
-editor interactions.
+conversion on note.com's preview pages.
 
 Modules:
     article_helpers: Extract article metadata from MCP tool results
     preview_helpers: Preview page navigation utilities
     validation: ValidationResult dataclass and PreviewValidator class
-    prosemirror: ProseMirrorStabilizer for reliable editor interactions
     image_utils: Test image creation and image validation utilities
 """
 
@@ -21,7 +19,6 @@ from .constants import (
 )
 from .image_utils import ImageValidationResult, ImageValidator, create_test_png
 from .preview_helpers import open_preview_for_article_key, preview_page_context
-from .prosemirror import ProseMirrorStabilizer
 from .retry import with_retry
 from .validation import PreviewValidator, ValidationResult
 
@@ -38,7 +35,6 @@ __all__ = [
     "open_preview_for_article_key",
     "preview_page_context",
     "PreviewValidator",
-    "ProseMirrorStabilizer",
     "ValidationResult",
     "with_retry",
 ]
