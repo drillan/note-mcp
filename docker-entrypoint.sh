@@ -36,10 +36,11 @@ log_error() {
 cleanup() {
     log_info "Cleaning up..."
 
-    # Kill VNC server if running
-    if [ -n "$VNC_PID" ]; then
-        kill $VNC_PID 2>/dev/null || true
-    fi
+    # Kill VNC server if running (started with setsid, so use pkill)
+    pkill -x Xvnc 2>/dev/null || true
+
+    # Kill websockify if running
+    pkill -x websockify 2>/dev/null || true
 
     # Kill Xvfb if running
     if [ -n "$XVFB_PID" ]; then
@@ -100,8 +101,9 @@ start_vnc() {
     echo "" | vncpasswd -f > ~/.vnc/passwd 2>/dev/null || true
     chmod 600 ~/.vnc/passwd 2>/dev/null || true
 
-    # Start TigerVNC server
-    Xvnc :${display_num} \
+    # Start TigerVNC server in a new session (setsid) so it survives exec
+    # This ensures Xvnc continues running even after the shell is replaced
+    setsid Xvnc :${display_num} \
         -geometry 1920x1080 \
         -depth 24 \
         -rfbport ${rfb_port} \
@@ -109,25 +111,31 @@ start_vnc() {
         -localhost no \
         -alwaysshared \
         -AcceptSetDesktopSize \
-        &
-    VNC_PID=$!
-
-    sleep 1
+        </dev/null >/dev/null 2>&1 &
 
     # Update DISPLAY to use VNC display
     export DISPLAY=:${display_num}
 
-    # Start noVNC (web-based VNC client)
-    websockify --web=/usr/share/novnc/ ${novnc_port} localhost:${rfb_port} &
-    NOVNC_PID=$!
+    # Wait for Xvnc to start and verify it's running
+    local max_wait=10
+    local waited=0
+    while ! xdpyinfo -display $DISPLAY >/dev/null 2>&1; do
+        if [ $waited -ge $max_wait ]; then
+            log_error "TigerVNC failed to start within ${max_wait} seconds"
+            exit 1
+        fi
+        sleep 0.5
+        waited=$((waited + 1))
+    done
 
-    if pgrep -x Xvnc > /dev/null; then
-        log_info "TigerVNC server started on port $port"
-        log_info "Connect with: vncviewer localhost:$port"
-        log_info "Or use noVNC: http://localhost:${novnc_port}/vnc.html"
-    else
-        log_warn "TigerVNC server may not have started correctly"
-    fi
+    log_info "TigerVNC server started on display $DISPLAY (port $port)"
+
+    # Start noVNC (web-based VNC client) in a new session
+    setsid websockify --web=/usr/share/novnc/ ${novnc_port} localhost:${rfb_port} \
+        </dev/null >/dev/null 2>&1 &
+
+    log_info "Connect with: vncviewer localhost:$port"
+    log_info "Or use noVNC: http://localhost:${novnc_port}/vnc.html"
 }
 
 # =============================================================================

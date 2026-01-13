@@ -52,7 +52,11 @@ def main() -> None:
     from note_mcp.server import mcp
 
     if args.http:
-        mcp.run(transport="http", host=args.host, port=args.port)
+        # stateless_http=True to avoid session ID management issues
+        # when the server is restarted (e.g., container restart).
+        # Application-level session state (CaptureSessionManager) is
+        # independent of HTTP transport session management.
+        mcp.run(transport="http", host=args.host, port=args.port, stateless_http=True)
     else:
         mcp.run()
 
