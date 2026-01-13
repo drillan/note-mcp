@@ -247,10 +247,13 @@ Both should appear as embed cards."""
         article_key = extract_article_key(result)
         article_html = await get_article_html(article_key)
 
+        # Issue #171: URL in paragraph should remain as plain text (not converted)
         # URL should remain as plain text, not figure (in raw HTML)
         assert 'embedded-service="youtube"' not in article_html
         # URL should be in the paragraph as plain text (not converted to anchor)
         assert youtube_url in article_html
+        # Explicitly verify NOT in anchor tag
+        assert f'href="{youtube_url}"' not in article_html
 
     async def test_embed_as_markdown_link_not_converted(
         self,

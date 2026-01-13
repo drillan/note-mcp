@@ -471,10 +471,10 @@ class TestTocConversion:
         draft_article: Article,
         preview_page: Page,
     ) -> None:
-        """[TOC] without headings → Empty TOC element is generated.
+        """[TOC] without headings → TOC element is still generated.
 
         note.com generates a <table-of-contents> element even when there are no headings.
-        The element will be empty (no list items) but it will still exist.
+        This test verifies that the element exists (not that it's empty).
         """
         # Arrange: Update article with TOC marker but no headings
         article_input = ArticleInput(
