@@ -3,10 +3,22 @@
 Provides common functionality for MCP tool handlers:
 - Session validation
 - API error handling
+
+Decorator Order:
+    When combining decorators, apply in this order (outermost first):
+
+        @handle_api_error   # Catches NoteAPIError from the inner function
+        @require_session    # Validates session before calling handler
+        async def handler(session: Session, ...) -> str:
+            ...
+
+    This ensures session validation happens first, then API errors
+    are caught and formatted.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from functools import wraps
 from typing import TYPE_CHECKING, Concatenate
@@ -17,11 +29,14 @@ from note_mcp.models import NoteAPIError
 if TYPE_CHECKING:
     from note_mcp.models import Session
 
-# Session manager instance (shared with server.py)
+logger = logging.getLogger(__name__)
+
+# Session manager instance for decorators
+# (SessionManager uses persistent storage, so multiple instances are safe)
 _session_manager = SessionManager()
 
 
-def require_session[**P, R](
+def require_session[**P](
     func: Callable[Concatenate[Session, P], Awaitable[str]],
 ) -> Callable[P, Awaitable[str]]:
     """Decorator to validate session before executing handler.
@@ -79,6 +94,13 @@ def handle_api_error[**P](
         try:
             return await func(*args, **kwargs)
         except NoteAPIError as e:
-            return f"エラー: {e}"
+            logger.error(
+                "NoteAPIError in %s: code=%s, message=%s",
+                func.__name__,
+                e.code.value,
+                e.message,
+                exc_info=True,
+            )
+            return f"エラー [{e.code.value}]: {e.message}"
 
     return wrapper

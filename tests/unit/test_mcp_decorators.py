@@ -120,7 +120,7 @@ class TestHandleApiErrorDecorator:
 
         result = await mock_handler("test_value")
 
-        assert result == "エラー: API failed"
+        assert result == "エラー [api_error]: API failed"
 
     @pytest.mark.asyncio
     async def test_handle_api_error_propagates_other_exceptions(self) -> None:
@@ -181,7 +181,7 @@ class TestCombinedDecorators:
 
             result = await mock_handler("test_value")
 
-        assert result == "エラー: Upload failed"
+        assert result == "エラー [upload_failed]: Upload failed"
 
     @pytest.mark.asyncio
     async def test_combined_decorators_no_session_flow(self) -> None:
@@ -219,7 +219,7 @@ class TestCombinedDecorators:
             result = await mock_handler("test_value")
 
         # Should get the error message, not raise an exception
-        assert result == "エラー: Test error"
+        assert result == "エラー [api_error]: Test error"
 
 
 class TestDecoratorPreservesMetadata:
