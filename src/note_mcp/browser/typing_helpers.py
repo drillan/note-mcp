@@ -78,9 +78,6 @@ _MATH_INLINE_PATTERN = re.compile(r"\$\$\{(.+?)\}\$\$", re.DOTALL)
 _MATH_DISPLAY_PATTERN = re.compile(r"\$\$([^{].*?)\$\$", re.DOTALL)
 # Horizontal line pattern: --- (must be standalone line)
 _HR_PATTERN = re.compile(r"^---$")
-# Ruby notation pattern: ｜漢字《かんじ》 or |漢字《かんじ》 or 漢字《かんじ》
-# Note: Vertical bar is REQUIRED by note.com, but pattern accepts omission for detection
-_RUBY_PATTERN = re.compile(r"[｜|]?([一-龯ぁ-んァ-ヶー]+)《([^》]+)》")
 # TOC pattern: [TOC] alone on a line
 _TOC_PATTERN = re.compile(r"^\[TOC\]$")
 # TOC placeholder for browser insertion (text marker, not HTML comment)
@@ -215,50 +212,6 @@ async def _type_with_inline_pattern(
         await page.keyboard.press("Backspace")
 
     return remaining
-
-
-async def _type_with_ruby(page: Any, text: str) -> str:
-    """Process ruby notation patterns ｜漢字《かんじ》 - Issue #110 Problem 3.
-
-    note.com requires the vertical bar (｜ or |) before kanji for ruby to work.
-    This function ensures the vertical bar is present and types the ruby notation
-    correctly.
-
-    Args:
-        page: Playwright page object
-        text: Text that may contain ruby notation patterns
-
-    Returns:
-        Remaining text after first ruby is processed, or empty string if no match.
-    """
-    match = _RUBY_PATTERN.search(text)
-    if not match:
-        await page.keyboard.type(text)
-        return ""
-
-    # Type text before ruby
-    before = text[: match.start()]
-    if before:
-        await page.keyboard.type(before)
-
-    # Extract ruby components
-    kanji = match.group(1)
-    reading = match.group(2)
-
-    # Type ruby with vertical bar (required by note.com)
-    # Check if the match already includes a vertical bar
-    full_match = match.group(0)
-    if full_match.startswith("｜") or full_match.startswith("|"):
-        # Vertical bar already present, type as-is
-        await page.keyboard.type(full_match)
-    else:
-        # Add full-width vertical bar for note.com compatibility
-        await page.keyboard.type(f"｜{kanji}《{reading}》")
-
-    logger.debug(f"Typed ruby: {kanji}《{reading}》")
-
-    # Return remaining text
-    return text[match.end() :]
 
 
 async def _insert_image_via_prosemirror(page: Any, image_url: str, alt_text: str) -> bool:
@@ -515,7 +468,6 @@ async def _type_with_inline_formatting(page: Any, text: str) -> None:
     - Math formulas $${...}$$ and $$...$$ - processed first (Issue #101)
     - Images ![alt](url) - processed before links (Issue #110)
     - Links [text](url) - bracket/parenthesis delimited
-    - Ruby ｜漢字《かんじ》 - processed for note.com (Issue #110)
     - Bold **text** - double asterisk
     - Strikethrough ~~text~~ - double tilde
 
@@ -552,13 +504,6 @@ async def _type_with_inline_formatting(page: Any, text: str) -> None:
     # Check for link pattern
     if _LINK_PATTERN.search(text):
         remaining = await _type_with_link(page, text)
-        if remaining:
-            await _type_with_inline_formatting(page, remaining)
-        return
-
-    # Check for ruby pattern (Issue #110)
-    if _RUBY_PATTERN.search(text):
-        remaining = await _type_with_ruby(page, text)
         if remaining:
             await _type_with_inline_formatting(page, remaining)
         return

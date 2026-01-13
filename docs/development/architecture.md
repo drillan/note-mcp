@@ -103,7 +103,7 @@ from note_mcp.utils.markdown_to_html import markdown_to_html
 html = markdown_to_html("# タイトル\n本文")
 ```
 
-変換時にルビ記法や数式記法も処理されます。
+変換時に数式記法も処理されます。
 
 #### 目次（TOC）機能
 

@@ -21,14 +21,11 @@ from note_mcp.api.articles import (
 from note_mcp.api.images import upload_body_image, upload_eyecatch_image
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
-from note_mcp.browser.create_draft import create_draft_via_browser
 from note_mcp.browser.insert_image import insert_image_via_api
 from note_mcp.browser.preview import show_preview
-from note_mcp.browser.update_article import update_article_via_browser
 from note_mcp.investigator import register_investigator_tools
 from note_mcp.models import ArticleInput, ArticleStatus, NoteAPIError
 from note_mcp.utils.file_parser import parse_markdown_file
-from note_mcp.utils.markdown_to_html import has_ruby_notation
 
 # Create MCP server instance
 mcp = FastMCP("note-mcp")
@@ -146,10 +143,6 @@ async def note_create_draft(
 
     Markdown形式の本文をHTMLに変換してnote.comに送信します。
     blockquote内の引用（— 出典名）はfigcaptionに自動入力されます。
-    作成後、ブラウザでプレビューを表示します。
-
-    [TOC]マーカーを含む記事は目次を自動挿入するため、
-    ブラウザ自動化を使用して作成されます。
 
     Args:
         title: 記事のタイトル
@@ -169,41 +162,13 @@ async def note_create_draft(
         tags=tags or [],
     )
 
-    # Use browser-based creation for articles with ruby notation
-    # Ruby requires browser automation for server-side conversion
-    # Note: Embed URLs are now handled via API (Issue #116)
-    # Note: Math formulas are now handled via API (Issue #117) - text preserved and rendered on preview
-    # Note: TOC is now handled via API (Issue #117) - <table-of-contents> element preserved
-    toc_info = ""
-    embed_info = ""
-    use_browser = has_ruby_notation(body)
-
-    if use_browser:
-        result = await create_draft_via_browser(session, article_input)
-        article = result.article
-        # Add TOC status to response
-        if result.toc_inserted:
-            toc_info = "、目次: 挿入済み"
-        elif result.toc_error:
-            toc_info = f"、目次: 挿入失敗（{result.toc_error}）"
-        elif result.toc_inserted is None:
-            pass  # TOC not attempted (no placeholder found after typing)
-        # Add embed status to response
-        if result.embeds_inserted is not None and result.embeds_inserted > 0:
-            embed_info = f"、埋め込み: {result.embeds_inserted}件"
-        elif result.embed_error:
-            embed_info = f"、埋め込み: 失敗（{result.embed_error}）"
-        # Add debug info if present
-        debug_info = f"、DEBUG: {result.debug_info}" if result.debug_info else ""
-    else:
+    try:
         article = await create_draft(session, article_input)
-        # Note: Preview is NOT automatically shown for API-created articles
-        # because the editor's auto-save corrupts embed HTML (Issue #116).
-        # Use note_show_preview explicitly if needed.
-        debug_info = ""
+    except NoteAPIError as e:
+        return f"記事作成に失敗しました: {e}"
 
     tag_info = f"、タグ: {', '.join(article.tags)}" if article.tags else ""
-    return f"下書きを作成しました。ID: {article.id}、キー: {article.key}{tag_info}{toc_info}{embed_info}{debug_info}"
+    return f"下書きを作成しました。ID: {article.id}、キー: {article.key}{tag_info}"
 
 
 @mcp.tool()
@@ -258,9 +223,6 @@ async def note_update_article(
     編集前にnote_get_articleで既存内容を取得することを推奨します。
     Markdown形式の本文をHTMLに変換してnote.comに送信します。
 
-    [TOC]マーカーを含む記事は目次を自動挿入するため、
-    ブラウザ自動化を使用して更新されます。
-
     Args:
         article_id: 更新する記事のID
         title: 新しいタイトル
@@ -280,33 +242,13 @@ async def note_update_article(
         tags=tags or [],
     )
 
-    # Use browser-based update for articles with ruby notation
-    # Ruby requires browser automation for server-side conversion
-    # Note: Embed URLs are now handled via API (Issue #116)
-    # Note: Math formulas are now handled via API (Issue #117) - text preserved and rendered on preview
-    # Note: TOC is now handled via API (Issue #117) - <table-of-contents> element preserved
-    toc_info = ""
-    embed_info = ""
-    use_browser = has_ruby_notation(body)
-
-    if use_browser:
-        result = await update_article_via_browser(session, article_id, article_input)
-        article = result.article
-        # Add TOC status to response
-        if result.toc_inserted:
-            toc_info = "、目次: 挿入済み"
-        elif result.toc_error:
-            toc_info = f"、目次: 挿入失敗（{result.toc_error}）"
-        # Add embed status to response
-        if result.embeds_inserted is not None and result.embeds_inserted > 0:
-            embed_info = f"、埋め込み: {result.embeds_inserted}件"
-        elif result.embed_error:
-            embed_info = f"、埋め込み: 失敗（{result.embed_error}）"
-    else:
+    try:
         article = await update_article(session, article_id, article_input)
+    except NoteAPIError as e:
+        return f"記事更新に失敗しました: {e}"
 
     tag_info = f"、タグ: {', '.join(article.tags)}" if article.tags else ""
-    return f"記事を更新しました。ID: {article.id}{tag_info}{toc_info}{embed_info}"
+    return f"記事を更新しました。ID: {article.id}{tag_info}"
 
 
 @mcp.tool()
@@ -480,19 +422,22 @@ async def note_publish_article(
         return "セッションが無効です。note_loginでログインしてください。"
 
     # Determine whether to publish existing or create new
-    if article_id is not None:
-        # Publish existing draft
-        article = await publish_article(session, article_id=article_id)
-    elif title is not None and body is not None:
-        # Create and publish new article
-        article_input = ArticleInput(
-            title=title,
-            body=body,
-            tags=tags or [],
-        )
-        article = await publish_article(session, article_input=article_input)
-    else:
-        return "article_idまたは（titleとbody）のいずれかを指定してください。"
+    try:
+        if article_id is not None:
+            # Publish existing draft
+            article = await publish_article(session, article_id=article_id)
+        elif title is not None and body is not None:
+            # Create and publish new article
+            article_input = ArticleInput(
+                title=title,
+                body=body,
+                tags=tags or [],
+            )
+            article = await publish_article(session, article_input=article_input)
+        else:
+            return "article_idまたは（titleとbody）のいずれかを指定してください。"
+    except NoteAPIError as e:
+        return f"記事公開に失敗しました: {e}"
 
     url_info = f"、URL: {article.url}" if article.url else ""
     return f"記事を公開しました。ID: {article.id}{url_info}"
@@ -528,7 +473,10 @@ async def note_list_articles(
         except ValueError:
             return f"無効なステータスです: {status}。draft/published/allのいずれかを指定してください。"
 
-    result = await list_articles(session, status=status_filter, page=page, limit=limit)
+    try:
+        result = await list_articles(session, status=status_filter, page=page, limit=limit)
+    except NoteAPIError as e:
+        return f"記事一覧の取得に失敗しました: {e}"
 
     if not result.articles:
         return "記事が見つかりませんでした。"
@@ -592,15 +540,7 @@ async def note_create_from_file(
         tags=parsed.tags,
     )
 
-    # Ruby notation requires browser automation for server-side conversion
-    # Note: Embed URLs are now handled via API (Issue #116)
-    # Note: Math formulas are now handled via API (Issue #117) - text preserved and rendered on preview
-    # Note: TOC is now handled via API (Issue #117) - <table-of-contents> element preserved
-    needs_browser = has_ruby_notation(parsed.body)
-
     try:
-        # Always create draft via API first (Issue #111: API-based image upload)
-        # This ensures we have an article ID for image uploads before browser processing
         article = await create_draft(session, article_input)
 
         uploaded_count = 0
@@ -627,20 +567,14 @@ async def note_create_from_file(
                 else:
                     failed_images.append(f"{img.markdown_path}: ファイルが見つかりません")
 
-        # Update article with image URLs and special formatting
-        if uploaded_count > 0 or needs_browser:
+        # Update article with image URLs
+        if uploaded_count > 0:
             updated_input = ArticleInput(
                 title=parsed.title,
                 body=updated_body,
                 tags=parsed.tags,
             )
-            # Use browser path if TOC, math, or ruby processing is needed
-            # Images are already uploaded via API, so typing_helpers will handle
-            # note.com CDN URLs specially (no re-upload needed)
-            if needs_browser:
-                await update_article_via_browser(session, article.id, updated_input)
-            elif uploaded_count > 0:
-                await update_article(session, article.id, updated_input)
+            await update_article(session, article.id, updated_input)
 
         result_lines = [
             "✅ 下書きを作成しました",

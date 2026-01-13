@@ -11,7 +11,7 @@ note-mcpは、AIアシスタント（Claude Code、Claude Desktop等）からnot
 - 記事の作成・更新・公開
 - 画像のアップロード・挿入
 - セキュアな認証管理
-- ルビ・数式・目次記法のサポート
+- 数式・目次記法のサポート
 - API調査ツール（Investigatorモード）
 
 ## ドキュメント
@@ -39,7 +39,6 @@ api/investigator
 :caption: '機能詳細'
 :maxdepth: 2
 
-features/ruby
 features/math
 features/toc
 ```
