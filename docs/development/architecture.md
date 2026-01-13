@@ -16,15 +16,9 @@ src/note_mcp/
 │   ├── session.py     # セッションマネージャー
 │   ├── browser.py     # ブラウザログイン
 │   └── file_session.py # ファイルベースセッション
-├── browser/           # ブラウザ自動化
-│   ├── manager.py     # ブラウザマネージャー
-│   ├── create_draft.py # 下書き作成
-│   ├── get_article.py # 記事取得
-│   ├── update_article.py # 記事更新
+├── browser/           # ブラウザ操作（ログイン・プレビュー用）
+│   ├── manager.py     # ブラウザライフサイクル管理
 │   ├── preview.py     # プレビュー表示
-│   ├── insert_image.py # 画像挿入
-│   ├── toc_helpers.py # 目次挿入ヘルパー
-│   ├── typing_helpers.py # 入力ヘルパー
 │   └── url_helpers.py # URL操作ヘルパー
 ├── utils/             # ユーティリティ
 │   ├── markdown_to_html.py # Markdown→HTML変換
@@ -80,9 +74,10 @@ class NoteClient:
     async def put(self, path: str, data: dict) -> dict
 ```
 
-### ブラウザ自動化
+### ブラウザ操作
 
-Playwrightを使用してChromiumブラウザを操作します。
+Playwrightを使用したブラウザ操作は、**ログイン**と**プレビュー表示**のみに限定されています。
+コンテンツ操作（記事作成・更新・画像挿入等）はすべてAPI経由で行われます。
 
 ```
 BrowserManager (Singleton)
@@ -112,22 +107,16 @@ html = markdown_to_html("# タイトル\n本文")
 ```
 Markdown入力: [TOC]
     ↓
-テキストプレースホルダ: §§TOC§§
+HTML変換: note.com目次用のiframe埋め込みHTML
     ↓
-ブラウザ自動化でnote.com目次機能を挿入
+API経由で記事に保存
 ```
 
-プレースホルダはHTMLコメントではなく、テキストマーカー（`§§TOC§§`）を使用します。
-これはProseMirrorエディタでテキストノードとして認識される必要があるためです。
-
-`toc_helpers.py`がブラウザ操作を担当します：
-
-1. `has_toc_placeholder()` - エディタ内のプレースホルダを検出
-2. `insert_toc_at_placeholder()` - note.comの[+]ボタン→[目次]でTOC挿入
+目次はAPI経由でHTML形式で直接送信されます。
 
 #### 埋め込み（Embed）機能
 
-対応サービスのURLは、ブラウザ自動化でnote.comの埋め込みウィジェットに変換されます。
+対応サービスのURLは、API経由でnote.comの埋め込みウィジェットに変換されます。
 
 **対応サービス:**
 - YouTube（youtube.com, youtu.be）
@@ -137,54 +126,26 @@ Markdown入力: [TOC]
 ```
 Markdown入力: https://www.youtube.com/watch?v=abc123
     ↓
-URL検出: _is_embed_url()で対応サービスかを判定
+URL検出: 対応サービスかを判定
     ↓
-プレースホルダ挿入: §§EMBED:url§§ 形式でエディタに入力
+HTML変換: note.com埋め込み用のiframe HTML生成
     ↓
-ブラウザ自動化: insert_embed.pyで[+]ボタン→[埋め込み]→URL入力
-    ↓
-埋め込みウィジェット: note.comが自動変換
+API経由で記事に保存
 ```
-
-**モジュール構成:**
-
-- `typing_helpers.py` - URL検出とプレースホルダ挿入
-  - `_is_embed_url()` - 対応サービスURLかを判定
-  - `_EMBED_YOUTUBE_PATTERN`, `_EMBED_TWITTER_PATTERN`, `_EMBED_NOTE_PATTERN`
-
-- `embed_helpers.py` - プレースホルダ検出と埋め込み適用
-  - `has_embed_placeholders()` - エディタ内のプレースホルダを検出
-  - `apply_embeds()` - 全プレースホルダを埋め込みに変換
-
-- `insert_embed.py` - ブラウザ自動化で実際に埋め込み挿入
-  - `insert_embed_at_cursor()` - カーソル位置に埋め込み挿入
-  - note.comの「+」→「埋め込み」メニューを操作
 
 > **注意**: 非対応サービスのURLは通常のリンクとして表示されます。埋め込みカードにはなりません。
 
 #### リンク（Link）機能
 
-Markdown記法 `[text](url)` はProseMirrorエディタで自動変換されません（InputRule未実装）。
-このため、ブラウザ自動化でUI経由のリンク挿入を行います。
+Markdown記法 `[text](url)` はAPI経由でHTMLリンクに変換されます。
 
 ```
 Markdown入力: [テキスト](https://example.com)
     ↓
-パターン検出: _type_with_link()でリンク記法を識別
+HTML変換: <a href="https://example.com">テキスト</a>
     ↓
-ブラウザ自動化: insert_link_at_cursor()でUI操作
-    ↓
-リンク挿入: エディタにリンクmark付きテキストが挿入
+API経由で記事に保存
 ```
-
-**モジュール構成:**
-
-- `insert_link.py` - ブラウザ自動化でリンク挿入
-  - `insert_link_at_cursor()` - カーソル位置にリンクを挿入
-  - `LinkResult` - 挿入結果（SUCCESS, TIMEOUT）
-
-> **注意**: 他のMarkdown書式（`**bold**`、`~~strikethrough~~`）は自動変換されますが、
-> リンクはUI経由での挿入が必要です。
 
 ### Investigatorモード
 

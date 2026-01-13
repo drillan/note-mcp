@@ -41,6 +41,9 @@ api/investigator
 
 features/math
 features/toc
+features/embed
+features/link
+features/text-align
 ```
 
 ```{toctree}
@@ -48,6 +51,7 @@ features/toc
 :maxdepth: 2
 
 development/architecture
+development/testing
 development/troubleshooting
 development/contributing
 ```
