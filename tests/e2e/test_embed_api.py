@@ -19,7 +19,7 @@ import pytest
 
 from note_mcp.server import note_create_draft, note_get_article
 from tests.e2e.helpers import (
-    extract_article_id,
+    extract_article_key,
     preview_page_context,
 )
 
@@ -65,9 +65,10 @@ The video should appear above."""
         assert "下書きを作成しました" in result
         assert "ID:" in result
 
-        # Extract article ID and verify content
-        article_id = extract_article_id(result)
-        article_content = await note_get_article.fn(article_id)
+        # Extract article key and verify content
+        # Issue #154: API requires key format, not numeric ID
+        article_key = extract_article_key(result)
+        article_content = await note_get_article.fn(article_key)
 
         # Verify embed figure is present
         assert 'embedded-service="youtube"' in article_content
@@ -101,9 +102,10 @@ The tweet should appear above."""
         # Assert - API response
         assert "下書きを作成しました" in result
 
-        # Extract article ID and verify content
-        article_id = extract_article_id(result)
-        article_content = await note_get_article.fn(article_id)
+        # Extract article key and verify content
+        # Issue #154: API requires key format, not numeric ID
+        article_key = extract_article_key(result)
+        article_content = await note_get_article.fn(article_key)
 
         # Verify embed figure is present
         assert 'embedded-service="twitter"' in article_content
@@ -136,9 +138,10 @@ The post should appear above."""
         # Assert - API response
         assert "下書きを作成しました" in result
 
-        # Extract article ID and verify content
-        article_id = extract_article_id(result)
-        article_content = await note_get_article.fn(article_id)
+        # Extract article key and verify content
+        # Issue #154: API requires key format, not numeric ID
+        article_key = extract_article_key(result)
+        article_content = await note_get_article.fn(article_key)
 
         # Verify embed figure is present (X URLs use twitter service)
         assert 'embedded-service="twitter"' in article_content
@@ -171,9 +174,10 @@ The article card should appear above."""
         # Assert - API response
         assert "下書きを作成しました" in result
 
-        # Extract article ID and verify content
-        article_id = extract_article_id(result)
-        article_content = await note_get_article.fn(article_id)
+        # Extract article key and verify content
+        # Issue #154: API requires key format, not numeric ID
+        article_key = extract_article_key(result)
+        article_content = await note_get_article.fn(article_key)
 
         # Verify embed figure is present
         assert 'embedded-service="note"' in article_content
@@ -210,9 +214,10 @@ Both should appear as embed cards."""
         # Assert - API response
         assert "下書きを作成しました" in result
 
-        # Extract article ID and verify content
-        article_id = extract_article_id(result)
-        article_content = await note_get_article.fn(article_id)
+        # Extract article key and verify content
+        # Issue #154: API requires key format, not numeric ID
+        article_key = extract_article_key(result)
+        article_content = await note_get_article.fn(article_key)
 
         # Verify both embeds are present
         assert 'embedded-service="youtube"' in article_content
@@ -242,9 +247,10 @@ Both should appear as embed cards."""
         # Assert - API response
         assert "下書きを作成しました" in result
 
-        # Extract article ID and verify content
-        article_id = extract_article_id(result)
-        article_content = await note_get_article.fn(article_id)
+        # Extract article key and verify content
+        # Issue #154: API requires key format, not numeric ID
+        article_key = extract_article_key(result)
+        article_content = await note_get_article.fn(article_key)
 
         # URL should remain as link, not figure
         assert 'embedded-service="youtube"' not in article_content
@@ -274,9 +280,10 @@ Both should appear as embed cards."""
         # Assert - API response
         assert "下書きを作成しました" in result
 
-        # Extract article ID and verify content
-        article_id = extract_article_id(result)
-        article_content = await note_get_article.fn(article_id)
+        # Extract article key and verify content
+        # Issue #154: API requires key format, not numeric ID
+        article_key = extract_article_key(result)
+        article_content = await note_get_article.fn(article_key)
 
         # URL should be in anchor tag, not figure
         assert 'embedded-service="youtube"' not in article_content
@@ -311,10 +318,11 @@ class TestEmbedPreviewRendering:
 
         # Assert - API response
         assert "下書きを作成しました" in result
-        article_id = extract_article_id(result)
+        # Issue #154: API requires key format, not numeric ID
+        article_key = extract_article_key(result)
 
         # Verify preview rendering
-        async with preview_page_context(real_session, article_id) as page:
+        async with preview_page_context(real_session, article_key) as page:
             # Wait for embed to render (note.com renders iframes client-side)
             embed_figure = page.locator('figure[embedded-service="youtube"]')
             await embed_figure.wait_for(timeout=10000)

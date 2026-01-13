@@ -410,7 +410,8 @@ class TestGetArticleRawHtml:
             mock_client.__aexit__ = AsyncMock()
             mock_client.get = AsyncMock(return_value=mock_response)
 
-            result = await get_article_raw_html(session, "12345")
+            # Issue #154: API requires key format, not numeric ID
+            result = await get_article_raw_html(session, "n12345abcdef")
 
             assert result.id == "12345"
             assert result.key == "n12345abcdef"
