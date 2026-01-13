@@ -86,13 +86,15 @@ def _protect_code_blocks(content: str, prefix: str = "CODE_BLOCK") -> Iterator[t
         prefix: Prefix for placeholder names. Use unique prefixes to avoid conflicts.
 
     Yields:
-        Tuple of (protected_content, code_blocks_list) where code_blocks_list
-        contains (placeholder, original) tuples for restoration.
+        Tuple of (protected_content, code_blocks_list) where:
+        - protected_content: Content with code blocks replaced by placeholders
+        - code_blocks_list: List of (placeholder, original_code) tuples for restoration
 
     Example:
         with _protect_code_blocks(content, "ALIGN") as (protected, blocks):
-            result = some_processing(protected)
-        result = _restore_code_blocks(result, blocks)
+            # Process the protected content (reassign to protected)
+            protected = some_pattern.sub(replacement, protected)
+        return _restore_code_blocks(protected, blocks)
     """
     code_blocks: list[tuple[str, str]] = []
 
