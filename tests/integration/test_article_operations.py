@@ -118,14 +118,12 @@ class TestUpdateArticle:
             body="Updated content",
         )
 
+        # Issue #155: draft_save API returns {result, note_days_count, updated_at}, not article data
         mock_response = {
             "data": {
-                "id": "123456",
-                "key": "n1234567890ab",
-                "name": "Updated Title",
-                "body": "<p>Updated content</p>\n",
-                "status": "draft",
-                "hashtags": [],
+                "result": True,
+                "note_days_count": 1,
+                "updated_at": "2026-01-13T00:00:00Z",
             }
         }
 
@@ -144,6 +142,7 @@ class TestUpdateArticle:
 
             article = await update_article(session, "123456", article_input)
 
+            # Article is constructed from input since draft_save doesn't return full article data
             assert article.id == "123456"
             assert article.title == "Updated Title"
 
@@ -156,14 +155,12 @@ class TestUpdateArticle:
             body="",  # Empty body means no update
         )
 
+        # Issue #155: draft_save API returns {result, note_days_count, updated_at}, not article data
         mock_response = {
             "data": {
-                "id": "123456",
-                "key": "n1234567890ab",
-                "name": "New Title Only",
-                "body": "<p>Original content</p>",
-                "status": "draft",
-                "hashtags": [],
+                "result": True,
+                "note_days_count": 1,
+                "updated_at": "2026-01-13T00:00:00Z",
             }
         }
 
@@ -182,6 +179,7 @@ class TestUpdateArticle:
 
             article = await update_article(session, "123456", article_input)
 
+            # Article is constructed from input since draft_save doesn't return full article data
             assert article.title == "New Title Only"
 
 
@@ -610,14 +608,12 @@ class TestUpdateArticleWithEmbeds:
             '<figure data-src="https://twitter.com/user/status/1234567890" '
             'embedded-content-key="emb1234567890abc"></figure>'
         )
+        # Issue #155: draft_save API returns {result, note_days_count, updated_at}, not article data
         mock_save_response = {
             "data": {
-                "id": "123456",
-                "key": "n1234567890ab",
-                "name": "Updated with Twitter",
-                "body": twitter_embed_html,
-                "status": "draft",
-                "hashtags": [],
+                "result": True,
+                "note_days_count": 1,
+                "updated_at": "2026-01-13T00:00:00Z",
             }
         }
 
@@ -638,6 +634,7 @@ class TestUpdateArticleWithEmbeds:
 
             article = await update_article(session, "123456", article_input)
 
+            # Article is constructed from input since draft_save doesn't return full article data
             assert article.id == "123456"
             # Verify resolve_embed_keys was called
             mock_resolve_embeds.assert_called_once()
