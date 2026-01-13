@@ -256,7 +256,7 @@ WARNING - Attempt 2 failed: TimeoutError. Retrying in 2.0s...
 
 ## MCPツールテスト
 
-MCPツールテストは、note-mcpが提供する11個のMCPツールの動作を検証するE2Eテストです。
+MCPツールテストは、note-mcpが提供する17個のMCPツールの動作を検証するE2Eテストです。
 
 ### 対象ツール
 
@@ -269,12 +269,16 @@ MCPツールテストは、note-mcpが提供する11個のMCPツールの動作�
 | 記事CRUD | `note_create_draft` | 下書き記事を作成 |
 | | `note_get_article` | 記事の内容を取得 |
 | | `note_update_article` | 記事を更新 |
+| | `note_publish_article` | 記事を公開 |
 | | `note_list_articles` | 記事一覧を取得 |
+| | `note_create_from_file` | ファイルから記事を作成 |
+| | `note_delete_draft` | 下書きを削除 |
+| | `note_delete_all_drafts` | 全下書きを削除 |
 | 画像操作 | `note_upload_eyecatch` | アイキャッチ画像をアップロード |
 | | `note_upload_body_image` | 本文用画像をアップロード |
+| | `note_insert_body_image` | 画像を記事に挿入 |
 | プレビュー | `note_show_preview` | 記事のプレビューを表示 |
-
-> **Note**: `note_insert_body_image`はProseMirror状態への複雑な依存があるため、[別issue #53](https://github.com/drillan/note-mcp/issues/53)で対応しています。
+| | `note_get_preview_html` | プレビューHTMLを取得 |
 
 ### MCPツールテストの実行
 

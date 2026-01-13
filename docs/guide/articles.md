@@ -134,7 +134,7 @@ $$
 
 取得される情報：
 - タイトル
-- 本文（HTML形式）
+- 本文（Markdown形式）
 - ステータス（draft/published）
 - タグ
 
