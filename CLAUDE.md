@@ -204,7 +204,7 @@ issue対応時は以下のワークフローに従う。
 |------|---------|--------------|
 | 1 | issueを作成 | GitHub上で手動作成 |
 | 2 | issueを読み込み、ブランチ作成、計画立案 | `/start-issue <issue番号>` |
-| 3 | 計画承認後、実装 | 手動実装 |
+| 3 | 計画承認後、TDDワークフローに従って実装 | TDD実装 |
 | 4 | PR作成 | `/commit-commands:commit-push-pr` |
 | 5 | PRレビュー | `/pr-review-toolkit:review-pr` |
 | 6 | レビューコメント対応 | `/review-pr-comments` |
@@ -218,6 +218,8 @@ issue対応時は以下のワークフローに従う。
 | バグ修正 | `fix/` | `fix/456-fix-login-error` |
 | リファクタリング | `refactor/` | `refactor/789-cleanup-api` |
 | ドキュメント | `docs/` | `docs/101-update-readme` |
+| テスト | `test/` | `test/111-add-e2e-tests` |
+| 雑務 | `chore/` | `chore/222-update-dependencies` |
 
 **注意:**
 - 既存のブランチがある場合はそちらを使用

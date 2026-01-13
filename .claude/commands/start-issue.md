@@ -119,7 +119,7 @@ git checkout <existing-branch>
 
 ### Step 6: 実装計画の立案
 
-EnterPlanModeを使用してプランモードに移行し、以下の情報を基に実装計画を立てる:
+プランモードに移行し、以下の情報を基に実装計画を立てる:
 
 **計画に含める内容**:
 1. issueの要件サマリー
@@ -151,30 +151,9 @@ EnterPlanModeを使用してプランモードに移行し、以下の情報を�
 
 ### Step 7: 計画のissueへの記録
 
-issue-reporterスキルに従い、立案した計画をissueにコメントとして投稿:
+issue-reporterスキルの「計画立案時（Plan）」形式に従い、立案した計画をissueにコメントとして投稿する。
 
-```bash
-gh issue comment $ARGUMENTS --body "$(cat <<'EOF'
-## 📋 実装計画
-
-**作業内容**: [issueタイトル]
-
-### 計画
-
-1. [ステップ1]
-2. [ステップ2]
-3. [ステップ3]
-
-### 予想される課題
-
-- [課題1]
-- [課題2]
-
----
-*Posted by Claude Code at YYYY-MM-DD HH:MM*
-EOF
-)"
-```
+詳細: `.claude/skills/issue-reporter/SKILL.md`
 
 ## Error Handling
 
