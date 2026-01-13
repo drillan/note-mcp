@@ -547,3 +547,70 @@ async def publish_article(
     # Parse response
     article_data = response.get("data", {})
     return from_api_response(article_data)
+
+
+# =============================================================================
+# Issue #134: Preview Access Token Functions
+# =============================================================================
+
+
+async def get_preview_access_token(
+    session: Session,
+    article_key: str,
+) -> str:
+    """Get preview access token for a draft article.
+
+    Calls the note.com API to obtain a preview access token that allows
+    viewing draft articles without editor access.
+
+    Args:
+        session: Authenticated session
+        article_key: Article key (e.g., "n1234567890ab")
+
+    Returns:
+        32-character hex preview access token
+
+    Raises:
+        NoteAPIError: If API request fails or token is missing from response
+
+    Example:
+        token = await get_preview_access_token(session, "n1234567890ab")
+        url = build_preview_url("n1234567890ab", token)
+    """
+    async with NoteAPIClient(session) as client:
+        response = await client.post(
+            f"/v2/notes/{article_key}/access_tokens",
+            json={"key": article_key},
+        )
+
+    data = response.get("data", {})
+    token = data.get("preview_access_token")
+
+    if not token:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Failed to get preview access token",
+            details={"article_key": article_key, "response": response},
+        )
+
+    return str(token)
+
+
+def build_preview_url(article_key: str, preview_access_token: str) -> str:
+    """Build direct preview URL from access token.
+
+    Constructs a URL that allows direct access to the draft article preview
+    without going through the editor UI.
+
+    Args:
+        article_key: Article key (e.g., "n1234567890ab")
+        preview_access_token: 32-character hex token from API
+
+    Returns:
+        Direct preview URL
+
+    Example:
+        url = build_preview_url("n123abc", "token123...")
+        # url = "https://note.com/preview/n123abc?prev_access_key=token123..."
+    """
+    return f"https://note.com/preview/{article_key}?prev_access_key={preview_access_token}"

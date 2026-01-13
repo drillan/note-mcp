@@ -2,16 +2,22 @@
 
 Provides utilities for opening and navigating to note.com preview pages.
 Extracted from conftest.py to enable reuse across test modules.
+
+As of Issue #134, preview access uses the API-based approach (get_preview_access_token)
+instead of navigating through the editor UI.
 """
 
 from __future__ import annotations
 
 import logging
+import warnings
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 from playwright.async_api import async_playwright
+
+from note_mcp.api.articles import build_preview_url, get_preview_access_token
 
 from .constants import (
     DEFAULT_ELEMENT_WAIT_TIMEOUT_MS,
@@ -28,6 +34,49 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+async def open_preview_via_api(
+    page: Page,
+    session: Session,
+    article_key: str,
+    timeout: int = DEFAULT_NAVIGATION_TIMEOUT_MS,
+) -> Page:
+    """Navigate directly to preview URL using API-obtained token.
+
+    Much faster than editor-based approach - no menu navigation required.
+    Uses the access_tokens API to get a preview token, then navigates
+    directly to the preview URL.
+
+    Args:
+        page: Playwright Page instance with session cookies injected
+        session: Authenticated session (for API access)
+        article_key: Article key (e.g., "n1234567890ab")
+        timeout: Navigation timeout in milliseconds
+
+    Returns:
+        Same page instance (navigated to preview URL)
+
+    Raises:
+        NoteAPIError: If token fetch fails
+        TimeoutError: If navigation times out
+    """
+    # Get preview access token via API
+    token = await get_preview_access_token(session, article_key)
+
+    # Build direct preview URL
+    preview_url = build_preview_url(article_key, token)
+
+    # Navigate directly to preview URL
+    await page.goto(
+        preview_url,
+        wait_until="domcontentloaded",
+        timeout=timeout,
+    )
+    # Wait for JavaScript rendering (needed for math formulas like nwc-formula)
+    await page.wait_for_load_state("networkidle", timeout=timeout)
+
+    return page
+
+
 async def open_preview_for_article_key(
     page: Page,
     article_key: str,
@@ -35,11 +84,13 @@ async def open_preview_for_article_key(
 ) -> Page:
     """Navigate to editor and open preview, returning the preview page.
 
+    .. deprecated::
+        Use :func:`open_preview_via_api` instead for faster access.
+        This function navigates through the editor UI, which is slower
+        and more fragile. The API-based approach is preferred.
+
     Opens the note.com editor for the given article key, then clicks
     the preview button to open the preview in a new tab.
-
-    Note: note.com does not support direct preview URLs. Preview must
-    be accessed through the editor's menu button.
 
     Args:
         page: Playwright Page instance with session cookies injected
@@ -52,6 +103,11 @@ async def open_preview_for_article_key(
     Raises:
         TimeoutError: If navigation or element waits time out
     """
+    warnings.warn(
+        "open_preview_for_article_key is deprecated. Use open_preview_via_api instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     # Navigate to editor page
     editor_url = f"{NOTE_EDITOR_URL}/{article_key}/edit/"
     await page.goto(
@@ -112,8 +168,8 @@ async def preview_page_context(
     """Open preview page with automatic browser lifecycle management.
 
     Creates a fresh browser context, injects session cookies, and opens
-    the article preview page. Automatically cleans up all browser resources
-    on context exit.
+    the article preview page using API-based access (Issue #134).
+    Automatically cleans up all browser resources on context exit.
 
     Args:
         session: Authenticated Session object with cookies
@@ -121,10 +177,11 @@ async def preview_page_context(
         headless: Whether to run browser in headless mode
 
     Yields:
-        Playwright Page for the preview tab
+        Playwright Page for the preview
 
     Raises:
-        TimeoutError: If navigation or element waits time out
+        NoteAPIError: If preview token fetch fails
+        TimeoutError: If navigation times out
 
     Example:
         async with preview_page_context(session, article_key) as preview_page:
@@ -138,7 +195,8 @@ async def preview_page_context(
 
     try:
         await _inject_session_cookies(page, session)
-        preview_page = await open_preview_for_article_key(page, article_key)
+        # Issue #134: Use API-based approach instead of editor navigation
+        preview_page = await open_preview_via_api(page, session, article_key)
         yield preview_page
     finally:
         await context.close()
