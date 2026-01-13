@@ -147,10 +147,10 @@ def html_transformer(
         Function that applies the transformation to HTML content.
 
     Example:
-        >>> pattern = re.compile(r"\\[bold\\](.*?)\\[/bold\\]")
-        >>> bold_transformer = html_transformer(pattern, lambda m: f"<b>{m.group(1)}</b>")
-        >>> bold_transformer("[bold]text[/bold]")
-        '<b>text</b>'
+        >>> pattern = re.compile(r"<em>(.*?)</em>")
+        >>> strong_transformer = html_transformer(pattern, lambda m: f"<strong>{m.group(1)}</strong>")
+        >>> strong_transformer("<em>text</em>")
+        '<strong>text</strong>'
     """
 
     def transform(html: str) -> str:
@@ -322,7 +322,10 @@ def _apply_alignment(match: re.Match[str]) -> str:
     """Transform alignment placeholder to styled paragraph.
 
     Args:
-        match: Regex match containing attrs, alignment type, and content groups.
+        match: Regex match with groups:
+            - group(1): HTML attributes (e.g., ' name="..." id="..."')
+            - group(2): Alignment type (CENTER, RIGHT, or LEFT)
+            - group(3): Paragraph content
 
     Returns:
         HTML paragraph with text-align style applied.
@@ -394,7 +397,12 @@ def _convert_p_newlines(match: re.Match[str]) -> str:
     """Transform paragraph newlines to <br> tags inside blockquotes.
 
     Args:
-        match: Regex match containing blockquote and paragraph groups.
+        match: Regex match with groups:
+            - group(1): Content before <p> tag (including <blockquote>)
+            - group(2): Opening <p> tag (e.g., '<p name="..." id="...">')
+            - group(3): Paragraph content (text inside <p>)
+            - group(4): Closing </p> tag
+            - group(5): Content after </p> tag (including </blockquote>)
 
     Returns:
         Blockquote HTML with newlines converted to <br> tags.
@@ -445,7 +453,8 @@ def _wrap_in_figure(match: re.Match[str]) -> str:
     """Transform blockquote to note.com figure format.
 
     Args:
-        match: Regex match containing blockquote content.
+        match: Regex match with groups:
+            - group(1): Blockquote inner content (HTML between <blockquote> tags)
 
     Returns:
         Blockquote wrapped in figure element with citation extracted.
