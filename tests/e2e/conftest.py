@@ -7,6 +7,7 @@ Requires valid session (via login) for authentication.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import time
 from collections.abc import AsyncGenerator, Generator
@@ -32,6 +33,8 @@ from tests.e2e.helpers.constants import (
 )
 from tests.e2e.helpers.html_validator import HtmlValidator
 from tests.e2e.helpers.retry import with_retry
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from playwright._impl._api_structures import SetCookieParam
@@ -86,6 +89,10 @@ async def inter_test_delay() -> AsyncGenerator[None]:
     """
     yield
     if E2E_INTER_TEST_DELAY > 0:
+        logger.debug(
+            "Inter-test delay: sleeping %.2fs to avoid rate limiting",
+            E2E_INTER_TEST_DELAY,
+        )
         await asyncio.sleep(E2E_INTER_TEST_DELAY)
 
 

@@ -14,7 +14,7 @@ from collections.abc import Awaitable, Callable
 import httpx
 from playwright.async_api import Error as PlaywrightError
 
-from note_mcp.models import NoteAPIError
+from note_mcp.models import ErrorCode, NoteAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -30,18 +30,58 @@ DEFAULT_MAX_ATTEMPTS: int = 3
 DEFAULT_BACKOFF_BASE: float = 1.0
 
 
-def is_access_denied_error(exception: Exception) -> bool:
-    """Check if exception is an Access Denied (403) error.
+def is_transient_access_denied_error(exception: Exception) -> bool:
+    """Check if exception is a transient Access Denied (403) error.
+
+    Distinguishes between transient 403 errors (rate limiting) and
+    permanent 403 errors (true permission denied).
+
+    Transient 403 criteria:
+        - status_code is 403 AND
+        - response body contains "Access denied" (rate limiting pattern)
 
     Args:
         exception: The exception to check.
 
     Returns:
-        True if the exception is a NoteAPIError with status_code 403.
+        True if the exception is a transient 403 error suitable for retry.
     """
-    if isinstance(exception, NoteAPIError):
-        status_code = exception.details.get("status_code")
-        return status_code == 403
+    if not isinstance(exception, NoteAPIError):
+        return False
+
+    status_code = exception.details.get("status_code")
+    if status_code != 403:
+        return False
+
+    # Check response body for "Access denied" pattern (rate limiting)
+    response_text = exception.details.get("response", "")
+    if isinstance(response_text, str) and "Access denied" in response_text:
+        logger.debug(
+            "Detected transient 403 (Access denied in response body): %s",
+            exception.message,
+        )
+        return True
+
+    # Other 403 errors are likely true permission errors
+    logger.debug(
+        "403 error without 'Access denied' pattern - not retrying: %s",
+        exception.message,
+    )
+    return False
+
+
+def is_rate_limited_error(exception: Exception) -> bool:
+    """Check if exception is a rate limiting (429) error.
+
+    Args:
+        exception: The exception to check.
+
+    Returns:
+        True if the exception is a NoteAPIError with RATE_LIMITED code.
+    """
+    if isinstance(exception, NoteAPIError) and exception.code == ErrorCode.RATE_LIMITED:
+        logger.debug("Detected rate limited error (429): %s", exception.message)
+        return True
     return False
 
 
@@ -56,15 +96,26 @@ def is_retryable(exception: Exception) -> bool:
     """
     # Direct match for standard retryable exceptions
     if isinstance(exception, RETRYABLE_EXCEPTIONS):
+        logger.debug(
+            "Retryable exception type: %s",
+            type(exception).__name__,
+        )
         return True
 
     # PlaywrightError with timeout-related message
     if isinstance(exception, PlaywrightError):
         msg = str(exception).lower()
-        return "timeout" in msg or "timed out" in msg
+        if "timeout" in msg or "timed out" in msg:
+            logger.debug("Retryable Playwright timeout error: %s", msg)
+            return True
+        return False
 
-    # Access Denied (403) error - may be transient due to rate limiting
-    return is_access_denied_error(exception)
+    # Rate limited (429) error
+    if is_rate_limited_error(exception):
+        return True
+
+    # Transient Access Denied (403) error - rate limiting pattern
+    return is_transient_access_denied_error(exception)
 
 
 async def with_retry[T](
@@ -75,7 +126,16 @@ async def with_retry[T](
 ) -> T:
     """Execute an async function with retry on transient errors.
 
-    Implements exponential backoff: 1s, 2s, 4s, etc.
+    Implements exponential backoff with formula: backoff_base * 2^(attempt-1)
+    Example with backoff_base=1.0: 1s, 2s, 4s for attempts 1, 2, 3.
+    Example with backoff_base=2.0: 2s, 4s, 8s for attempts 1, 2, 3.
+
+    Retryable errors:
+        - Timeout errors (TimeoutError, httpx.TimeoutException)
+        - Network errors (httpx.NetworkError)
+        - Playwright timeout errors
+        - Rate limited errors (429 / ErrorCode.RATE_LIMITED)
+        - Transient 403 errors (with "Access denied" in response body)
 
     Args:
         func: Async function to execute (typically a lambda wrapping the call).
