@@ -15,7 +15,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -29,6 +28,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
 from note_mcp.server import note_create_from_file
+
+# Add tests directory to path for importing article helpers
+sys.path.insert(0, str(Path(__file__).parent.parent / "tests" / "e2e" / "helpers"))
+from article_helpers import (  # type: ignore[import-not-found]  # noqa: E402
+    extract_article_id,
+    extract_article_key,
+)
 
 if TYPE_CHECKING:
     from playwright._impl._api_structures import SetCookieParam
@@ -47,22 +53,6 @@ PROJECT_ROOT = Path(__file__).parent.parent
 OUTPUT_DIR = PROJECT_ROOT / "debug" / "output"
 TEST_FILE = PROJECT_ROOT / "examples" / "sample_article.md"
 NOTE_EDITOR_URL = "https://note.com/notes"
-
-
-def extract_article_key(result: str) -> str:
-    """Extract article key from MCP tool result."""
-    match = re.search(r"記事キー:\s*(\S+)", result)
-    if not match:
-        raise ValueError(f"Could not extract article key from result: {result}")
-    return match.group(1)
-
-
-def extract_article_id(result: str) -> str:
-    """Extract article ID from MCP tool result."""
-    match = re.search(r"(?:記事)?ID:\s*(\d+)", result)
-    if not match:
-        raise ValueError(f"Could not extract article ID from result: {result}")
-    return match.group(1)
 
 
 async def get_or_create_session() -> Session:

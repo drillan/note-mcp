@@ -1,7 +1,7 @@
 """Helper functions for extracting article information from MCP tool results.
 
-Provides utilities for parsing the text output from note_create_from_file.fn()
-and similar MCP tools to extract article metadata.
+Provides utilities for parsing the text output from MCP tools such as
+note_create_from_file.fn() and note_create_draft.fn() to extract article metadata.
 """
 
 from __future__ import annotations
