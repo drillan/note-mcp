@@ -288,6 +288,7 @@ git checkout -b fix/456-fix-login-error
 ## Active Technologies
 - Python 3.11+ (pyproject.toml: requires-python = ">=3.11") (001-e2e-native-html-validation)
 - N/A (テストコードのみ) (001-e2e-native-html-validation)
+- keyring (OS secure storage for session cookies) (002-preview-api)
 
 - Python 3.11+ (001-note-mcp)
 

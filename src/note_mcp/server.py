@@ -19,6 +19,7 @@ from note_mcp.api.articles import (
     update_article,
 )
 from note_mcp.api.images import insert_image_via_api, upload_body_image, upload_eyecatch_image
+from note_mcp.api.preview import get_preview_html
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
 from note_mcp.browser.preview import show_preview
@@ -371,11 +372,8 @@ async def note_show_preview(
     """記事のプレビューをブラウザで表示します。
 
     指定した記事のプレビューページをブラウザで開きます。
-    下書き記事の場合、プレビュー用アクセスキーを使用して表示します。
-
-    **警告**: このツールはエディターページを経由するため、
-    埋め込み(YouTube, Twitter等)のHTMLが変更される可能性があります。
-    埋め込みを含む記事ではプレビューを避けることを推奨します(Issue #116)。
+    API経由でプレビューアクセストークンを取得し、直接プレビューURLにアクセスします。
+    エディターページを経由しないため、高速かつ安定しています。
 
     Args:
         article_key: プレビューする記事のキー
@@ -387,11 +385,38 @@ async def note_show_preview(
     if session is None or session.is_expired():
         return "セッションが無効です。note_loginでログインしてください。"
 
-    await show_preview(session, article_key)
-    return (
-        f"プレビューを表示しました。記事キー: {article_key}\n"
-        "注意: エディター経由のプレビューは埋め込みHTMLを変更する可能性があります。"
-    )
+    try:
+        await show_preview(session, article_key)
+        return f"プレビューを表示しました。記事キー: {article_key}"
+    except NoteAPIError as e:
+        return f"エラー: {e}"
+
+
+@mcp.tool()
+async def note_get_preview_html(
+    article_key: Annotated[str, "取得する記事のキー（例: n1234567890ab）"],
+) -> str:
+    """プレビューページのHTMLを取得します。
+
+    指定した記事のプレビューページのHTMLを文字列として取得します。
+    E2Eテストやコンテンツ検証のために使用します。
+    ブラウザを起動せず、API経由で高速に取得します。
+
+    Args:
+        article_key: 取得する記事のキー
+
+    Returns:
+        プレビューページのHTML
+    """
+    session = _session_manager.load()
+    if session is None or session.is_expired():
+        return "セッションが無効です。note_loginでログインしてください。"
+
+    try:
+        html = await get_preview_html(session, article_key)
+        return html
+    except NoteAPIError as e:
+        return f"エラー: {e}"
 
 
 @mcp.tool()

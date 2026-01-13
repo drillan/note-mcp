@@ -1,0 +1,103 @@
+# MCP Tools Contract for Preview API
+# Feature: 002-preview-api
+# Date: 2025-01-13
+
+tools:
+  # 既存ツールの改修
+  - name: note_show_preview
+    description: |
+      記事のプレビューをブラウザで表示します。
+
+      指定した記事のプレビューページをブラウザで開きます。
+      API経由でプレビューアクセストークンを取得し、直接プレビューURLにアクセスします。
+      エディターページを経由しないため、高速かつ安定しています。
+    input_schema:
+      type: object
+      required:
+        - article_key
+      properties:
+        article_key:
+          type: string
+          description: プレビューする記事のキー（例: n1234567890ab）
+          pattern: "^n[a-z0-9]+$"
+    output:
+      type: string
+      description: プレビュー表示結果のメッセージ
+    errors:
+      - code: not_authenticated
+        description: 未認証状態
+        message: セッションが無効です。note_loginでログインしてください。
+      - code: article_not_found
+        description: 記事が見つからない
+        message: 記事が見つかりませんでした。記事キーを確認してください。
+      - code: api_error
+        description: APIエラー
+        message: プレビュートークンの取得に失敗しました。
+
+  # 新規ツール
+  - name: note_get_preview_html
+    description: |
+      プレビューページのHTMLを取得します。
+
+      指定した記事のプレビューページのHTMLを文字列として取得します。
+      E2Eテストやコンテンツ検証のために使用します。
+      ブラウザを起動せず、API経由で高速に取得します。
+    input_schema:
+      type: object
+      required:
+        - article_key
+      properties:
+        article_key:
+          type: string
+          description: 取得する記事のキー（例: n1234567890ab）
+          pattern: "^n[a-z0-9]+$"
+    output:
+      type: string
+      description: プレビューページのHTML
+    errors:
+      - code: not_authenticated
+        description: 未認証状態
+        message: セッションが無効です。note_loginでログインしてください。
+      - code: article_not_found
+        description: 記事が見つからない
+        message: 記事が見つかりませんでした。記事キーを確認してください。
+      - code: api_error
+        description: APIエラー
+        message: プレビューHTMLの取得に失敗しました。
+
+# Error Handling Contract
+error_handling:
+  authentication:
+    - condition: session is None
+      action: return "セッションが無効です。note_loginでログインしてください。"
+    - condition: session.is_expired()
+      action: return "セッションの有効期限が切れています。note_loginで再ログインしてください。"
+
+  api_errors:
+    - status_code: 401
+      error_code: NOT_AUTHENTICATED
+      message: 認証が必要です。ログインしてください。
+    - status_code: 403
+      error_code: API_ERROR
+      message: アクセス権がありません。
+    - status_code: 404
+      error_code: ARTICLE_NOT_FOUND
+      message: 記事が見つかりませんでした。
+    - status_code: 429
+      error_code: RATE_LIMITED
+      message: レート制限を超えました。しばらくしてから再試行してください。
+
+# Performance Contract
+performance:
+  note_show_preview:
+    target: 3秒以内
+    measurement: ツール呼び出しからブラウザ表示完了まで
+    current_baseline: 10-15秒（エディター経由）
+
+  note_get_preview_html:
+    target: 5秒以内
+    measurement: ツール呼び出しからHTML返却まで
+    components:
+      - api_token_fetch: ~200ms
+      - html_fetch: ~500ms
+      - total_overhead: ~300ms
