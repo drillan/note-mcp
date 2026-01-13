@@ -176,22 +176,24 @@ async def _inject_session_cookies(page: Page, session: Session) -> None:
     await page.context.add_cookies(playwright_cookies)
 
 
-async def _open_preview_and_get_page(page: Page, article_key: str) -> Page:
-    """Navigate to editor and open preview, returning the preview page.
+async def _open_preview_and_get_page(page: Page, session: Session, article_key: str) -> Page:
+    """Navigate directly to preview URL using API-based access.
 
-    This is a thin wrapper around open_preview_for_article_key() for
-    backward compatibility with existing fixtures.
+    Uses the access_tokens API to get a preview token, then navigates
+    directly to the preview URL. This is faster and more reliable than
+    the editor-based approach.
 
     Args:
         page: Playwright Page instance with session cookies
+        session: Authenticated session (for API access)
         article_key: Article key (e.g., "n1234567890ab")
 
     Returns:
-        Playwright Page for the preview tab
+        Playwright Page for the preview
     """
-    from tests.e2e.helpers.preview_helpers import open_preview_for_article_key
+    from tests.e2e.helpers.preview_helpers import open_preview_via_api
 
-    return await open_preview_for_article_key(page, article_key)
+    return await open_preview_via_api(page, session, article_key)
 
 
 @pytest_asyncio.fixture
@@ -222,8 +224,8 @@ async def preview_page(
         # Inject session cookies
         await _inject_session_cookies(page, real_session)
 
-        # Open preview and get the preview page
-        preview = await _open_preview_and_get_page(page, draft_article.key)
+        # Open preview using API-based access (Issue #134)
+        preview = await _open_preview_and_get_page(page, real_session, draft_article.key)
 
         yield preview
 
