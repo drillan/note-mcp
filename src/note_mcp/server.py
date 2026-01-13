@@ -574,7 +574,7 @@ async def note_create_from_file(
                 body=updated_body,
                 tags=parsed.tags,
             )
-            await update_article(session, article.id, updated_input)
+            await update_article(session, article.key, updated_input)
 
         result_lines = [
             "✅ 下書きを作成しました",

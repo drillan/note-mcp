@@ -338,6 +338,10 @@ class TestCreateFromFile:
             image_result = await image_validator.validate_image_exists(expected_count=1)
             assert image_result.success, f"Image validation failed: {image_result.message}"
 
+            # Verify image src is from note.com CDN (not a local path)
+            cdn_result = await image_validator.validate_image_src_contains("assets.st-note.com")
+            assert cdn_result.success, f"Image CDN validation failed: {cdn_result.message}"
+
     async def test_create_without_image_upload(
         self,
         real_session: Session,
@@ -391,6 +395,10 @@ class TestCreateFromFile:
             # Verify image is displayed
             image_result = await image_validator.validate_image_exists(expected_count=1)
             assert image_result.success, f"Image validation failed: {image_result.message}"
+
+            # Verify image src is from note.com CDN (not a local path)
+            cdn_result = await image_validator.validate_image_src_contains("assets.st-note.com")
+            assert cdn_result.success, f"Image CDN validation failed: {cdn_result.message}"
 
 
 class TestCreateFromFileErrors:
