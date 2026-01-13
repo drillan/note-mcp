@@ -272,7 +272,7 @@ class TestImageAndPreview:
         # Act
         result = await note_insert_body_image.fn(
             file_path=str(test_image_path),
-            article_key=draft_article.key,
+            article_id=draft_article.id,
             caption="E2E Test Image",
         )
 
