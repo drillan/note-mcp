@@ -196,26 +196,47 @@ docker compose up --build
 
 ### Issue Workflow
 
-issue対応の指示を受けた場合は、作業開始前に適切なブランチに切り替えること。
+issue対応時は以下のワークフローに従う。
+
+**標準ワークフロー:**
+
+| Step | 作業内容 | コマンド/操作 |
+|------|---------|--------------|
+| 1 | issueを作成 | GitHub上で手動作成 |
+| 2 | issueを読み込み、ブランチ作成、計画立案 | `/start-issue <issue番号>` |
+| 3 | 計画承認後、TDDワークフローに従って実装 | TDD実装 |
+| 4 | PR作成 | `/commit-commands:commit-push-pr` |
+| 5 | PRレビュー | `/pr-review-toolkit:review-pr` |
+| 6 | レビューコメント対応 | `/review-pr-comments` |
+| 7 | PRマージ | GitHub上で手動マージ |
 
 **ブランチ命名規則:**
-- 機能追加: `feat/<issue番号>-<説明>`
-- バグ修正: `fix/<issue番号>-<説明>`
-- リファクタリング: `refactor/<issue番号>-<説明>`
-- ドキュメント: `docs/<issue番号>-<説明>`
 
-**例:**
-```bash
-# Issue #123 の機能追加
-git checkout -b feat/123-add-user-authentication
-
-# Issue #456 のバグ修正
-git checkout -b fix/456-fix-login-error
-```
+| タイプ | プレフィックス | 例 |
+|-------|--------------|-----|
+| 機能追加 | `feat/` | `feat/123-add-user-authentication` |
+| バグ修正 | `fix/` | `fix/456-fix-login-error` |
+| リファクタリング | `refactor/` | `refactor/789-cleanup-api` |
+| ドキュメント | `docs/` | `docs/101-update-readme` |
+| テスト | `test/` | `test/111-add-e2e-tests` |
+| 雑務 | `chore/` | `chore/222-update-dependencies` |
 
 **注意:**
 - 既存のブランチがある場合はそちらを使用
 - `<説明>`は英語で、ハイフン区切りの短い説明（2-4語）
+- `/start-issue`はissueのラベルまたは内容からブランチタイプを自動判別
+
+**進捗記録（issue-reporter）:**
+
+ワークフロー実施中、以下のタイミングでissue-reporterスキルに従い対象issueにコメントを投稿する:
+
+| タイミング | 報告タイプ | 例 |
+|-----------|-----------|-----|
+| 計画立案完了時 | Plan | 実装計画、予想される課題 |
+| 重要な知見発見時 | Insight | API仕様の発見、設計変更の決定 |
+| 問題・ブロッカー発覚時 | Problem | テスト失敗の原因、実装上の障害 |
+
+詳細: `.claude/skills/issue-reporter/SKILL.md`
 
 ### Test-Driven Development (Article 1)
 
@@ -289,6 +310,7 @@ git checkout -b fix/456-fix-login-error
 - Python 3.11+ (pyproject.toml: requires-python = ">=3.11") (001-e2e-native-html-validation)
 - N/A (テストコードのみ) (001-e2e-native-html-validation)
 - keyring (OS secure storage for session cookies) (002-preview-api)
+- Python 3.11+ (pyproject.toml: requires-python = ">=3.11") + mcp>=1.9.2, pydantic>=2.0, playwright, httpx (via NoteAPIClient) (141-delete-draft)
 
 - Python 3.11+ (001-note-mcp)
 
