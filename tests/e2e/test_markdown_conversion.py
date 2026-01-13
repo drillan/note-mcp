@@ -3,11 +3,16 @@
 Tests that Markdown syntax is correctly converted to HTML
 when viewed in the preview page.
 
+Static HTML tests use HtmlValidator (BeautifulSoup-based, Playwright-free).
+Dynamic tests (TOC, Math) use PreviewValidator with Playwright.
+
 Requires:
 - Valid note.com session (login first if not authenticated)
 - Network access to note.com
 
 Run with: uv run pytest tests/e2e/test_markdown_conversion.py -v
+Run static tests only: uv run pytest tests/e2e/test_markdown_conversion.py -v -m "not playwright"
+Run dynamic tests only: uv run pytest tests/e2e/test_markdown_conversion.py -v -m "playwright"
 """
 
 from __future__ import annotations
@@ -17,8 +22,9 @@ from typing import TYPE_CHECKING
 import pytest
 
 from note_mcp.api.articles import update_article
+from note_mcp.api.preview import get_preview_html
 from note_mcp.models import ArticleInput
-from tests.e2e.helpers import PreviewValidator
+from tests.e2e.helpers import HtmlValidator, PreviewValidator
 
 if TYPE_CHECKING:
     from playwright.async_api import Page
@@ -34,13 +40,12 @@ pytestmark = [
 
 
 class TestHeadingConversion:
-    """Tests for heading (H2, H3) conversion."""
+    """Tests for heading (H2, H3) conversion using HtmlValidator."""
 
     async def test_h2_conversion(
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """## 見出し → <h2>見出し</h2>"""
         # Arrange: Update article with H2 heading
@@ -51,12 +56,11 @@ class TestHeadingConversion:
         )
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API (no Playwright needed)
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate H2
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_heading(2, test_text)
 
         # Assert
@@ -66,7 +70,6 @@ class TestHeadingConversion:
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """### 見出し → <h3>見出し</h3>"""
         # Arrange: Update article with H3 heading
@@ -77,12 +80,11 @@ class TestHeadingConversion:
         )
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate H3
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_heading(3, test_text)
 
         # Assert
@@ -90,13 +92,12 @@ class TestHeadingConversion:
 
 
 class TestStrikethroughConversion:
-    """Tests for strikethrough conversion."""
+    """Tests for strikethrough conversion using HtmlValidator."""
 
     async def test_strikethrough_conversion(
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """~~text~~ + space → <s>text</s>
 
@@ -111,12 +112,11 @@ class TestStrikethroughConversion:
         )
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate strikethrough
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_strikethrough(test_text)
 
         # Assert
@@ -124,13 +124,12 @@ class TestStrikethroughConversion:
 
 
 class TestCodeBlockConversion:
-    """Tests for code block conversion."""
+    """Tests for code block conversion using HtmlValidator."""
 
     async def test_fenced_code_block(
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """```python\\ncode\\n``` → <pre><code>code</code></pre>"""
         # Arrange: Update article with code block
@@ -141,12 +140,11 @@ class TestCodeBlockConversion:
         )
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate code block
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_code_block(code_content)
 
         # Assert
@@ -154,13 +152,12 @@ class TestCodeBlockConversion:
 
 
 class TestTextAlignment:
-    """Tests for text alignment conversion."""
+    """Tests for text alignment conversion using HtmlValidator."""
 
     async def test_center_alignment(
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """->text<- → style="text-align: center" """
         # Arrange: Update article with center-aligned text
@@ -171,12 +168,11 @@ class TestTextAlignment:
         )
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate center alignment
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_alignment(test_text, "center")
 
         # Assert
@@ -186,7 +182,6 @@ class TestTextAlignment:
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """->text → style="text-align: right" """
         # Arrange: Update article with right-aligned text
@@ -197,12 +192,11 @@ class TestTextAlignment:
         )
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate right alignment
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_alignment(test_text, "right")
 
         # Assert
@@ -210,13 +204,12 @@ class TestTextAlignment:
 
 
 class TestBoldConversion:
-    """Tests for bold text conversion."""
+    """Tests for bold text conversion using HtmlValidator."""
 
     async def test_bold_conversion(
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """**text** → <strong>text</strong>"""
         # Arrange: Update article with bold text
@@ -227,12 +220,11 @@ class TestBoldConversion:
         )
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate bold
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_bold(test_text)
 
         # Assert
@@ -240,13 +232,12 @@ class TestBoldConversion:
 
 
 class TestBlockquoteConversion:
-    """Tests for blockquote conversion."""
+    """Tests for blockquote conversion using HtmlValidator."""
 
     async def test_blockquote_conversion(
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """> text → <blockquote>text</blockquote>"""
         # Arrange: Update article with blockquote
@@ -257,12 +248,11 @@ class TestBlockquoteConversion:
         )
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate blockquote
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_blockquote(quote_text)
 
         # Assert
@@ -272,7 +262,6 @@ class TestBlockquoteConversion:
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """> text\\n> — source → <blockquote> with <figcaption>"""
         # Arrange: Update article with blockquote and citation
@@ -284,12 +273,11 @@ class TestBlockquoteConversion:
         )
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate blockquote (citation is inside figcaption)
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_blockquote(quote_text)
 
         # Assert
@@ -297,13 +285,12 @@ class TestBlockquoteConversion:
 
 
 class TestListConversion:
-    """Tests for list conversion."""
+    """Tests for list conversion using HtmlValidator."""
 
     async def test_unordered_list_single_item(
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """- item → <ul><li>item</li></ul>"""
         # Arrange: Update article with single unordered list item
@@ -312,12 +299,11 @@ class TestListConversion:
         article_input = ArticleInput(title=draft_article.title, body=body)
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate unordered list
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_unordered_list(items)
 
         # Assert
@@ -327,7 +313,6 @@ class TestListConversion:
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """Multiple - items → <ul><li>...</li><li>...</li></ul>"""
         # Arrange: Update article with multiple unordered list items
@@ -336,12 +321,11 @@ class TestListConversion:
         article_input = ArticleInput(title=draft_article.title, body=body)
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate unordered list
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_unordered_list(items)
 
         # Assert
@@ -351,7 +335,6 @@ class TestListConversion:
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """1. item → <ol><li>item</li></ol>"""
         # Arrange: Update article with single ordered list item
@@ -360,12 +343,11 @@ class TestListConversion:
         article_input = ArticleInput(title=draft_article.title, body=body)
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate ordered list
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_ordered_list(items)
 
         # Assert
@@ -375,7 +357,6 @@ class TestListConversion:
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """Multiple numbered items → <ol><li>...</li><li>...</li></ol>"""
         # Arrange: Update article with multiple ordered list items
@@ -384,12 +365,11 @@ class TestListConversion:
         article_input = ArticleInput(title=draft_article.title, body=body)
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate ordered list
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_ordered_list(items)
 
         # Assert
@@ -397,13 +377,12 @@ class TestListConversion:
 
 
 class TestHorizontalLineConversion:
-    """Tests for horizontal line conversion."""
+    """Tests for horizontal line conversion using HtmlValidator."""
 
     async def test_horizontal_line(
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """--- → <hr>"""
         # Arrange: Update article with horizontal line
@@ -413,12 +392,11 @@ class TestHorizontalLineConversion:
         )
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate horizontal line
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_horizontal_line()
 
         # Assert
@@ -426,13 +404,12 @@ class TestHorizontalLineConversion:
 
 
 class TestLinkConversion:
-    """Tests for link conversion."""
+    """Tests for link conversion using HtmlValidator."""
 
     async def test_link_conversion(
         self,
         real_session: Session,
         draft_article: Article,
-        preview_page: Page,
     ) -> None:
         """[text](url) → <a href="url">text</a>"""
         # Arrange: Update article with link
@@ -444,20 +421,24 @@ class TestLinkConversion:
         )
         await update_article(real_session, draft_article.id, article_input)
 
-        # Refresh preview
-        await preview_page.reload()
-        await preview_page.wait_for_load_state("domcontentloaded")
+        # Get preview HTML via API
+        html = await get_preview_html(real_session, draft_article.key)
 
         # Act: Validate link
-        validator = PreviewValidator(preview_page)
+        validator = HtmlValidator(html)
         result = await validator.validate_link(link_text, link_url)
 
         # Assert
         assert result.success, f"Link conversion failed: {result.message}"
 
 
+@pytest.mark.playwright
 class TestTocConversion:
-    """Tests for TOC (Table of Contents) conversion."""
+    """Tests for TOC (Table of Contents) conversion.
+
+    These tests require Playwright for dynamic element validation
+    (Shadow DOM, custom elements).
+    """
 
     async def test_toc_with_headings(
         self,

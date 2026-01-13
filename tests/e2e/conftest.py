@@ -18,16 +18,18 @@ import pytest_asyncio
 from playwright.async_api import Error as PlaywrightError
 
 from note_mcp.api.articles import create_draft
+from note_mcp.api.preview import get_preview_html
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
 from note_mcp.browser.manager import BrowserManager
-from note_mcp.models import Article, ArticleInput, LoginError, Session
+from note_mcp.models import Article, ArticleInput, LoginError, NoteAPIError, Session
 from tests.e2e.helpers.constants import (
     DEFAULT_ELEMENT_WAIT_TIMEOUT_MS,
     DEFAULT_NAVIGATION_TIMEOUT_MS,
     LOGIN_TIMEOUT_SECONDS,
     NOTE_EDITOR_URL,
 )
+from tests.e2e.helpers.html_validator import HtmlValidator
 
 if TYPE_CHECKING:
     from playwright._impl._api_structures import SetCookieParam
@@ -36,6 +38,18 @@ if TYPE_CHECKING:
 
 # Test article prefix for identification and cleanup
 E2E_TEST_PREFIX = "[E2E-TEST-"
+
+
+def _is_headless_test() -> bool:
+    """Check if tests should run in headless mode.
+
+    Uses NOTE_MCP_TEST_HEADLESS environment variable.
+    Default: False (headed mode for visibility during development)
+
+    Returns:
+        True if headless mode is enabled
+    """
+    return os.environ.get("NOTE_MCP_TEST_HEADLESS", "false").lower() == "true"
 
 
 def _generate_test_article_title() -> str:
@@ -197,6 +211,48 @@ async def _open_preview_and_get_page(page: Page, session: Session, article_key: 
 
 
 @pytest_asyncio.fixture
+async def preview_html(
+    real_session: Session,
+    draft_article: Article,
+) -> str:
+    """Get preview HTML via API without Playwright.
+
+    Uses note_get_preview_html API for fast HTML retrieval.
+    Suitable for static HTML validation tests.
+
+    Args:
+        real_session: Authenticated session fixture
+        draft_article: Draft article to get preview for
+
+    Returns:
+        Preview page HTML content
+
+    Raises:
+        pytest.skip: If API call fails
+    """
+    try:
+        return await get_preview_html(real_session, draft_article.key)
+    except NoteAPIError as e:
+        pytest.skip(f"Failed to fetch preview HTML: {e.message}")
+
+
+@pytest_asyncio.fixture
+async def html_validator(preview_html: str) -> HtmlValidator:
+    """Get HtmlValidator for static HTML validation.
+
+    Provides BeautifulSoup-based validator for fast, Playwright-free
+    HTML element verification.
+
+    Args:
+        preview_html: HTML content from preview_html fixture
+
+    Returns:
+        HtmlValidator instance
+    """
+    return HtmlValidator(preview_html)
+
+
+@pytest_asyncio.fixture
 async def preview_page(
     real_session: Session,
     draft_article: Article,
@@ -204,6 +260,7 @@ async def preview_page(
     """Get a browser page with the draft article preview loaded.
 
     Creates a fresh browser context for each test to ensure clean state.
+    Supports headless mode via NOTE_MCP_TEST_HEADLESS environment variable.
 
     Args:
         real_session: Authenticated session fixture
@@ -216,7 +273,8 @@ async def preview_page(
 
     # Create fresh browser context for each test to avoid state pollution
     playwright = await async_playwright().start()
-    browser = await playwright.chromium.launch(headless=False)
+    headless = _is_headless_test()
+    browser = await playwright.chromium.launch(headless=headless)
     context = await browser.new_context()
     page = await context.new_page()
 
@@ -245,6 +303,7 @@ async def editor_page(
 
     既存の下書き記事をエディタで開き、ProseMirrorが表示された状態を提供。
     ネイティブHTML変換テスト用にエディタへの直接入力を可能にする。
+    Supports headless mode via NOTE_MCP_TEST_HEADLESS environment variable.
 
     Args:
         real_session: 認証済みセッション
@@ -256,7 +315,8 @@ async def editor_page(
     from playwright.async_api import async_playwright
 
     playwright = await async_playwright().start()
-    browser = await playwright.chromium.launch(headless=False)
+    headless = _is_headless_test()
+    browser = await playwright.chromium.launch(headless=headless)
     context = await browser.new_context()
     page = await context.new_page()
 
