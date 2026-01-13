@@ -509,7 +509,7 @@ async def note_list_articles(
     lines = [f"記事一覧（{result.total}件中{len(result.articles)}件、ページ{result.page}）:"]
     for article in result.articles:
         status_label = "下書き" if article.status == ArticleStatus.DRAFT else "公開済み"
-        lines.append(f"  - [{status_label}] {article.title} (ID: {article.id})")
+        lines.append(f"  - [{status_label}] {article.title} (ID: {article.id}、キー: {article.key})")
 
     if result.has_more:
         lines.append(f"  （続きはpage={result.page + 1}で取得できます）")
