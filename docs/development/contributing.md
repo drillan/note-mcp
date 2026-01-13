@@ -172,7 +172,7 @@ Conventional Commits形式を使用します：
 
 例：
 ```
-feat: add ruby notation support
+feat: add table of contents support
 fix: handle session expiration
 docs: update authentication guide
 ```

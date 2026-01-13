@@ -58,9 +58,6 @@ _CITATION_PATTERN = re.compile(
 )
 # Pattern to extract URL from citation: "Text (URL)"
 _CITATION_URL_PATTERN = re.compile(r"^(.+?)\s+\((\S+)\)\s*$")
-# Ruby notation pattern: ｜漢字《かんじ》 or |漢字《かんじ》 or 漢字《かんじ》
-# Note: Vertical bar is REQUIRED by note.com, but pattern accepts omission for detection
-_RUBY_PATTERN = re.compile(r"[｜|]?([一-龯ぁ-んァ-ヶー]+)《([^》]+)》")
 
 # Text alignment patterns (Issue #40)
 # Center: ->text<- (must be at start of line, ends with <- at end of line)
@@ -73,22 +70,6 @@ _TEXT_ALIGN_LEFT_PATTERN = re.compile(r"^<-(.+)$", re.MULTILINE)
 
 # Pattern to find URLs that are alone on a line (potential embed URLs)
 _STANDALONE_URL_PATTERN = re.compile(r"^(https?://\S+)$", re.MULTILINE)
-
-
-def has_ruby_notation(content: str) -> bool:
-    """Check if content contains ruby notation that requires browser automation.
-
-    Ruby notation (｜漢字《かんじ》) must be processed via browser path because
-    note.com's API sanitizes <ruby> HTML tags. The server-side processing
-    only works when content is typed through the editor.
-
-    Args:
-        content: The markdown content to check.
-
-    Returns:
-        True if ruby notation is found, False otherwise.
-    """
-    return bool(_RUBY_PATTERN.search(content))
 
 
 def has_embed_url(content: str) -> bool:
@@ -205,27 +186,6 @@ def _extract_citation(blockquote_content: str) -> tuple[str, str]:
         figcaption_html = citation_text
 
     return modified_content, figcaption_html
-
-
-def _convert_ruby_to_html(text: str) -> str:
-    """Convert note.com ruby notation to HTML ruby tags.
-
-    Converts: ｜漢字《かんじ》 or 漢字《かんじ》
-    To: <ruby>漢字<rp>（</rp><rt>かんじ</rt><rp>）</rp></ruby>
-
-    Args:
-        text: Text containing ruby notation
-
-    Returns:
-        Text with ruby notation converted to HTML
-    """
-
-    def replace_ruby(match: re.Match[str]) -> str:
-        base = match.group(1)
-        reading = match.group(2)
-        return f"<ruby>{base}<rp>（</rp><rt>{reading}</rt><rp>）</rp></ruby>"
-
-    return _RUBY_PATTERN.sub(replace_ruby, text)
 
 
 def _convert_text_alignment(content: str) -> str:
@@ -650,13 +610,10 @@ def markdown_to_html(content: str) -> str:
     # 1. Convert [TOC] to placeholder FIRST (before any processing)
     content = _convert_toc_to_placeholder(content)
 
-    # 2. Convert ruby notation BEFORE markdown conversion
-    content = _convert_ruby_to_html(content)
-
-    # 3. Convert text alignment markers to placeholders BEFORE markdown conversion
+    # 2. Convert text alignment markers to placeholders BEFORE markdown conversion
     content = _convert_text_alignment(content)
 
-    # 4. Markdown conversion
+    # 3. Markdown conversion
     md = MarkdownIt().enable("strikethrough")
     result: str = md.render(content)
 
