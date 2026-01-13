@@ -13,12 +13,15 @@ with keys registered via the embed_by_external_api endpoint.
 from __future__ import annotations
 
 import html
+import logging
 import re
 import uuid
 from typing import TYPE_CHECKING
 
 from note_mcp.api.client import NoteAPIClient
 from note_mcp.models import ErrorCode, NoteAPIError
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from note_mcp.models import Session
@@ -128,6 +131,58 @@ def generate_embed_html(url: str, service: str | None = None) -> str:
     return _build_embed_figure_html(url, embed_key, service)
 
 
+async def _fetch_note_embed_key(
+    session: Session,
+    url: str,
+    article_key: str,
+) -> tuple[str, str]:
+    """Fetch embed key for note.com article via /v1/embed endpoint.
+
+    This internal function handles note.com article embeds which require
+    a different API endpoint than external services (YouTube, Twitter).
+
+    Issue #121: note.com articles must use POST /v1/embed instead of
+    GET /v2/embed_by_external_api which returns 500 error.
+
+    Args:
+        session: Authenticated session with valid cookies.
+        url: note.com article URL (e.g., https://note.com/user/n/xxx).
+        article_key: Article key where embed will be inserted
+                     (e.g., "n1234567890ab").
+
+    Returns:
+        Tuple of (embed_key, html_for_embed):
+        - embed_key: Server-registered key (e.g., "emb0076d44f4f7f")
+        - html_for_embed: HTML snippet for rendering the embed
+
+    Raises:
+        NoteAPIError: If API request fails or returns empty response.
+    """
+    payload = {
+        "url": url,
+        "embeddable_key": article_key,
+        "embeddable_type": "Note",
+    }
+
+    async with NoteAPIClient(session) as client:
+        response = await client.post("/v1/embed", json=payload)
+
+    # Response structure: {"data": {"embedded_content": {"key": ..., "html_for_embed": ...}}}
+    data = response.get("data", {})
+    embedded_content = data.get("embedded_content", {})
+    embed_key = embedded_content.get("key")
+    html_for_embed = embedded_content.get("html_for_embed", "")
+
+    if not embed_key:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Failed to fetch note embed key: API returned empty response",
+            details={"url": url, "article_key": article_key, "response": response},
+        )
+
+    return embed_key, html_for_embed
+
+
 async def fetch_embed_key(
     session: Session,
     url: str,
@@ -135,11 +190,15 @@ async def fetch_embed_key(
 ) -> tuple[str, str]:
     """Fetch server-registered embed key from note.com API.
 
-    This function calls the embed_by_external_api endpoint to register
+    This function calls the appropriate API endpoint to register
     the embed URL with note.com's server and obtain a valid embed key.
 
     The server-registered key is required for note.com's frontend to
     render the iframe. Random keys generated locally will not work.
+
+    Issue #121: Different endpoints are used for different services:
+    - note.com articles: POST /v1/embed
+    - YouTube/Twitter: GET /v2/embed_by_external_api
 
     Args:
         session: Authenticated session with valid cookies.
@@ -160,7 +219,11 @@ async def fetch_embed_key(
     if service is None:
         raise ValueError(f"Unsupported embed URL: {url}")
 
-    # Build query parameters for embed_by_external_api endpoint
+    # Issue #121: note.com articles use a different API endpoint
+    if service == "note":
+        return await _fetch_note_embed_key(session, url, article_key)
+
+    # YouTube/Twitter: use existing /v2/embed_by_external_api endpoint
     params = {
         "url": url,
         "service": service,
@@ -241,6 +304,9 @@ async def resolve_embed_keys(
     This function should be called after markdown_to_html() conversion
     and before saving the article body to note.com.
 
+    Issue #121: API errors for individual embeds are logged and skipped,
+    allowing other embeds to be processed successfully.
+
     Args:
         session: Authenticated session with valid cookies.
         html_body: HTML body containing figure elements with random embed keys.
@@ -249,9 +315,7 @@ async def resolve_embed_keys(
 
     Returns:
         HTML body with embed keys replaced by server-registered keys.
-
-    Raises:
-        NoteAPIError: If any API request fails.
+        Embeds that fail to resolve keep their original placeholder keys.
     """
     # Find all embed figures in the HTML
     matches = list(_EMBED_FIGURE_PATTERN.finditer(html_body))
@@ -274,13 +338,18 @@ async def resolve_embed_keys(
         if get_embed_service(url) is None:
             continue
 
-        # Fetch server-registered key
-        server_key, _ = await fetch_embed_key(session, url, article_key)
+        # Fetch server-registered key with error handling (Issue #121)
+        try:
+            server_key, _ = await fetch_embed_key(session, url, article_key)
 
-        # Replace the old key with the server key
-        result = result.replace(
-            f'embedded-content-key="{old_key}"',
-            f'embedded-content-key="{server_key}"',
-        )
+            # Replace the old key with the server key
+            result = result.replace(
+                f'embedded-content-key="{old_key}"',
+                f'embedded-content-key="{server_key}"',
+            )
+        except NoteAPIError as e:
+            # Log warning and continue processing other embeds
+            logger.warning("Embed key fetch failed for %s: %s", url, e.message)
+            # Original placeholder key is preserved
 
     return result

@@ -225,6 +225,148 @@ class TestEmbedPatterns:
         assert not NOTE_PATTERN.match("https://note.com/user")
 
 
+class TestFetchNoteEmbedKey:
+    """Tests for _fetch_note_embed_key function (Issue #121).
+
+    note.com article URLs require a different API endpoint (/v1/embed)
+    than external services (YouTube, Twitter) which use /v2/embed_by_external_api.
+    """
+
+    @pytest.mark.asyncio
+    async def test_fetch_note_embed_key_uses_post_v1_endpoint(self) -> None:
+        """Test that note.com article URL uses POST /v1/embed endpoint."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        # Response structure: {"data": {"embedded_content": {"key": ..., "html_for_embed": ...}}}
+        mock_response = {
+            "data": {
+                "embedded_content": {
+                    "key": "embnote123456789",
+                    "html_for_embed": '<div class="note-embed">Article preview</div>',
+                }
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            embed_key, html_for_embed = await fetch_embed_key(
+                session,
+                "https://note.com/username/n/n1234567890ab",
+                "n9876543210xy",
+            )
+
+            # Should use POST /v1/embed, not GET /v2/embed_by_external_api
+            mock_client.post.assert_called_once()
+            call_args = mock_client.post.call_args
+            assert "/v1/embed" in call_args[0][0]
+            # Verify GET was NOT called
+            mock_client.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_fetch_note_embed_key_returns_key_and_html(self) -> None:
+        """Test that note.com embed returns valid key and HTML."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        # Response structure: {"data": {"embedded_content": {"key": ..., "html_for_embed": ...}}}
+        mock_response = {
+            "data": {
+                "embedded_content": {
+                    "key": "embnote123456789",
+                    "html_for_embed": '<div class="note-embed">Article preview</div>',
+                }
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            embed_key, html_for_embed = await fetch_embed_key(
+                session,
+                "https://note.com/username/n/n1234567890ab",
+                "n9876543210xy",
+            )
+
+            assert embed_key == "embnote123456789"
+            assert "note-embed" in html_for_embed
+
+    @pytest.mark.asyncio
+    async def test_fetch_note_embed_key_sends_correct_payload(self) -> None:
+        """Test that note.com embed sends correct JSON payload."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        # Response structure: {"data": {"embedded_content": {"key": ..., "html_for_embed": ...}}}
+        mock_response = {
+            "data": {
+                "embedded_content": {
+                    "key": "embnote123456789",
+                    "html_for_embed": '<div class="note-embed">Article preview</div>',
+                }
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            await fetch_embed_key(
+                session,
+                "https://note.com/username/n/n1234567890ab",
+                "n9876543210xy",
+            )
+
+            # Verify the payload structure
+            call_kwargs = mock_client.post.call_args[1]
+            payload = call_kwargs.get("json", {})
+            assert payload.get("url") == "https://note.com/username/n/n1234567890ab"
+            assert payload.get("embeddable_key") == "n9876543210xy"
+            assert payload.get("embeddable_type") == "Note"
+
+
 class TestFetchEmbedKey:
     """Tests for fetch_embed_key function."""
 
@@ -543,8 +685,12 @@ class TestResolveEmbedKeys:
             assert 'embedded-content-key="embserverkey456"' in result
 
     @pytest.mark.asyncio
-    async def test_api_error_propagates(self) -> None:
-        """Test that API errors are propagated."""
+    async def test_api_error_logs_warning_and_continues(self) -> None:
+        """Test that API errors are logged and processing continues (Issue #121).
+
+        After implementing error handling for note.com embeds, errors should
+        be logged but not block other embeds from being processed.
+        """
         import time
         from unittest.mock import patch
 
@@ -558,22 +704,124 @@ class TestResolveEmbedKeys:
             created_at=int(time.time()),
         )
 
+        # HTML with two embeds - first one will fail, second should succeed
         html_body = (
             '<figure name="fig1" id="fig1" '
-            'data-src="https://www.youtube.com/watch?v=video1" '
-            'embedded-service="youtube" '
+            'data-src="https://note.com/user/n/nfailarticle" '
+            'embedded-service="note" '
             'embedded-content-key="embrandom1" '
+            'contenteditable="false"></figure>'
+            '<figure name="fig2" id="fig2" '
+            'data-src="https://www.youtube.com/watch?v=success1" '
+            'embedded-service="youtube" '
+            'embedded-content-key="embrandom2" '
             'contenteditable="false"></figure>'
         )
 
         with patch("note_mcp.api.embeds.fetch_embed_key") as mock_fetch:
-            mock_fetch.side_effect = NoteAPIError(
-                code=ErrorCode.API_ERROR,
-                message="API request failed",
+            # First call fails (note.com), second succeeds (YouTube)
+            mock_fetch.side_effect = [
+                NoteAPIError(
+                    code=ErrorCode.API_ERROR,
+                    message="note.com embed failed",
+                ),
+                ("embserverkey2", "<iframe>youtube</iframe>"),
+            ]
+
+            # Should NOT raise - error is logged and processing continues
+            result = await resolve_embed_keys(session, html_body, "n1234567890ab")
+
+            # First embed keeps original key (failed), second is replaced (succeeded)
+            assert 'embedded-content-key="embrandom1"' in result  # unchanged
+            assert 'embedded-content-key="embserverkey2"' in result  # replaced
+            assert mock_fetch.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_resolve_note_embed_uses_correct_api(self) -> None:
+        """Test that note.com embeds are resolved via the correct API (Issue #121)."""
+        import time
+        from unittest.mock import patch
+
+        from note_mcp.api.embeds import resolve_embed_keys
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        html_body = (
+            '<figure name="fig1" id="fig1" '
+            'data-src="https://note.com/username/n/n1234567890ab" '
+            'embedded-service="note" '
+            'embedded-content-key="embrandomnote" '
+            'contenteditable="false"></figure>'
+        )
+
+        with patch("note_mcp.api.embeds.fetch_embed_key") as mock_fetch:
+            mock_fetch.return_value = ("embnoteserver123", "<div>note preview</div>")
+
+            result = await resolve_embed_keys(session, html_body, "narticlekey")
+
+            # Verify the key was replaced
+            assert 'embedded-content-key="embnoteserver123"' in result
+            assert 'embedded-content-key="embrandomnote"' not in result
+            mock_fetch.assert_called_once_with(
+                session,
+                "https://note.com/username/n/n1234567890ab",
+                "narticlekey",
             )
 
-            with pytest.raises(NoteAPIError):
-                await resolve_embed_keys(session, html_body, "n1234567890ab")
+    @pytest.mark.asyncio
+    async def test_resolve_mixed_embeds_all_succeed(self) -> None:
+        """Test resolving mixed YouTube, Twitter, and note.com embeds (Issue #121)."""
+        import time
+        from unittest.mock import patch
+
+        from note_mcp.api.embeds import resolve_embed_keys
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        html_body = (
+            '<figure name="fig1" id="fig1" '
+            'data-src="https://www.youtube.com/watch?v=ytid123" '
+            'embedded-service="youtube" '
+            'embedded-content-key="embytrand" '
+            'contenteditable="false"></figure>'
+            '<figure name="fig2" id="fig2" '
+            'data-src="https://twitter.com/user/status/123" '
+            'embedded-service="twitter" '
+            'embedded-content-key="embtwrand" '
+            'contenteditable="false"></figure>'
+            '<figure name="fig3" id="fig3" '
+            'data-src="https://note.com/user/n/n123" '
+            'embedded-service="note" '
+            'embedded-content-key="embntrand" '
+            'contenteditable="false"></figure>'
+        )
+
+        with patch("note_mcp.api.embeds.fetch_embed_key") as mock_fetch:
+            mock_fetch.side_effect = [
+                ("embytserver", "<iframe>yt</iframe>"),
+                ("embtwserver", "<blockquote>tw</blockquote>"),
+                ("embntserver", "<div>note</div>"),
+            ]
+
+            result = await resolve_embed_keys(session, html_body, "narticlekey")
+
+            # All embeds should be resolved
+            assert 'embedded-content-key="embytserver"' in result
+            assert 'embedded-content-key="embtwserver"' in result
+            assert 'embedded-content-key="embntserver"' in result
+            assert mock_fetch.call_count == 3
 
 
 class TestGenerateEmbedHtmlWithKey:

@@ -169,6 +169,16 @@ if result == LinkResult.SUCCESS:
 - 認証状態はセッション管理で適切に維持すること
 - セッション期限切れ時は適切なエラーメッセージを返すこと
 
+### Test URLs (実在するURL)
+
+テスト・動作確認時は**必ず以下の実在するURL**を使用すること。架空のURLを生成してはならない。
+
+| サービス | URL |
+|---------|-----|
+| YouTube | https://www.youtube.com/watch?v=NMHcEDcympM |
+| X (Twitter) | https://x.com/patraqushe/status/1326880858007990275 |
+| note.com | https://note.com/drillan/n/n7379c02632c9 |
+
 ## Available Skills
 
 プロジェクト固有のスキルが `.claude/skills/` に用意されています。
@@ -195,6 +205,7 @@ docker compose up --build
 
 ### Other Skills
 
+- **issue-reporter** - 作業進捗をGitHub issueに自動報告
 - **code-quality-gate** - コード品質基準の完全遵守を保証
 - **constitution-checker** - プロジェクト憲法への準拠を検証
 - **tdd-workflow** - TDDワークフローを強制
