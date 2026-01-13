@@ -461,11 +461,12 @@ class TestUpdateArticleRawHtml:
 
         html_body = "<p>Updated content</p><figure><img src='new.jpg'></figure>"
 
+        # Issue #155: draft_save API returns {result, note_days_count, updated_at}, not article data
         mock_response = {
             "data": {
-                "result": "saved",  # draft_save returns result, not id
+                "result": True,
                 "note_days_count": 1,
-                "updated_at": 1234567890,
+                "updated_at": "2026-01-13T00:00:00Z",
             }
         }
 
@@ -492,7 +493,11 @@ class TestUpdateArticleRawHtml:
             payload = call_args.kwargs.get("json") or call_args[1].get("json")
             assert payload["body"] == html_body
             assert payload["name"] == "Updated Title"
+            # Article is constructed from input since draft_save doesn't return full article data
             assert result.id == "12345"
+            assert result.key == ""  # Numeric ID doesn't have key format
+            assert result.title == "Updated Title"
+            assert result.body == html_body
 
     @pytest.mark.asyncio
     async def test_update_article_with_tags(self) -> None:
@@ -501,11 +506,12 @@ class TestUpdateArticleRawHtml:
 
         session = create_mock_session()
 
+        # Issue #155: draft_save API returns {result, note_days_count, updated_at}, not article data
         mock_response = {
             "data": {
-                "result": "saved",  # draft_save returns result, not id
+                "result": True,
                 "note_days_count": 1,
-                "updated_at": 1234567890,
+                "updated_at": "2026-01-13T00:00:00Z",
             }
         }
 
@@ -575,8 +581,9 @@ class TestUpdateArticleRawHtml:
 
         session = create_mock_session()
 
-        # Response with data but no result field (draft_save returns {result, ...})
-        mock_response = {"data": {"name": "Title", "body": "<p>Content</p>"}}
+        # Issue #155: draft_save returns {result, note_days_count, updated_at}
+        # Response with data but no "result" field should raise error
+        mock_response = {"data": {"note_days_count": 1, "updated_at": "2026-01-13T00:00:00Z"}}
 
         with (
             patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
