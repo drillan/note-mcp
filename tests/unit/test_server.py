@@ -5,8 +5,65 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from note_mcp.models import Article, ArticleStatus, Image, ImageType
+from note_mcp.models import Article, ArticleListResult, ArticleStatus, Image, ImageType
 from note_mcp.utils.file_parser import LocalImage, ParsedArticle
+
+
+class TestNoteListArticles:
+    """Tests for note_list_articles function."""
+
+    @pytest.mark.asyncio
+    async def test_output_includes_article_key(self) -> None:
+        """記事一覧の出力にキーが含まれることを確認する.
+
+        Issue #137: note_list_articlesの出力に記事キー（key）を追加する。
+        note_get_preview_htmlやnote_show_previewはarticle_keyを必要とするため、
+        記事一覧からキーを確認できるようにする。
+        """
+        mock_session = MagicMock()
+        mock_articles = [
+            Article(
+                id="123456789",
+                key="n1234567890ab",
+                title="テスト記事1",
+                status=ArticleStatus.DRAFT,
+                body="",
+            ),
+            Article(
+                id="987654321",
+                key="nfedcba098765",
+                title="テスト記事2",
+                status=ArticleStatus.PUBLISHED,
+                body="",
+            ),
+        ]
+        mock_result = ArticleListResult(
+            articles=mock_articles,
+            total=2,
+            page=1,
+            has_more=False,
+        )
+
+        with (
+            patch("note_mcp.server._session_manager") as mock_session_manager,
+            patch("note_mcp.server.list_articles", new_callable=AsyncMock) as mock_list,
+        ):
+            mock_session.is_expired.return_value = False
+            mock_session_manager.load.return_value = mock_session
+            mock_list.return_value = mock_result
+
+            from note_mcp.server import note_list_articles
+
+            fn = note_list_articles.fn
+            result = await fn()
+
+            # 出力にキーが含まれることを確認
+            assert "キー: n1234567890ab" in result
+            assert "キー: nfedcba098765" in result
+
+            # IDも引き続き含まれることを確認
+            assert "ID: 123456789" in result
+            assert "ID: 987654321" in result
 
 
 class TestNoteCreateFromFile:
