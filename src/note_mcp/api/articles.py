@@ -115,14 +115,28 @@ async def get_article_raw_html(
 
     Args:
         session: Authenticated session
-        article_id: ID of the article (numeric or key format)
+        article_id: Article key (e.g., "n1234567890ab").
+            Note: Key format is required due to note.com API limitations.
+            The /v3/notes/ endpoint does not support numeric IDs.
 
     Returns:
         Article object with raw HTML body
 
     Raises:
-        NoteAPIError: If API request fails
+        NoteAPIError: If API request fails or numeric ID is provided
     """
+    # Issue #154: /v3/notes/ endpoint does not support numeric IDs
+    if article_id.isdigit():
+        raise NoteAPIError(
+            code=ErrorCode.INVALID_INPUT,
+            message=(
+                f"Numeric article ID '{article_id}' is not supported. "
+                "Please use the article key format (e.g., 'n1234567890ab'). "
+                "You can get the article key from create_draft() or list_articles()."
+            ),
+            details={"article_id": article_id},
+        )
+
     async with NoteAPIClient(session) as client:
         response = await client.get(f"/v3/notes/{article_id}")
 
@@ -432,14 +446,28 @@ async def get_article_via_api(
 
     Args:
         session: Authenticated session
-        article_id: ID of the article to retrieve (numeric or key format)
+        article_id: Article key (e.g., "n1234567890ab").
+            Note: Key format is required due to note.com API limitations.
+            The /v3/notes/ endpoint does not support numeric IDs.
 
     Returns:
         Article object with title, body (as Markdown), and status
 
     Raises:
-        NoteAPIError: If API request fails
+        NoteAPIError: If API request fails or numeric ID is provided
     """
+    # Issue #154: /v3/notes/ endpoint does not support numeric IDs
+    if article_id.isdigit():
+        raise NoteAPIError(
+            code=ErrorCode.INVALID_INPUT,
+            message=(
+                f"Numeric article ID '{article_id}' is not supported. "
+                "Please use the article key format (e.g., 'n1234567890ab'). "
+                "You can get the article key from create_draft() or list_articles()."
+            ),
+            details={"article_id": article_id},
+        )
+
     from note_mcp.utils.html_to_markdown import html_to_markdown
 
     async with NoteAPIClient(session) as client:

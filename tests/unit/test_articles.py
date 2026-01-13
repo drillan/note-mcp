@@ -1,7 +1,13 @@
 """Unit tests for article operations."""
 
-from note_mcp.api.articles import _build_article_payload
-from note_mcp.models import ArticleInput
+import pytest
+
+from note_mcp.api.articles import (
+    _build_article_payload,
+    get_article_raw_html,
+    get_article_via_api,
+)
+from note_mcp.models import ArticleInput, ErrorCode, NoteAPIError, Session
 
 
 class TestBuildArticlePayload:
@@ -107,3 +113,45 @@ class TestBuildArticlePayload:
         assert "body_length" not in payload
         # But title should still be included
         assert payload["name"] == "Test Article"
+
+
+class TestGetArticleViaApiNumericIdValidation:
+    """Tests for numeric ID validation in get_article_via_api()."""
+
+    @pytest.fixture
+    def mock_session(self) -> Session:
+        """Create a mock session for testing."""
+        return Session(
+            cookies={"note_gql_auth_token": "test_token", "XSRF-TOKEN": "test_xsrf"},
+            user_id="test_user",
+            username="testuser",
+            created_at=1700000000,
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_article_via_api_rejects_numeric_id(self, mock_session: Session) -> None:
+        """get_article_via_api() should reject numeric IDs.
+
+        Issue #154: /v3/notes/ endpoint does not support numeric IDs.
+        """
+        with pytest.raises(NoteAPIError) as exc_info:
+            await get_article_via_api(mock_session, "123456789")
+
+        assert exc_info.value.code == ErrorCode.INVALID_INPUT
+        assert "Numeric article ID" in exc_info.value.message
+        assert "123456789" in exc_info.value.message
+        assert "n1234567890ab" in exc_info.value.message
+
+    @pytest.mark.asyncio
+    async def test_get_article_raw_html_rejects_numeric_id(self, mock_session: Session) -> None:
+        """get_article_raw_html() should reject numeric IDs.
+
+        Issue #154: /v3/notes/ endpoint does not support numeric IDs.
+        """
+        with pytest.raises(NoteAPIError) as exc_info:
+            await get_article_raw_html(mock_session, "987654321")
+
+        assert exc_info.value.code == ErrorCode.INVALID_INPUT
+        assert "Numeric article ID" in exc_info.value.message
+        assert "987654321" in exc_info.value.message
+        assert "n1234567890ab" in exc_info.value.message
