@@ -404,7 +404,7 @@ class TestNoteGetPreviewHtmlTool:
 
         with (
             patch(
-                "note_mcp.server._session_manager.load",
+                "note_mcp.decorators._session_manager.load",
                 return_value=mock_session,
             ),
             patch(
@@ -461,7 +461,7 @@ class TestNoteGetPreviewHtmlTool:
 
         with (
             patch(
-                "note_mcp.server._session_manager.load",
+                "note_mcp.decorators._session_manager.load",
                 return_value=mock_session,
             ),
             patch(
