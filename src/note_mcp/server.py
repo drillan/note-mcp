@@ -25,8 +25,9 @@ from note_mcp.api.preview import get_preview_html
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
 from note_mcp.browser.preview import show_preview
+from note_mcp.decorators import handle_api_error, require_session
 from note_mcp.investigator import register_investigator_tools
-from note_mcp.models import ArticleInput, ArticleStatus, NoteAPIError
+from note_mcp.models import ArticleInput, ArticleStatus, NoteAPIError, Session
 from note_mcp.utils.file_parser import parse_markdown_file
 
 # Create MCP server instance
@@ -254,7 +255,10 @@ async def note_update_article(
 
 
 @mcp.tool()
+@require_session
+@handle_api_error
 async def note_upload_eyecatch(
+    session: Session,
     file_path: Annotated[str, "アップロードする画像ファイルのパス"],
     note_id: Annotated[str, "画像を関連付ける記事のID（数字のみ）"],
 ) -> str:
@@ -273,19 +277,15 @@ async def note_upload_eyecatch(
     Returns:
         アップロード結果（画像URLを含む）
     """
-    session = _session_manager.load()
-    if session is None or session.is_expired():
-        return "セッションが無効です。note_loginでログインしてください。"
-
-    try:
-        image = await upload_eyecatch_image(session, file_path, note_id=note_id)
-        return f"アイキャッチ画像をアップロードしました。URL: {image.url}"
-    except NoteAPIError as e:
-        return f"エラー: {e}"
+    image = await upload_eyecatch_image(session, file_path, note_id=note_id)
+    return f"アイキャッチ画像をアップロードしました。URL: {image.url}"
 
 
 @mcp.tool()
+@require_session
+@handle_api_error
 async def note_upload_body_image(
+    session: Session,
     file_path: Annotated[str, "アップロードする画像ファイルのパス"],
     note_id: Annotated[str, "画像を関連付ける記事のID（数字のみ）"],
 ) -> str:
@@ -306,18 +306,11 @@ async def note_upload_body_image(
     Returns:
         アップロード結果（画像URLを含む）
     """
-    session = _session_manager.load()
-    if session is None or session.is_expired():
-        return "セッションが無効です。note_loginでログインしてください。"
-
-    try:
-        image = await upload_body_image(session, file_path, note_id=note_id)
-        return (
-            f"本文用画像をアップロードしました。URL: {image.url}\n\n"
-            f"※画像を記事に直接挿入するには note_insert_body_image を使用してください。"
-        )
-    except NoteAPIError as e:
-        return f"エラー: {e}"
+    image = await upload_body_image(session, file_path, note_id=note_id)
+    return (
+        f"本文用画像をアップロードしました。URL: {image.url}\n\n"
+        f"※画像を記事に直接挿入するには note_insert_body_image を使用してください。"
+    )
 
 
 @mcp.tool()
@@ -368,7 +361,10 @@ async def note_insert_body_image(
 
 
 @mcp.tool()
+@require_session
+@handle_api_error
 async def note_show_preview(
+    session: Session,
     article_key: Annotated[str, "プレビューする記事のキー（例: n1234567890ab）"],
 ) -> str:
     """記事のプレビューをブラウザで表示します。
@@ -383,19 +379,15 @@ async def note_show_preview(
     Returns:
         プレビュー結果のメッセージ
     """
-    session = _session_manager.load()
-    if session is None or session.is_expired():
-        return "セッションが無効です。note_loginでログインしてください。"
-
-    try:
-        await show_preview(session, article_key)
-        return f"プレビューを表示しました。記事キー: {article_key}"
-    except NoteAPIError as e:
-        return f"エラー: {e}"
+    await show_preview(session, article_key)
+    return f"プレビューを表示しました。記事キー: {article_key}"
 
 
 @mcp.tool()
+@require_session
+@handle_api_error
 async def note_get_preview_html(
+    session: Session,
     article_key: Annotated[str, "取得する記事のキー（例: n1234567890ab）"],
 ) -> str:
     """プレビューページのHTMLを取得します。
@@ -410,15 +402,7 @@ async def note_get_preview_html(
     Returns:
         プレビューページのHTML
     """
-    session = _session_manager.load()
-    if session is None or session.is_expired():
-        return "セッションが無効です。note_loginでログインしてください。"
-
-    try:
-        html = await get_preview_html(session, article_key)
-        return html
-    except NoteAPIError as e:
-        return f"エラー: {e}"
+    return await get_preview_html(session, article_key)
 
 
 @mcp.tool()
