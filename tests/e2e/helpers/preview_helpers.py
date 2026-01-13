@@ -168,7 +168,7 @@ async def preview_page_context(
     article_key: str,
     *,
     headless: bool = False,
-) -> AsyncGenerator[Page, None]:
+) -> AsyncGenerator[Page]:
     """Open preview page with automatic browser lifecycle management.
 
     Creates a fresh browser context, injects session cookies, and opens

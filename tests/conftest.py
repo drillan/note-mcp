@@ -62,7 +62,7 @@ def expired_session() -> Session:
 
 
 @pytest.fixture
-def mock_keyring() -> Generator[MagicMock, None, None]:
+def mock_keyring() -> Generator[MagicMock]:
     """Create a mock keyring for testing session storage.
 
     Yields:
@@ -94,7 +94,7 @@ def mock_keyring_with_session(mock_keyring: MagicMock, mock_session: Session) ->
 
 
 @pytest.fixture
-def mock_api_client() -> Generator[AsyncMock, None, None]:
+def mock_api_client() -> Generator[AsyncMock]:
     """Create a mock NoteAPIClient for testing API operations.
 
     Yields:
@@ -114,7 +114,7 @@ def mock_api_client() -> Generator[AsyncMock, None, None]:
 
 
 @pytest.fixture
-def mock_browser_manager() -> Generator[tuple[MagicMock, AsyncMock], None, None]:
+def mock_browser_manager() -> Generator[tuple[MagicMock, AsyncMock]]:
     """Create a mock BrowserManager for testing browser operations.
 
     Yields:

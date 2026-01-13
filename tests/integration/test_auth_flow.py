@@ -138,7 +138,7 @@ class TestSessionFlow:
     """Tests for complete session flow."""
 
     @pytest.fixture
-    def mock_keyring(self) -> Generator[MagicMock, None, None]:
+    def mock_keyring(self) -> Generator[MagicMock]:
         """Create a mock keyring."""
         with patch("note_mcp.auth.session.keyring") as mock:
             mock.get_password.return_value = None

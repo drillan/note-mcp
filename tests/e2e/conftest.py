@@ -45,7 +45,7 @@ def _generate_test_article_title() -> str:
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def cleanup_browser_manager() -> AsyncGenerator[None, None]:
+async def cleanup_browser_manager() -> AsyncGenerator[None]:
     """Clean up BrowserManager singleton after each test.
 
     This fixture ensures that the BrowserManager singleton is properly
@@ -64,7 +64,7 @@ async def cleanup_browser_manager() -> AsyncGenerator[None, None]:
 
 
 @pytest.fixture(scope="session")
-def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
+def event_loop() -> Generator[asyncio.AbstractEventLoop]:
     """Create an event loop for the session."""
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
@@ -72,7 +72,7 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def real_session() -> AsyncGenerator[Session, None]:
+async def real_session() -> AsyncGenerator[Session]:
     """Get a real authenticated session.
 
     Session acquisition priority:
@@ -128,7 +128,7 @@ async def real_session() -> AsyncGenerator[Session, None]:
 @pytest_asyncio.fixture
 async def draft_article(
     real_session: Session,
-) -> AsyncGenerator[Article, None]:
+) -> AsyncGenerator[Article]:
     """Create a test draft article with automatic cleanup.
 
     Creates a draft with the [E2E-TEST-{timestamp}] prefix for identification.
@@ -200,7 +200,7 @@ async def _open_preview_and_get_page(page: Page, session: Session, article_key: 
 async def preview_page(
     real_session: Session,
     draft_article: Article,
-) -> AsyncGenerator[Page, None]:
+) -> AsyncGenerator[Page]:
     """Get a browser page with the draft article preview loaded.
 
     Creates a fresh browser context for each test to ensure clean state.
@@ -240,7 +240,7 @@ async def preview_page(
 async def editor_page(
     real_session: Session,
     draft_article: Article,
-) -> AsyncGenerator[Page, None]:
+) -> AsyncGenerator[Page]:
     """エディタページを開いた状態のブラウザページ。
 
     既存の下書き記事をエディタで開き、ProseMirrorが表示された状態を提供。
