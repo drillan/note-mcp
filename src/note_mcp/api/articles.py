@@ -141,8 +141,7 @@ async def get_article_raw_html(
         response = await client.get(f"/v3/notes/{article_id}")
 
     # Parse response - body remains as raw HTML
-    article_data = response.get("data", {})
-    return from_api_response(article_data)
+    return _parse_article_response(response)
 
 
 async def update_article_raw_html(
@@ -205,6 +204,22 @@ async def update_article_raw_html(
         body=html_body,
         status=ArticleStatus.DRAFT,
     )
+
+
+def _parse_article_response(response: dict[str, Any]) -> Article:
+    """Parse API response and convert to Article.
+
+    Handles the common pattern of extracting article data from
+    API response and converting it to Article model.
+
+    Args:
+        response: Raw API response dict with "data" key
+
+    Returns:
+        Article object parsed from response data
+    """
+    article_data = response.get("data", {})
+    return from_api_response(article_data)
 
 
 def _normalize_tags(tags: list[str] | None) -> list[dict[str, Any]] | None:
@@ -495,8 +510,7 @@ async def get_article_via_api(
         response = await client.get(f"/v3/notes/{article_id}")
 
     # Parse response
-    article_data = response.get("data", {})
-    article = from_api_response(article_data)
+    article = _parse_article_response(response)
 
     # Convert HTML body to Markdown for consistent output
     if article.body:
@@ -660,8 +674,7 @@ async def publish_article(
             response = await client.post("/v3/notes", json=payload)
 
     # Parse response
-    article_data = response.get("data", {})
-    return from_api_response(article_data)
+    return _parse_article_response(response)
 
 
 # =============================================================================
@@ -786,8 +799,7 @@ async def delete_draft(
     # Step 1: Fetch article info to validate and get details
     async with NoteAPIClient(session) as client:
         response = await client.get(f"/v3/notes/{article_key}")
-        article_data = response.get("data", {})
-        article = from_api_response(article_data)
+        article = _parse_article_response(response)
 
         # Check if article is published (cannot delete published articles)
         if article.status == ArticleStatus.PUBLISHED:

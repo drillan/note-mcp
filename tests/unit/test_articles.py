@@ -4,10 +4,72 @@ import pytest
 
 from note_mcp.api.articles import (
     _build_article_payload,
+    _parse_article_response,
     get_article_raw_html,
     get_article_via_api,
 )
-from note_mcp.models import ArticleInput, ErrorCode, NoteAPIError, Session
+from note_mcp.models import Article, ArticleInput, ArticleStatus, ErrorCode, NoteAPIError, Session
+
+
+class TestParseArticleResponse:
+    """Tests for _parse_article_response helper function."""
+
+    def test_parses_standard_api_response(self) -> None:
+        """_parse_article_response should extract Article from standard API response."""
+        response = {
+            "data": {
+                "id": 12345,
+                "key": "n1234567890ab",
+                "name": "Test Article",
+                "body": "<p>Test body</p>",
+                "status": "draft",
+            }
+        }
+
+        article = _parse_article_response(response)
+
+        assert isinstance(article, Article)
+        assert article.id == "12345"
+        assert article.key == "n1234567890ab"
+        assert article.title == "Test Article"
+        assert article.body == "<p>Test body</p>"
+        assert article.status == ArticleStatus.DRAFT
+
+    def test_handles_empty_data(self) -> None:
+        """_parse_article_response should handle empty data gracefully."""
+        response: dict[str, dict[str, str]] = {"data": {}}
+
+        article = _parse_article_response(response)
+
+        assert isinstance(article, Article)
+        assert article.id == ""
+        assert article.key == ""
+        assert article.title == ""
+
+    def test_handles_missing_data_key(self) -> None:
+        """_parse_article_response should handle missing 'data' key."""
+        response: dict[str, str] = {}
+
+        article = _parse_article_response(response)
+
+        assert isinstance(article, Article)
+        assert article.id == ""
+
+    def test_parses_published_article(self) -> None:
+        """_parse_article_response should correctly parse published article status."""
+        response = {
+            "data": {
+                "id": 67890,
+                "key": "nabcdef123456",
+                "name": "Published Article",
+                "body": "<p>Content</p>",
+                "status": "published",
+            }
+        }
+
+        article = _parse_article_response(response)
+
+        assert article.status == ArticleStatus.PUBLISHED
 
 
 class TestBuildArticlePayload:
