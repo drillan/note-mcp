@@ -5,7 +5,7 @@ Uses markdown-it-py for CommonMark-compliant conversion.
 
 import re
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
 from markdown_it import MarkdownIt
@@ -73,6 +73,24 @@ _TEXT_ALIGN_LEFT_PATTERN = re.compile(r"^<-(.+)$", re.MULTILINE)
 # Pattern to find URLs that are alone on a line (potential embed URLs)
 _STANDALONE_URL_PATTERN = re.compile(r"^(https?://\S+)$", re.MULTILINE)
 
+# Pattern to match paragraphs containing alignment placeholders (for html_transformer)
+_ALIGN_P_PATTERN = re.compile(
+    r"<p([^>]*)>§§ALIGN_(CENTER|RIGHT|LEFT)§§(.*?)§§/ALIGN§§</p>",
+    re.DOTALL | re.IGNORECASE,
+)
+
+# Pattern to match <p> content inside blockquotes (for html_transformer)
+_P_IN_BLOCKQUOTE_PATTERN = re.compile(
+    r"(<blockquote[^>]*>.*?)(<p[^>]*>)(.*?)(</p>)(.*?</blockquote>)",
+    re.DOTALL | re.IGNORECASE,
+)
+
+# Pattern to match blockquote elements for figure wrapping (for html_transformer)
+_BLOCKQUOTE_FIGURE_PATTERN = re.compile(
+    r"<blockquote[^>]*>(.*?)</blockquote>",
+    re.DOTALL | re.IGNORECASE,
+)
+
 
 @contextmanager
 def _protect_code_blocks(content: str, prefix: str = "CODE_BLOCK") -> Iterator[tuple[str, list[tuple[str, str]]]]:
@@ -109,6 +127,36 @@ def _protect_code_blocks(content: str, prefix: str = "CODE_BLOCK") -> Iterator[t
     protected = re.sub(r"`[^`]+`", protect, protected)
 
     yield protected, code_blocks
+
+
+def html_transformer(
+    pattern: re.Pattern[str],
+    transformer: Callable[[re.Match[str]], str],
+) -> Callable[[str], str]:
+    """Create an HTML transformation function.
+
+    This Higher-Order Function reduces code duplication for pattern-based
+    HTML transformations that follow the pattern:
+        result = pattern.sub(transform_func, html)
+
+    Args:
+        pattern: Compiled regex pattern to match.
+        transformer: Function that takes a Match object and returns replacement string.
+
+    Returns:
+        Function that applies the transformation to HTML content.
+
+    Example:
+        >>> pattern = re.compile(r"\\[bold\\](.*?)\\[/bold\\]")
+        >>> bold_transformer = html_transformer(pattern, lambda m: f"<b>{m.group(1)}</b>")
+        >>> bold_transformer("[bold]text[/bold]")
+        '<b>text</b>'
+    """
+
+    def transform(html: str) -> str:
+        return pattern.sub(transformer, html)
+
+    return transform
 
 
 def _restore_code_blocks(content: str, blocks: list[tuple[str, str]]) -> str:
@@ -270,45 +318,46 @@ def _convert_text_alignment(content: str) -> str:
     return _restore_code_blocks(protected, blocks)
 
 
-def _apply_text_alignment_to_html(html: str) -> str:
-    """Convert text alignment placeholders to HTML style attributes.
-
-    This function processes the alignment placeholders created by
-    _convert_text_alignment and converts them to proper HTML paragraphs
-    with text-align styles.
+def _apply_alignment(match: re.Match[str]) -> str:
+    """Transform alignment placeholder to styled paragraph.
 
     Args:
-        html: HTML content with alignment placeholders
+        match: Regex match containing attrs, alignment type, and content groups.
 
     Returns:
-        HTML with proper text-align styles applied
+        HTML paragraph with text-align style applied.
     """
-    # Pattern to match paragraphs containing alignment placeholders
-    # The placeholders will be inside <p> tags after markdown conversion
-    align_p_pattern = re.compile(
-        r"<p([^>]*)>§§ALIGN_(CENTER|RIGHT|LEFT)§§(.*?)§§/ALIGN§§</p>",
-        re.DOTALL | re.IGNORECASE,
-    )
+    attrs = match.group(1)
+    alignment = match.group(2).lower()
+    content = match.group(3)
 
-    def apply_alignment(match: re.Match[str]) -> str:
-        attrs = match.group(1)
-        alignment = match.group(2).lower()
-        content = match.group(3)
+    # Add style attribute for text-align
+    style = f"text-align: {alignment}"
 
-        # Add style attribute for text-align
-        style = f"text-align: {alignment}"
+    # If there are existing attributes, append style
+    if attrs and 'style="' in attrs:
+        # Append to existing style (unlikely but handle it)
+        attrs = attrs.replace('style="', f'style="{style}; ')
+    else:
+        # Add new style attribute before other attrs
+        attrs = f' style="{style}"' + (attrs or "")
 
-        # If there are existing attributes, append style
-        if attrs and 'style="' in attrs:
-            # Append to existing style (unlikely but handle it)
-            attrs = attrs.replace('style="', f'style="{style}; ')
-        else:
-            # Add new style attribute before other attrs
-            attrs = f' style="{style}"' + (attrs or "")
+    return f"<p{attrs}>{content}</p>"
 
-        return f"<p{attrs}>{content}</p>"
 
-    return align_p_pattern.sub(apply_alignment, html)
+_apply_text_alignment_to_html = html_transformer(_ALIGN_P_PATTERN, _apply_alignment)
+"""Convert text alignment placeholders to HTML style attributes.
+
+This function processes the alignment placeholders created by
+_convert_text_alignment and converts them to proper HTML paragraphs
+with text-align styles.
+
+Args:
+    html: HTML content with alignment placeholders
+
+Returns:
+    HTML with proper text-align styles applied
+"""
 
 
 def _wrap_li_content_in_p(html: str) -> str:
@@ -341,96 +390,100 @@ def _wrap_li_content_in_p(html: str) -> str:
     return _LI_CONTENT_PATTERN.sub(wrap_content, html)
 
 
-def _convert_blockquote_newlines_to_br(html: str) -> str:
-    """Convert newlines inside blockquote paragraphs to <br> tags.
-
-    note.com's browser editor uses <br> tags for line breaks inside blockquotes.
-    This function converts newlines to <br> tags to match that format.
-
-    Converts:
-        <blockquote><p>Line 1
-        Line 2</p></blockquote>
-    To:
-        <blockquote><p>Line 1<br>Line 2</p></blockquote>
-
-    Note: While this generates correct HTML with <br> tags, note.com's API
-    sanitizes <br> tags from blockquote content. This is a server-side
-    limitation. Content created via browser editor preserves <br> tags,
-    but API-submitted content has them stripped.
-
-    Workaround for users: Use separate blockquotes for each line:
-        > Line 1
-
-        > Line 2
+def _convert_p_newlines(match: re.Match[str]) -> str:
+    """Transform paragraph newlines to <br> tags inside blockquotes.
 
     Args:
-        html: HTML string with blockquotes
+        match: Regex match containing blockquote and paragraph groups.
 
     Returns:
-        HTML with blockquote paragraph newlines converted to <br> tags
+        Blockquote HTML with newlines converted to <br> tags.
     """
-    # Pattern to match <p> content inside blockquotes
-    p_in_blockquote_pattern = re.compile(
-        r"(<blockquote[^>]*>.*?)(<p[^>]*>)(.*?)(</p>)(.*?</blockquote>)",
-        re.DOTALL | re.IGNORECASE,
-    )
+    before_p = match.group(1)  # <blockquote...> and anything before <p>
+    p_open = match.group(2)  # <p ...>
+    p_content = match.group(3)  # content inside <p>
+    p_close = match.group(4)  # </p>
+    after_p = match.group(5)  # anything after </p> including </blockquote>
 
-    def convert_p_newlines(match: re.Match[str]) -> str:
-        before_p = match.group(1)  # <blockquote...> and anything before <p>
-        p_open = match.group(2)  # <p ...>
-        p_content = match.group(3)  # content inside <p>
-        p_close = match.group(4)  # </p>
-        after_p = match.group(5)  # anything after </p> including </blockquote>
+    # Convert newlines to <br> tags (note.com uses <br> without slash)
+    p_content = p_content.replace("\n", "<br>")
 
-        # Convert newlines to <br> tags (note.com uses <br> without slash)
-        p_content = p_content.replace("\n", "<br>")
-
-        return f"{before_p}{p_open}{p_content}{p_close}{after_p}"
-
-    return p_in_blockquote_pattern.sub(convert_p_newlines, html)
+    return f"{before_p}{p_open}{p_content}{p_close}{after_p}"
 
 
-def _convert_blockquotes_to_note_format(html: str) -> str:
-    """Convert blockquotes to note.com figure format.
+_convert_blockquote_newlines_to_br = html_transformer(_P_IN_BLOCKQUOTE_PATTERN, _convert_p_newlines)
+"""Convert newlines inside blockquote paragraphs to <br> tags.
 
-    note.com expects blockquotes to be wrapped in <figure> elements:
-    <figure name="UUID" id="UUID">
-      <blockquote><p name="UUID" id="UUID">content</p></blockquote>
-      <figcaption>citation</figcaption>
-    </figure>
+note.com's browser editor uses <br> tags for line breaks inside blockquotes.
+This function converts newlines to <br> tags to match that format.
 
-    Citation is extracted from lines starting with em-dash (—):
-    - "— Source" becomes <figcaption>Source</figcaption>
-    - "— Source (URL)" becomes <figcaption><a href="URL">Source</a></figcaption>
+Converts:
+    <blockquote><p>Line 1
+    Line 2</p></blockquote>
+To:
+    <blockquote><p>Line 1<br>Line 2</p></blockquote>
 
-    This format is required for the API to preserve <br> tags inside blockquotes.
+Note: While this generates correct HTML with <br> tags, note.com's API
+sanitizes <br> tags from blockquote content. This is a server-side
+limitation. Content created via browser editor preserves <br> tags,
+but API-submitted content has them stripped.
+
+Workaround for users: Use separate blockquotes for each line:
+    > Line 1
+
+    > Line 2
+
+Args:
+    html: HTML string with blockquotes
+
+Returns:
+    HTML with blockquote paragraph newlines converted to <br> tags
+"""
+
+
+def _wrap_in_figure(match: re.Match[str]) -> str:
+    """Transform blockquote to note.com figure format.
 
     Args:
-        html: HTML string with blockquotes
+        match: Regex match containing blockquote content.
 
     Returns:
-        HTML with blockquotes wrapped in figure elements
+        Blockquote wrapped in figure element with citation extracted.
     """
-    # Pattern to match blockquote elements
-    blockquote_pattern = re.compile(
-        r"<blockquote[^>]*>(.*?)</blockquote>",
-        re.DOTALL | re.IGNORECASE,
+    blockquote_content = match.group(1)
+    element_id = _generate_uuid()
+
+    # Extract citation if present
+    modified_content, figcaption_html = _extract_citation(blockquote_content)
+
+    return (
+        f'<figure name="{element_id}" id="{element_id}">'
+        f"<blockquote>{modified_content}</blockquote>"
+        f"<figcaption>{figcaption_html}</figcaption></figure>"
     )
 
-    def wrap_in_figure(match: re.Match[str]) -> str:
-        blockquote_content = match.group(1)
-        element_id = _generate_uuid()
 
-        # Extract citation if present
-        modified_content, figcaption_html = _extract_citation(blockquote_content)
+_convert_blockquotes_to_note_format = html_transformer(_BLOCKQUOTE_FIGURE_PATTERN, _wrap_in_figure)
+"""Convert blockquotes to note.com figure format.
 
-        return (
-            f'<figure name="{element_id}" id="{element_id}">'
-            f"<blockquote>{modified_content}</blockquote>"
-            f"<figcaption>{figcaption_html}</figcaption></figure>"
-        )
+note.com expects blockquotes to be wrapped in <figure> elements:
+<figure name="UUID" id="UUID">
+  <blockquote><p name="UUID" id="UUID">content</p></blockquote>
+  <figcaption>citation</figcaption>
+</figure>
 
-    return blockquote_pattern.sub(wrap_in_figure, html)
+Citation is extracted from lines starting with em-dash (—):
+- "— Source" becomes <figcaption>Source</figcaption>
+- "— Source (URL)" becomes <figcaption><a href="URL">Source</a></figcaption>
+
+This format is required for the API to preserve <br> tags inside blockquotes.
+
+Args:
+    html: HTML string with blockquotes
+
+Returns:
+    HTML with blockquotes wrapped in figure elements
+"""
 
 
 def _add_uuid_to_elements(html: str) -> str:
