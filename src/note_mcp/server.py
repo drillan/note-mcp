@@ -527,6 +527,7 @@ async def note_create_from_file(
     Args:
         file_path: Markdownファイルのパス
         upload_images: ローカル画像をアップロードするかどうか（デフォルト: True）
+            Falseの場合、ローカルパスがそのまま残り、プレビューで画像が表示されません。
 
     Returns:
         作成結果のメッセージ（記事IDを含む）
