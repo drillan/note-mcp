@@ -82,7 +82,9 @@ async def get_article_html(article_key: str) -> str:
         The article body as raw HTML
 
     Raises:
-        RuntimeError: If session is not available
+        RuntimeError: If session is not available or expired
+        NoteAPIError: If API request fails (article not found, auth error, etc.)
+        ValueError: If article body is empty
 
     Example:
         >>> html = await get_article_html("n1234567890ab")
@@ -91,6 +93,13 @@ async def get_article_html(article_key: str) -> str:
     session = SessionManager().load()
     if session is None:
         raise RuntimeError("Session not found. Please login first.")
+    if session.is_expired():
+        raise RuntimeError("Session has expired. Please login again.")
 
     article = await get_article_raw_html(session, article_key)
-    return article.body or ""
+    if not article.body:
+        raise ValueError(
+            f"Article '{article_key}' has no body content. "
+            f"Article title: '{article.title}', status: '{article.status.value}'."
+        )
+    return article.body

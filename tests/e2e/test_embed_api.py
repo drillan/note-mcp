@@ -66,9 +66,7 @@ The video should appear above."""
         assert "下書きを作成しました" in result
         assert "ID:" in result
 
-        # Extract article key and verify content
-        # Issue #154: API requires key format, not numeric ID
-        # Issue #165: Use get_article_html() to get raw HTML for embed attribute validation
+        # Issue #165: Use get_article_html() for raw HTML embed attribute validation
         article_key = extract_article_key(result)
         article_html = await get_article_html(article_key)
 
@@ -104,9 +102,7 @@ The tweet should appear above."""
         # Assert - API response
         assert "下書きを作成しました" in result
 
-        # Extract article key and verify content
-        # Issue #154: API requires key format, not numeric ID
-        # Issue #165: Use get_article_html() to get raw HTML for embed attribute validation
+        # Issue #165: Use get_article_html() for raw HTML embed attribute validation
         article_key = extract_article_key(result)
         article_html = await get_article_html(article_key)
 
@@ -141,9 +137,7 @@ The post should appear above."""
         # Assert - API response
         assert "下書きを作成しました" in result
 
-        # Extract article key and verify content
-        # Issue #154: API requires key format, not numeric ID
-        # Issue #165: Use get_article_html() to get raw HTML for embed attribute validation
+        # Issue #165: Use get_article_html() for raw HTML embed attribute validation
         article_key = extract_article_key(result)
         article_html = await get_article_html(article_key)
 
@@ -178,9 +172,7 @@ The article card should appear above."""
         # Assert - API response
         assert "下書きを作成しました" in result
 
-        # Extract article key and verify content
-        # Issue #154: API requires key format, not numeric ID
-        # Issue #165: Use get_article_html() to get raw HTML for embed attribute validation
+        # Issue #165: Use get_article_html() for raw HTML embed attribute validation
         article_key = extract_article_key(result)
         article_html = await get_article_html(article_key)
 
@@ -219,9 +211,7 @@ Both should appear as embed cards."""
         # Assert - API response
         assert "下書きを作成しました" in result
 
-        # Extract article key and verify content
-        # Issue #154: API requires key format, not numeric ID
-        # Issue #165: Use get_article_html() to get raw HTML for embed attribute validation
+        # Issue #165: Use get_article_html() for raw HTML embed attribute validation
         article_key = extract_article_key(result)
         article_html = await get_article_html(article_key)
 
@@ -253,9 +243,7 @@ Both should appear as embed cards."""
         # Assert - API response
         assert "下書きを作成しました" in result
 
-        # Extract article key and verify content
-        # Issue #154: API requires key format, not numeric ID
-        # Issue #165: Use get_article_html() to get raw HTML for embed attribute validation
+        # Issue #165: Use get_article_html() for raw HTML embed attribute validation
         article_key = extract_article_key(result)
         article_html = await get_article_html(article_key)
 
@@ -287,9 +275,7 @@ Both should appear as embed cards."""
         # Assert - API response
         assert "下書きを作成しました" in result
 
-        # Extract article key and verify content
-        # Issue #154: API requires key format, not numeric ID
-        # Issue #165: Use get_article_html() to get raw HTML for embed attribute validation
+        # Issue #165: Use get_article_html() for raw HTML embed attribute validation
         article_key = extract_article_key(result)
         article_html = await get_article_html(article_key)
 
@@ -326,7 +312,6 @@ class TestEmbedPreviewRendering:
 
         # Assert - API response
         assert "下書きを作成しました" in result
-        # Issue #154: API requires key format, not numeric ID
         article_key = extract_article_key(result)
 
         # Verify preview rendering
