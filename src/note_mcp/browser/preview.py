@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
 from note_mcp.api.articles import build_preview_url, get_preview_access_token
 from note_mcp.browser.manager import BrowserManager
 
@@ -56,5 +59,10 @@ async def show_preview(
     await page.context.add_cookies(playwright_cookies)  # type: ignore[arg-type]
 
     # Navigate directly to preview URL (no editor involved)
-    await page.goto(preview_url, wait_until="domcontentloaded")
-    await page.wait_for_load_state("networkidle")
+    try:
+        await page.goto(preview_url, wait_until="domcontentloaded")
+        await page.wait_for_load_state("networkidle")
+    except PlaywrightTimeoutError as e:
+        raise RuntimeError(f"Preview page load timed out: {preview_url}") from e
+    except PlaywrightError as e:
+        raise RuntimeError(f"Browser navigation failed: {e}") from e

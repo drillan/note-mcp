@@ -21,6 +21,9 @@ if TYPE_CHECKING:
 # API base URL
 NOTE_API_BASE = "https://note.com/api"
 
+# Common User-Agent string for API requests
+USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+
 # Rate limiting configuration
 RATE_LIMIT_REQUESTS = 10  # Maximum requests per minute
 RATE_LIMIT_WINDOW = 60  # Window size in seconds
@@ -79,9 +82,7 @@ class NoteAPIClient:
         """
         headers: dict[str, str] = {
             "Accept": "*/*",
-            "User-Agent": (
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
-            ),
+            "User-Agent": USER_AGENT,
         }
 
         if self.session is not None:

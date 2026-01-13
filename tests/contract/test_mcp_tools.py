@@ -199,6 +199,27 @@ class TestToolSchemas:
         required = schema.get("required", [])
         assert "article_key" in required
 
+    def test_note_get_preview_html_tool_exists(self) -> None:
+        """Test that note_get_preview_html tool is registered."""
+        tools = get_tools()
+        assert "note_get_preview_html" in tools
+
+    def test_note_get_preview_html_schema(self) -> None:
+        """Test note_get_preview_html tool has correct schema."""
+        tools = get_tools()
+        preview_html_tool = tools["note_get_preview_html"]
+
+        assert preview_html_tool.parameters is not None
+        schema = preview_html_tool.parameters
+        assert "properties" in schema
+
+        # Required parameters
+        assert "article_key" in schema["properties"]
+
+        # Check required fields
+        required = schema.get("required", [])
+        assert "article_key" in required
+
     def test_note_publish_article_tool_exists(self) -> None:
         """Test that note_publish_article tool is registered."""
         tools = get_tools()

@@ -389,7 +389,7 @@ class TestGetPreviewHtmlRetry:
 
             # Should have retried once
             assert call_count["token"] == 2, "Should have fetched token twice"
-            assert exc_info.value.code == ErrorCode.API_ERROR
+            assert exc_info.value.code == ErrorCode.NOT_AUTHENTICATED
 
 
 class TestNoteGetPreviewHtmlTool:

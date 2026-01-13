@@ -20,6 +20,9 @@ if TYPE_CHECKING:
 # Re-export for convenience
 __all__ = ["get_preview_access_token", "build_preview_url", "get_preview_html"]
 
+# Common User-Agent string for API requests
+USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+
 
 async def get_preview_html(
     session: Session,
@@ -43,16 +46,14 @@ async def get_preview_html(
     Raises:
         NoteAPIError: If token fetch or HTML fetch fails after retry
     """
-    # Build cookies header (reused across attempts)
+    # Build cookie header
     cookie_parts = [f"{k}={v}" for k, v in session.cookies.items()]
     cookies_header = "; ".join(cookie_parts)
 
     # HTTP headers for requests
     headers = {
         "Cookie": cookies_header,
-        "User-Agent": (
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
-        ),
+        "User-Agent": USER_AGENT,
     }
 
     # Auth error status codes that trigger retry
@@ -86,11 +87,16 @@ async def get_preview_html(
 
     # All attempts failed
     assert last_response is not None
+
+    # Use NOT_AUTHENTICATED for auth errors, API_ERROR for others
+    error_code = ErrorCode.NOT_AUTHENTICATED if last_response.status_code == 401 else ErrorCode.API_ERROR
+
     raise NoteAPIError(
-        code=ErrorCode.API_ERROR,
+        code=error_code,
         message=f"Failed to fetch preview HTML. Status: {last_response.status_code}",
         details={
             "article_key": article_key,
             "status_code": last_response.status_code,
+            "response_text": last_response.text[:500] if last_response.text else "(empty)",
         },
     )
