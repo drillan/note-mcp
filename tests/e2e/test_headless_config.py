@@ -93,27 +93,33 @@ class TestPreviewPageContextHeadless:
 
 
 class TestBrowserManagerHeadless:
-    """Tests for BrowserManager headless configuration in manager.py."""
+    """Tests for BrowserManager headless configuration via shared config module.
+
+    BrowserManager uses get_headless_mode() from note_mcp.browser.config.
+    These tests verify the shared configuration function works correctly.
+    """
 
     def test_headless_env_var_name(self) -> None:
-        """BrowserManager should use NOTE_MCP_TEST_HEADLESS env var."""
-        # This test verifies the env var name is consistent with test fixtures
-        # by checking the actual implementation
-        import inspect
+        """Config module should use NOTE_MCP_TEST_HEADLESS env var."""
+        from note_mcp.browser.config import HEADLESS_ENV_VAR
 
-        from note_mcp.browser.manager import BrowserManager
-
-        source = inspect.getsource(BrowserManager._ensure_browser)
-        assert "NOTE_MCP_TEST_HEADLESS" in source, "BrowserManager should use NOTE_MCP_TEST_HEADLESS env var"
+        assert HEADLESS_ENV_VAR == "NOTE_MCP_TEST_HEADLESS", "Config should use NOTE_MCP_TEST_HEADLESS env var"
 
     def test_headless_default_is_true(self) -> None:
-        """BrowserManager should default to headless=True."""
+        """get_headless_mode() should default to True (headless mode)."""
+        from note_mcp.browser.config import get_headless_mode
+
+        with patch.dict(os.environ, {}, clear=True):
+            os.environ.pop("NOTE_MCP_TEST_HEADLESS", None)
+            result = get_headless_mode()
+
+        assert result is True, "Default should be headless (True)"
+
+    def test_manager_uses_config_module(self) -> None:
+        """BrowserManager should import get_headless_mode from config."""
         import inspect
 
         from note_mcp.browser.manager import BrowserManager
 
         source = inspect.getsource(BrowserManager._ensure_browser)
-        # Check that default is "true" (headless by default)
-        assert '"true"' in source.lower() or "'true'" in source.lower(), (
-            "BrowserManager should default to headless=True"
-        )
+        assert "get_headless_mode" in source, "BrowserManager should use get_headless_mode function"

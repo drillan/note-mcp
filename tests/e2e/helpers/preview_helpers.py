@@ -10,7 +10,6 @@ instead of navigating through the editor UI.
 from __future__ import annotations
 
 import logging
-import os
 import warnings
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -19,6 +18,7 @@ from typing import TYPE_CHECKING
 from playwright.async_api import async_playwright
 
 from note_mcp.api.articles import build_preview_url, get_preview_access_token
+from note_mcp.browser.config import get_headless_mode
 
 from .constants import (
     DEFAULT_ELEMENT_WAIT_TIMEOUT_MS,
@@ -35,18 +35,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _get_headless_default() -> bool:
-    """Get default headless mode from environment variable.
-
-    Uses NOTE_MCP_TEST_HEADLESS environment variable.
-    Default: True (headless mode for CI/CD stability)
-
-    Set NOTE_MCP_TEST_HEADLESS=false to show browser window for debugging.
-
-    Returns:
-        True if headless mode is enabled (default)
-    """
-    return os.environ.get("NOTE_MCP_TEST_HEADLESS", "true").lower() != "false"
+# Alias for backward compatibility with existing test code
+_get_headless_default = get_headless_mode
 
 
 async def open_preview_via_api(
