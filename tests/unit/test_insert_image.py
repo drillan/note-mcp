@@ -568,13 +568,13 @@ class TestUpdateArticleRawHtml:
             assert "empty response" in exc_info.value.message.lower()
 
     @pytest.mark.asyncio
-    async def test_update_article_response_missing_id_raises_error(self) -> None:
-        """Test that response without id field raises NoteAPIError."""
+    async def test_update_article_response_missing_result_raises_error(self) -> None:
+        """Test that response without result field raises NoteAPIError."""
         from note_mcp.api.articles import update_article_raw_html
 
         session = create_mock_session()
 
-        # Response with data but no id field
+        # Response with data but no result field (draft_save returns {result, ...})
         mock_response = {"data": {"name": "Title", "body": "<p>Content</p>"}}
 
         with (

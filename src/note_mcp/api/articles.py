@@ -191,9 +191,11 @@ async def update_article_raw_html(
         )
 
     # Construct Article from input since draft_save doesn't return full article data
+    # Preserve key if article_id was in key format (not purely numeric)
+    article_key = article_id if not article_id.isdigit() else ""
     return Article(
         id=numeric_id,
-        key="",  # Key not available from draft_save response
+        key=article_key,
         title=title,
         body=html_body,
         status=ArticleStatus.DRAFT,
