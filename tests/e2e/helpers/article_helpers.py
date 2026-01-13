@@ -10,14 +10,15 @@ import re
 
 
 def extract_article_key(result: str) -> str:
-    """Extract article_key from note_create_from_file.fn() result.
+    """Extract article_key from MCP tool result.
 
     Parses the text output from MCP tools to find the article key,
     which is needed for preview page navigation.
 
     Args:
-        result: The text result from note_create_from_file.fn()
-            Expected format includes "記事キー: n1234567890ab"
+        result: The text result from MCP tools like note_create_draft.fn()
+            or note_create_from_file.fn()
+            Supported formats: "キー: n1234567890ab" or "記事キー: n1234567890ab"
 
     Returns:
         The extracted article key (e.g., "n1234567890ab")
@@ -26,11 +27,11 @@ def extract_article_key(result: str) -> str:
         ValueError: If article key cannot be found in the result
 
     Example:
-        >>> result = "✅ 下書きを作成しました\\n   タイトル: Test\\n   記事ID: 123\\n   記事キー: n1234567890ab"
+        >>> result = "下書きを作成しました。ID: 123、キー: n1234567890ab"
         >>> extract_article_key(result)
         'n1234567890ab'
     """
-    match = re.search(r"記事キー:\s*(\S+)", result)
+    match = re.search(r"(?:記事)?キー:\s*(\S+)", result)
     if not match:
         raise ValueError(f"Could not extract article key from result: {result}")
     return match.group(1)
