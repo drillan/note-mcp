@@ -589,7 +589,11 @@ async def get_preview_access_token(
     if not token:
         raise NoteAPIError(
             code=ErrorCode.API_ERROR,
-            message="Failed to get preview access token",
+            message=(
+                "Failed to get preview access token. "
+                "Possible causes: article does not exist, article is already published, "
+                "or insufficient permissions."
+            ),
             details={"article_key": article_key, "response": response},
         )
 

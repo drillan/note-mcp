@@ -176,9 +176,7 @@ async def _inject_session_cookies(page: Page, session: Session) -> None:
     await page.context.add_cookies(playwright_cookies)
 
 
-async def _open_preview_and_get_page(
-    page: Page, session: Session, article_key: str
-) -> Page:
+async def _open_preview_and_get_page(page: Page, session: Session, article_key: str) -> Page:
     """Navigate directly to preview URL using API-based access.
 
     Uses the access_tokens API to get a preview token, then navigates

@@ -60,10 +60,13 @@ async def open_preview_via_api(
         TimeoutError: If navigation times out
     """
     # Get preview access token via API
+    logger.debug("Fetching preview access token for article: %s", article_key)
     token = await get_preview_access_token(session, article_key)
+    logger.debug("Successfully obtained preview token")
 
     # Build direct preview URL
     preview_url = build_preview_url(article_key, token)
+    logger.debug("Navigating to preview URL: %s", preview_url)
 
     # Navigate directly to preview URL
     await page.goto(
@@ -73,6 +76,7 @@ async def open_preview_via_api(
     )
     # Wait for JavaScript rendering (needed for math formulas like nwc-formula)
     await page.wait_for_load_state("networkidle", timeout=timeout)
+    logger.debug("Preview page loaded successfully for article: %s", article_key)
 
     return page
 
