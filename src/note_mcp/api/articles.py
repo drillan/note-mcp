@@ -40,6 +40,17 @@ if TYPE_CHECKING:
 NOTE_DEFAULT_IMAGE_WIDTH: int = 620
 NOTE_DEFAULT_IMAGE_HEIGHT: int = 457
 
+# =============================================================================
+# Issue #141: Delete Draft Constants
+# =============================================================================
+
+# Maximum pages to fetch when listing all drafts (safety limit for pagination)
+# 1 page = ~10 articles, so 100 pages = ~1000 articles
+DELETE_ALL_DRAFTS_MAX_PAGES: int = 100
+
+# Number of articles to show in preview when confirm=False
+DELETE_ALL_DRAFTS_PREVIEW_LIMIT: int = 10
+
 
 def generate_image_html(
     image_url: str,
@@ -751,10 +762,9 @@ async def delete_all_drafts(
     # Step 1: Get all drafts (paginate through all pages)
     article_summaries: list[ArticleSummary] = []
     page = 1
-    max_pages = 1000  # Safety limit to prevent infinite loops
 
     async with NoteAPIClient(session) as client:
-        while page <= max_pages:
+        while page <= DELETE_ALL_DRAFTS_MAX_PAGES:
             response = await client.get(
                 "/v2/note_list/contents",
                 params={"publish_status": "draft", "page": page},
@@ -799,12 +809,11 @@ async def delete_all_drafts(
             message="削除対象の下書きがありません。",
         )
 
-    # If confirm=False, return preview (only first 10 articles for display)
-    preview_limit = 10
+    # If confirm=False, return preview
     if not confirm:
         return BulkDeletePreview(
             total_count=total_count,
-            articles=article_summaries[:preview_limit],
+            articles=article_summaries[:DELETE_ALL_DRAFTS_PREVIEW_LIMIT],
             message=f"{total_count}件の下書き記事を削除しますか？confirm=True を指定して再度呼び出してください。",
         )
 
