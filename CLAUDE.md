@@ -97,6 +97,22 @@ Playwright/ブラウザ自動化は**ログイン**と**プレビュー表示**�
 - 作業ウィンドウの再利用を優先すること
 - セッション情報はOSのセキュアストレージに保存すること
 
+### Playwright Headless Mode
+
+E2Eテストおよびブラウザ自動化はデフォルトで**headlessモード**（ブラウザウィンドウ非表示）で実行されます。
+
+```bash
+# デフォルト: headlessモード（ブラウザウィンドウ非表示）
+uv run pytest tests/e2e/
+
+# ブラウザウィンドウを表示してデバッグする場合
+NOTE_MCP_TEST_HEADLESS=false uv run pytest tests/e2e/
+```
+
+環境変数 `NOTE_MCP_TEST_HEADLESS`:
+- 未設定 or `true`: headlessモード（デフォルト、CI/CD向け）
+- `false`: headedモード（ブラウザウィンドウ表示、デバッグ向け）
+
 ### ProseMirror Markdown Trigger Pattern
 
 note.comのエディタ（ProseMirror）でMarkdownパターンをHTMLに変換するには、**パターンの後にスペースが必要**です。

@@ -111,9 +111,9 @@ class BrowserManager:
         assert playwright is not None
 
         if self._browser is None:
-            import os
+            from note_mcp.browser.config import get_headless_mode
 
-            headless = os.environ.get("NOTE_MCP_HEADLESS", "false").lower() == "true"
+            headless = get_headless_mode()
             self.__class__._browser = await playwright.chromium.launch(headless=headless)
         browser = self._browser
         assert browser is not None

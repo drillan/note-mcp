@@ -21,6 +21,7 @@ from note_mcp.api.articles import create_draft
 from note_mcp.api.preview import get_preview_html
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
+from note_mcp.browser.config import get_headless_mode
 from note_mcp.browser.manager import BrowserManager
 from note_mcp.models import Article, ArticleInput, LoginError, NoteAPIError, Session
 from tests.e2e.helpers.constants import (
@@ -40,16 +41,8 @@ if TYPE_CHECKING:
 E2E_TEST_PREFIX = "[E2E-TEST-"
 
 
-def _is_headless_test() -> bool:
-    """Check if tests should run in headless mode.
-
-    Uses NOTE_MCP_TEST_HEADLESS environment variable.
-    Default: False (headed mode for visibility during development)
-
-    Returns:
-        True if headless mode is enabled
-    """
-    return os.environ.get("NOTE_MCP_TEST_HEADLESS", "false").lower() == "true"
+# Alias for backward compatibility with existing test code
+_is_headless_test = get_headless_mode
 
 
 def _generate_test_article_title() -> str:
