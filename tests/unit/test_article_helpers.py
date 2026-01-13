@@ -71,13 +71,15 @@ class TestExtractArticleKey:
         with pytest.raises(ValueError, match="Could not extract article key"):
             extract_article_key("No key here")
 
-    def test_extract_key_old_format_not_supported(self) -> None:
-        """Old format '、キー: n...' is not supported by current regex.
+    def test_extract_key_short_format(self) -> None:
+        """'キー: n...' format (without 記事 prefix) should be matched.
 
-        The current implementation only matches '記事キー:' format.
-        This test documents the limitation.
+        This format is used by note_create_draft and other MCP tools.
         """
         result = "下書きを作成しました。ID: 123456789、キー: n1234567890ab"
-        # Current regex uses 記事キー, so this will fail
-        with pytest.raises(ValueError, match="Could not extract article key"):
-            extract_article_key(result)
+        assert extract_article_key(result) == "n1234567890ab"
+
+    def test_extract_key_with_extra_whitespace(self) -> None:
+        """Key followed by multiple spaces should be handled."""
+        result = "キー:   n1234567890ab"
+        assert extract_article_key(result) == "n1234567890ab"
