@@ -46,14 +46,15 @@ class TestParseArticleResponse:
         assert article.key == ""
         assert article.title == ""
 
-    def test_handles_missing_data_key(self) -> None:
-        """_parse_article_response should handle missing 'data' key."""
+    def test_raises_error_when_data_key_missing(self) -> None:
+        """_parse_article_response should raise error when 'data' key is missing."""
         response: dict[str, str] = {}
 
-        article = _parse_article_response(response)
+        with pytest.raises(NoteAPIError) as exc_info:
+            _parse_article_response(response)
 
-        assert isinstance(article, Article)
-        assert article.id == ""
+        assert exc_info.value.code == ErrorCode.API_ERROR
+        assert "missing 'data' key" in exc_info.value.message
 
     def test_parses_published_article(self) -> None:
         """_parse_article_response should correctly parse published article status."""

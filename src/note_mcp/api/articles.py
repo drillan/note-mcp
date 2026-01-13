@@ -140,7 +140,6 @@ async def get_article_raw_html(
     async with NoteAPIClient(session) as client:
         response = await client.get(f"/v3/notes/{article_id}")
 
-    # Parse response - body remains as raw HTML
     return _parse_article_response(response)
 
 
@@ -217,8 +216,17 @@ def _parse_article_response(response: dict[str, Any]) -> Article:
 
     Returns:
         Article object parsed from response data
+
+    Raises:
+        NoteAPIError: If "data" key is missing from response
     """
-    article_data = response.get("data", {})
+    article_data = response.get("data")
+    if article_data is None:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Invalid API response: missing 'data' key",
+            details={"response": response},
+        )
     return from_api_response(article_data)
 
 
