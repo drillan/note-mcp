@@ -1,0 +1,153 @@
+# Preview API Contract
+# Feature: 002-preview-api
+# Date: 2025-01-13
+
+openapi: "3.0.3"
+info:
+  title: note.com Preview API
+  version: "1.0.0"
+  description: |
+    note.com プレビュー機能のAPI契約定義。
+    MCP Server経由で利用されるnote.com APIエンドポイント。
+
+servers:
+  - url: https://note.com/api
+    description: note.com API
+
+paths:
+  /v2/notes/{article_key}/access_tokens:
+    post:
+      operationId: getPreviewAccessToken
+      summary: プレビューアクセストークンを取得
+      description: |
+        指定した記事のプレビューアクセストークンを取得します。
+        このトークンはプレビューURLへのアクセスに必要です。
+      tags:
+        - Preview
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: article_key
+          in: path
+          required: true
+          description: 記事キー（例: n1234567890ab）
+          schema:
+            type: string
+            pattern: "^n[a-z0-9]+$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - key
+              properties:
+                key:
+                  type: string
+                  description: 記事キー（パスパラメータと同じ値）
+                  example: "n1234567890ab"
+      responses:
+        "200":
+          description: トークン取得成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessTokenResponse"
+        "401":
+          description: 認証エラー（未ログイン）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: アクセス権限エラー（他ユーザーの記事）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: 記事が見つからない
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /preview/{article_key}:
+    get:
+      operationId: getPreviewPage
+      summary: プレビューページを取得
+      description: |
+        記事のプレビューページHTMLを取得します。
+        クエリパラメータにprev_access_keyが必要です。
+      tags:
+        - Preview
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: article_key
+          in: path
+          required: true
+          description: 記事キー
+          schema:
+            type: string
+            pattern: "^n[a-z0-9]+$"
+        - name: prev_access_key
+          in: query
+          required: true
+          description: プレビューアクセストークン
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{32}$"
+      responses:
+        "200":
+          description: プレビューHTML取得成功
+          content:
+            text/html:
+              schema:
+                type: string
+                description: プレビューページのHTML
+        "401":
+          description: 認証エラー
+        "403":
+          description: 無効なアクセストークン
+        "404":
+          description: 記事が見つからない
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: note_gql_auth_token
+      description: note.com認証Cookie
+
+  schemas:
+    AccessTokenResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          required:
+            - preview_access_token
+          properties:
+            preview_access_token:
+              type: string
+              description: 32文字の16進数プレビューアクセストークン
+              pattern: "^[0-9a-f]{32}$"
+              example: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+              description: エラーメッセージ
+            code:
+              type: string
+              description: エラーコード

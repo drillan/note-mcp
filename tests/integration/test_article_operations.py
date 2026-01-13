@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import time
 from typing import TYPE_CHECKING, Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from note_mcp.api.articles import create_draft, get_article, list_articles, publish_article, update_article
-from note_mcp.browser.preview import show_preview
 from note_mcp.models import ArticleInput, ArticleStatus, Session
 
 if TYPE_CHECKING:
@@ -262,142 +261,6 @@ class TestGetArticle:
             assert isinstance(article, Article)
             assert article.title == "Test Title"
             assert article.status == ArticleStatus.DRAFT
-
-
-class TestShowPreview:
-    """Tests for show_preview function.
-
-    show_preview navigates to the editor page, clicks the menu button
-    to open the header popover, then clicks the preview button which
-    opens a new tab with the preview page.
-    """
-
-    @pytest.mark.asyncio
-    async def test_show_preview_navigates_to_edit_page(self) -> None:
-        """Test that preview navigates to the editor first then clicks preview."""
-        session = create_mock_session()
-
-        with patch("note_mcp.browser.preview.BrowserManager") as mock_manager_class:
-            mock_manager = MagicMock()
-            mock_manager_class.get_instance.return_value = mock_manager
-
-            # Mock the page object with all required methods
-            mock_page = AsyncMock()
-            mock_page.goto = AsyncMock()
-            mock_page.wait_for_load_state = AsyncMock()
-            mock_page.wait_for_selector = AsyncMock()
-
-            # Mock the locator for menu button
-            mock_menu_button = AsyncMock()
-            mock_menu_button.click = AsyncMock()
-
-            # Mock the locator for preview button
-            mock_preview_button = AsyncMock()
-            mock_preview_button.click = AsyncMock()
-
-            # Mock page.locator to return appropriate mocks
-            def locator_side_effect(selector: str, **kwargs: object) -> AsyncMock:
-                if 'aria-label="その他"' in selector:
-                    return mock_menu_button
-                else:
-                    return mock_preview_button
-
-            mock_page.locator = MagicMock(side_effect=locator_side_effect)
-
-            # Mock context for new page handling
-            mock_new_page = AsyncMock()
-            mock_new_page.wait_for_load_state = AsyncMock()
-            mock_new_page.bring_to_front = AsyncMock()
-
-            mock_context = MagicMock()
-            mock_context.add_cookies = AsyncMock()
-            mock_page.context = mock_context
-
-            # Create async context manager for expect_page
-            # The value property needs to be awaitable
-            async def get_new_page() -> AsyncMock:
-                return mock_new_page
-
-            mock_expect_page = MagicMock()
-            mock_expect_page.__aenter__ = AsyncMock(return_value=mock_expect_page)
-            mock_expect_page.__aexit__ = AsyncMock(return_value=None)
-            mock_expect_page.value = get_new_page()  # Returns coroutine
-            mock_context.expect_page = MagicMock(return_value=mock_expect_page)
-
-            mock_manager.get_page = AsyncMock(return_value=mock_page)
-
-            await show_preview(session, "n1234567890ab")
-
-            # Verify navigation to the edit page on editor.note.com
-            mock_page.goto.assert_called_once()
-            call_args = mock_page.goto.call_args[0][0]
-            assert call_args == "https://editor.note.com/notes/n1234567890ab/edit/"
-
-            # Verify menu button was clicked
-            mock_menu_button.click.assert_called_once()
-
-            # Verify preview button was clicked
-            mock_preview_button.click.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_show_preview_uses_article_key(self) -> None:
-        """Test that preview uses the article key in URL."""
-        session = create_mock_session()
-
-        with patch("note_mcp.browser.preview.BrowserManager") as mock_manager_class:
-            mock_manager = MagicMock()
-            mock_manager_class.get_instance.return_value = mock_manager
-
-            # Mock the page object with all required methods
-            mock_page = AsyncMock()
-            mock_page.goto = AsyncMock()
-            mock_page.wait_for_load_state = AsyncMock()
-            mock_page.wait_for_selector = AsyncMock()
-
-            # Mock the locator for menu button
-            mock_menu_button = AsyncMock()
-            mock_menu_button.click = AsyncMock()
-
-            # Mock the locator for preview button
-            mock_preview_button = AsyncMock()
-            mock_preview_button.click = AsyncMock()
-
-            # Mock page.locator to return appropriate mocks
-            def locator_side_effect(selector: str, **kwargs: object) -> AsyncMock:
-                if 'aria-label="その他"' in selector:
-                    return mock_menu_button
-                else:
-                    return mock_preview_button
-
-            mock_page.locator = MagicMock(side_effect=locator_side_effect)
-
-            # Mock context for new page handling
-            mock_new_page = AsyncMock()
-            mock_new_page.wait_for_load_state = AsyncMock()
-            mock_new_page.bring_to_front = AsyncMock()
-
-            mock_context = MagicMock()
-            mock_context.add_cookies = AsyncMock()
-            mock_page.context = mock_context
-
-            # Create async context manager for expect_page
-            # The value property needs to be awaitable
-            async def get_new_page() -> AsyncMock:
-                return mock_new_page
-
-            mock_expect_page = MagicMock()
-            mock_expect_page.__aenter__ = AsyncMock(return_value=mock_expect_page)
-            mock_expect_page.__aexit__ = AsyncMock(return_value=None)
-            mock_expect_page.value = get_new_page()  # Returns coroutine
-            mock_context.expect_page = MagicMock(return_value=mock_expect_page)
-
-            mock_manager.get_page = AsyncMock(return_value=mock_page)
-
-            await show_preview(session, "article123")
-
-            call_args = mock_page.goto.call_args[0][0]
-            assert "article123" in call_args
-            assert call_args == "https://editor.note.com/notes/article123/edit/"
 
 
 class TestListArticles:
