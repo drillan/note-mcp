@@ -90,6 +90,9 @@ uv run ruff check --fix . && uv run ruff format . && uv run mypy .
 
 ### Playwright Integration
 
+note.comへのコンテンツ操作は完全にAPI経由で行われます。
+Playwright/ブラウザ自動化は**ログイン**と**プレビュー表示**にのみ使用されます。
+
 - ブラウザインスタンスは適切にライフサイクル管理すること
 - 作業ウィンドウの再利用を優先すること
 - セッション情報はOSのセキュアストレージに保存すること
@@ -138,27 +141,6 @@ note.comへのコンテンツ送信はAPI経由（`markdown_to_html.py`）で行
 上記のトリガーパターンは、**ブラウザエディタでの手動入力時の挙動**として
 参考情報として残しています。API経由での送信では、HTMLを直接生成するため
 これらのトリガーパターンは関係しません。
-
-### Link Insertion (UI Required)
-
-Markdown記法 `[text](url)` はProseMirrorで**自動変換されません**（InputRule未実装）。
-
-リンク挿入は `insert_link_at_cursor()` でUI経由で行います：
-
-```python
-from note_mcp.browser.insert_link import insert_link_at_cursor, LinkResult
-
-result, debug = await insert_link_at_cursor(page, text="リンクテキスト", url="https://example.com")
-if result == LinkResult.SUCCESS:
-    # リンク挿入成功
-```
-
-**UI操作フロー**:
-1. テキスト入力 → 選択
-2. リンクダイアログを開く（Ctrl+K）
-3. URL入力 → 適用
-
-詳細: `docs/features/link.md`
 
 ### Session Management
 
@@ -311,6 +293,7 @@ git checkout -b fix/456-fix-login-error
 
 ## Recent Changes
 
+- 2026-01-13: Removed Playwright-based editor helpers (Issue #131), content operations now API-only
 - 2026-01-13: Added Issue Workflow section with branch naming conventions
 - 2025-12-31: Added Available Skills section with api-investigator導線
 - 001-note-mcp: Added Python 3.11+

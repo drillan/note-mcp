@@ -6,16 +6,19 @@ Supports both eyecatch (header) images and body (inline) images.
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from note_mcp.api.client import NoteAPIClient
 from note_mcp.models import ErrorCode, Image, ImageType, NoteAPIError, Session
 
 if TYPE_CHECKING:
     pass
+
+logger = logging.getLogger(__name__)
 
 
 async def _resolve_numeric_note_id(session: Session, note_id: str) -> str:
@@ -311,3 +314,102 @@ async def upload_body_image(
         uploaded_at=int(time.time()),
         image_type=ImageType.BODY,
     )
+
+
+async def insert_image_via_api(
+    session: Session,
+    article_id: str,
+    file_path: str,
+    caption: str | None = None,
+) -> dict[str, Any]:
+    """Insert an image into an article via API.
+
+    Fully API-based implementation without Playwright dependency.
+    This is faster and more reliable than browser-based insertion.
+
+    Flow:
+    1. Validate image file
+    2. Get article with raw HTML body
+    3. Upload image to S3 via API
+    4. Generate figure HTML
+    5. Append to existing body
+    6. Update article via draft_save API
+
+    Args:
+        session: Authenticated session
+        article_id: ID of the article to edit (numeric or key format)
+        file_path: Path to the image file to insert
+        caption: Optional caption for the image
+
+    Returns:
+        Dictionary with the following keys:
+        - success: Always True on success (raises on failure)
+        - article_id: Numeric article ID
+        - article_key: Article key (e.g., "n1234567890ab")
+        - file_path: Path to the uploaded file
+        - image_url: URL of the uploaded image on note.com CDN
+        - caption: Caption text (if provided)
+        - fallback_used: Always False (no browser fallback in API-only mode)
+
+    Raises:
+        NoteAPIError: If image insertion fails
+    """
+    # Import here to avoid circular imports
+    from note_mcp.api.articles import (
+        append_image_to_body,
+        generate_image_html,
+        get_article_raw_html,
+        update_article_raw_html,
+    )
+
+    # Step 1: Validate file (existence, extension, and size)
+    validate_image_file(file_path)
+
+    # Step 2: Get article with raw HTML body
+    # Use get_article_raw_html to preserve HTML (no Markdown conversion)
+    try:
+        article = await get_article_raw_html(session, article_id)
+    except NoteAPIError as e:
+        raise NoteAPIError(
+            code=ErrorCode.INVALID_INPUT,
+            message=f"Invalid article ID: {article_id}. Please verify the article exists and you have access.",
+            details={"article_id": article_id, "original_error": str(e)},
+        ) from e
+
+    article_key = article.key
+    numeric_id = article.id
+    logger.debug(f"Article validated: key={article_key}, numeric_id={numeric_id}")
+
+    # Step 3: Upload image via API
+    image = await upload_body_image(session, file_path, numeric_id)
+    logger.info(f"Image uploaded via API: {image.url[:50]}...")
+
+    # Step 4: Generate image HTML in note.com format
+    image_html = generate_image_html(
+        image_url=image.url,
+        caption=caption or "",
+    )
+    logger.debug(f"Generated image HTML: {image_html[:100]}...")
+
+    # Step 5: Append image to existing body
+    new_body_html = append_image_to_body(article.body or "", image_html)
+    logger.debug(f"New body length: {len(new_body_html)} chars")
+
+    # Step 6: Update article via API (draft_save)
+    await update_article_raw_html(
+        session=session,
+        article_id=numeric_id,
+        title=article.title,
+        html_body=new_body_html,
+    )
+    logger.info("Article updated via API")
+
+    return {
+        "success": True,
+        "article_id": numeric_id,
+        "article_key": article_key,
+        "file_path": file_path,
+        "image_url": image.url,
+        "caption": caption,
+        "fallback_used": False,  # No fallback in API-only mode
+    }
