@@ -462,9 +462,11 @@ class TestUpdateArticleRawHtml:
 
         mock_response = {
             "data": {
-                "result": "saved",  # draft_save returns result, not id
-                "note_days_count": 1,
-                "updated_at": 1234567890,
+                "id": 12345,
+                "key": "n12345abcdef",
+                "name": "Updated Title",
+                "body": html_body,
+                "publish_status": "draft",
             }
         }
 
@@ -492,6 +494,7 @@ class TestUpdateArticleRawHtml:
             assert payload["body"] == html_body
             assert payload["name"] == "Updated Title"
             assert result.id == "12345"
+            assert result.key == "n12345abcdef"
 
     @pytest.mark.asyncio
     async def test_update_article_with_tags(self) -> None:
@@ -502,9 +505,11 @@ class TestUpdateArticleRawHtml:
 
         mock_response = {
             "data": {
-                "result": "saved",  # draft_save returns result, not id
-                "note_days_count": 1,
-                "updated_at": 1234567890,
+                "id": 12345,
+                "key": "n12345abcdef",
+                "name": "Title",
+                "body": "<p>Content</p>",
+                "publish_status": "draft",
             }
         }
 
@@ -568,13 +573,13 @@ class TestUpdateArticleRawHtml:
             assert "empty response" in exc_info.value.message.lower()
 
     @pytest.mark.asyncio
-    async def test_update_article_response_missing_result_raises_error(self) -> None:
-        """Test that response without result field raises NoteAPIError."""
+    async def test_update_article_response_missing_id_raises_error(self) -> None:
+        """Test that response without id field raises NoteAPIError."""
         from note_mcp.api.articles import update_article_raw_html
 
         session = create_mock_session()
 
-        # Response with data but no result field (draft_save returns {result, ...})
+        # Response with data but no id field (draft_save returns article data with id)
         mock_response = {"data": {"name": "Title", "body": "<p>Content</p>"}}
 
         with (

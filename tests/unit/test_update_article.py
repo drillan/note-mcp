@@ -51,13 +51,12 @@ class TestUpdateArticleIdResolution:
             body="## Heading\n\nSimple text without embeds.",
         )
 
+        # Issue #155: draft_save returns {result, ...}, not full article data
         mock_response: dict[str, Any] = {
             "data": {
-                "id": 12345,
-                "key": "n12345abcdef",
-                "name": "Test Article",
-                "body": "<h2>Heading</h2><p>Simple text without embeds.</p>",
-                "publish_status": "draft",
+                "result": "saved",
+                "note_days_count": 1,
+                "updated_at": 1234567890,
             }
         }
 
@@ -81,7 +80,9 @@ class TestUpdateArticleIdResolution:
             # because there are no embeds to resolve
             mock_client.get.assert_not_called()
 
+            # Result is constructed from input, not API response
             assert result.id == "12345"
+            assert result.title == "Test Article"
 
     @pytest.mark.asyncio
     async def test_update_article_with_key_no_embeds(self) -> None:
@@ -98,13 +99,12 @@ class TestUpdateArticleIdResolution:
             body="Simple text without embeds.",
         )
 
+        # Issue #155: draft_save returns {result, ...}, not full article data
         mock_post_response: dict[str, Any] = {
             "data": {
-                "id": 12345,
-                "key": "n12345abcdef",
-                "name": "Test Article",
-                "body": "<p>Simple text without embeds.</p>",
-                "publish_status": "draft",
+                "result": "saved",
+                "note_days_count": 1,
+                "updated_at": 1234567890,
             }
         }
 
@@ -128,18 +128,21 @@ class TestUpdateArticleIdResolution:
             # Should call POST once for draft_save
             assert mock_client.post.call_count == 1
 
+            # Result is constructed from input with key preserved
             assert result.key == "n12345abcdef"
+            assert result.title == "Test Article"
 
     @pytest.mark.asyncio
     async def test_update_article_with_numeric_id_with_embeds(self) -> None:
-        """Numeric ID + embeds → Should save twice (once to get key, once with resolved embeds).
+        """Numeric ID + embeds → Should fetch article key via GET, then save once.
 
-        When numeric ID is provided and body contains embeds:
-        1. First draft_save to get article key from response
+        Issue #155: Since draft_save doesn't return article key, we now:
+        1. GET article to retrieve key (get_article_via_api)
         2. Use key to resolve embed keys
-        3. Second draft_save with resolved embed HTML
+        3. Single draft_save with resolved embed HTML
         """
         from note_mcp.api.articles import update_article
+        from note_mcp.models import Article, ArticleStatus
 
         session = create_mock_session()
         # Body with YouTube embed URL that will be converted to embed figure
@@ -148,56 +151,57 @@ class TestUpdateArticleIdResolution:
             body="Check this video:\n\nhttps://www.youtube.com/watch?v=dQw4w9WgXcQ",
         )
 
-        # First save response (to get key)
-        mock_first_post_response: dict[str, Any] = {
-            "data": {
-                "id": 12345,
-                "key": "n12345abcdef",
-                "name": "Test Article",
-                "body": "<p>Check this video:</p><figure ...>",
-                "publish_status": "draft",
-            }
-        }
+        # Mock article returned by get_article_via_api
+        mock_fetched_article = Article(
+            id="12345",
+            key="n12345abcdef",
+            title="Test Article",
+            body="Previous content",
+            status=ArticleStatus.DRAFT,
+        )
 
-        # Second save response (with resolved embeds)
-        mock_second_post_response: dict[str, Any] = {
+        # Issue #155: draft_save returns {result, ...}, not full article data
+        mock_post_response: dict[str, Any] = {
             "data": {
-                "id": 12345,
-                "key": "n12345abcdef",
-                "name": "Test Article",
-                "body": "<p>Check this video:</p><figure embedded-content-key='resolved'>",
-                "publish_status": "draft",
+                "result": "saved",
+                "note_days_count": 1,
+                "updated_at": 1234567890,
             }
         }
 
         with (
             patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
             patch("note_mcp.api.articles.resolve_embed_keys") as mock_resolve,
+            patch("note_mcp.api.articles.get_article_via_api") as mock_get_article,
         ):
             mock_client = MagicMock()
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
-            mock_client.get = AsyncMock()
-            mock_client.post = AsyncMock(side_effect=[mock_first_post_response, mock_second_post_response])
+            mock_client.post = AsyncMock(return_value=mock_post_response)
             mock_client_class.return_value = mock_client
+
+            # Mock get_article_via_api to return article with key
+            mock_get_article.return_value = mock_fetched_article
 
             # Mock resolve_embed_keys to return modified HTML
             mock_resolve.return_value = "<p>Check this video:</p><figure embedded-content-key='resolved'>"
 
             result = await update_article(session, "12345", article_input)
 
-            # Should call POST twice (first to get key, second with resolved embeds)
-            assert mock_client.post.call_count == 2
+            # Should call get_article_via_api to fetch article key
+            mock_get_article.assert_called_once_with(session, "12345")
 
-            # resolve_embed_keys should be called with the article key from first response
+            # Should call POST once (with resolved embeds)
+            assert mock_client.post.call_count == 1
+
+            # resolve_embed_keys should be called with the article key from GET response
             mock_resolve.assert_called_once()
             resolve_call_args = mock_resolve.call_args[0]
             assert resolve_call_args[2] == "n12345abcdef"  # article_key
 
-            # Should NOT call GET (no need to fetch article for numeric ID with embed flow)
-            mock_client.get.assert_not_called()
-
+            # Result is constructed from input
             assert result.id == "12345"
+            assert result.title == "Test Article"
 
     @pytest.mark.asyncio
     async def test_update_article_with_key_with_embeds(self) -> None:
@@ -216,13 +220,12 @@ class TestUpdateArticleIdResolution:
             body="Check this:\n\nhttps://www.youtube.com/watch?v=dQw4w9WgXcQ",
         )
 
+        # Issue #155: draft_save returns {result, ...}, not full article data
         mock_post_response: dict[str, Any] = {
             "data": {
-                "id": 12345,
-                "key": "n12345abcdef",
-                "name": "Test Article",
-                "body": "<p>Check this:</p><figure embedded-content-key='resolved'>",
-                "publish_status": "draft",
+                "result": "saved",
+                "note_days_count": 1,
+                "updated_at": 1234567890,
             }
         }
 
@@ -254,4 +257,6 @@ class TestUpdateArticleIdResolution:
             resolve_call_args = mock_resolve_embeds.call_args[0]
             assert resolve_call_args[2] == "n12345abcdef"  # article_key
 
+            # Result is constructed from input with key preserved
             assert result.key == "n12345abcdef"
+            assert result.title == "Test Article"

@@ -181,25 +181,14 @@ async def update_article_raw_html(
         )
 
     # Parse and validate response
-    # Note: draft_save returns {result, note_days_count, updated_at}, not article data
     article_data = response.get("data", {})
-    if not article_data or "result" not in article_data:
+    if not article_data or not article_data.get("id"):
         raise NoteAPIError(
             code=ErrorCode.API_ERROR,
             message="Article update failed: API returned empty response",
             details={"article_id": article_id, "response": response},
         )
-
-    # Construct Article from input since draft_save doesn't return full article data
-    # Preserve key if article_id was in key format (not purely numeric)
-    article_key = article_id if not article_id.isdigit() else ""
-    return Article(
-        id=numeric_id,
-        key=article_key,
-        title=title,
-        body=html_body,
-        status=ArticleStatus.DRAFT,
-    )
+    return from_api_response(article_data)
 
 
 def _normalize_tags(tags: list[str] | None) -> list[dict[str, Any]] | None:
@@ -367,32 +356,42 @@ async def update_article(
         if article_id.startswith("n") and not article_id.isdigit():
             article_key = article_id
         else:
-            # Numeric ID: need to get key from draft_save response
-            # First save without embed resolution, then resolve and save again
-            payload = _build_article_payload(article_input, html_body)
-            async with NoteAPIClient(session) as client:
-                response = await client.post(
-                    f"/v1/text_notes/draft_save?id={numeric_id}&is_temp_saved=true",
-                    json=payload,
-                )
-            article_data = response.get("data", {})
-            if not article_data or not article_data.get("id"):
-                raise NoteAPIError(
-                    code=ErrorCode.API_ERROR,
-                    message="Article update failed: API returned empty response during initial save",
-                    details={"article_id": article_id, "response": response},
-                )
-            article_key = article_data.get("key", "")
+            # Numeric ID: fetch article to get key since draft_save doesn't return it
+            # Issue #155: draft_save returns {result, note_days_count, updated_at}, not article data
+            fetched_article = await get_article_via_api(session, str(numeric_id))
+            article_key = fetched_article.key
 
             if not article_key:
                 # Fallback: proceed without embed resolution if key not available
                 logger.warning(
-                    "Embed resolution skipped: draft_save response did not include article key. "
+                    "Embed resolution skipped: article does not have a key. "
                     "Embeds in article %s may not render correctly.",
                     article_id,
-                    extra={"article_id": article_id, "response": response},
+                    extra={"article_id": article_id},
                 )
-                return from_api_response(article_data)
+                # Save without embed resolution
+                payload = _build_article_payload(article_input, html_body)
+                async with NoteAPIClient(session) as client:
+                    response = await client.post(
+                        f"/v1/text_notes/draft_save?id={numeric_id}&is_temp_saved=true",
+                        json=payload,
+                    )
+                # Validate response
+                article_data = response.get("data", {})
+                if not article_data or "result" not in article_data:
+                    raise NoteAPIError(
+                        code=ErrorCode.API_ERROR,
+                        message="Article update failed: API returned empty response",
+                        details={"article_id": article_id, "response": response},
+                    )
+                # Construct Article from input since draft_save doesn't return full data
+                return Article(
+                    id=numeric_id,
+                    key="",
+                    title=article_input.title,
+                    body=html_body,
+                    status=ArticleStatus.DRAFT,
+                )
 
         # Resolve embed keys via API
         # Replace random keys with server-registered keys for iframe rendering
@@ -411,14 +410,26 @@ async def update_article(
         )
 
     # Parse and validate response
+    # Issue #155: draft_save returns {result, note_days_count, updated_at}, not article data
     article_data = response.get("data", {})
-    if not article_data or not article_data.get("id"):
+    if not article_data or "result" not in article_data:
         raise NoteAPIError(
             code=ErrorCode.API_ERROR,
             message="Article update failed: API returned empty response after save",
             details={"article_id": article_id, "response": response},
         )
-    return from_api_response(article_data)
+
+    # Construct Article from input since draft_save doesn't return full article data
+    # This matches the pattern used in update_article_raw_html()
+    final_html = resolved_html if has_embeds else html_body
+    article_key_for_result = article_id if article_id.startswith("n") and not article_id.isdigit() else ""
+    return Article(
+        id=numeric_id,
+        key=article_key_for_result,
+        title=article_input.title,
+        body=final_html,
+        status=ArticleStatus.DRAFT,
+    )
 
 
 async def get_article_via_api(
