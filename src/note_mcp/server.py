@@ -13,6 +13,8 @@ from fastmcp import FastMCP
 
 from note_mcp.api.articles import (
     create_draft,
+    delete_all_drafts,
+    delete_draft,
     get_article,
     list_articles,
     publish_article,
@@ -619,6 +621,127 @@ async def note_create_from_file(
 
     except NoteAPIError as e:
         return f"記事作成エラー: {e}"
+
+
+@mcp.tool()
+async def note_delete_draft(
+    article_key: Annotated[str, "削除する記事のキー（例: n1234567890ab）"],
+    confirm: Annotated[bool, "削除を実行する場合はTrue、確認のみの場合はFalse"] = False,
+) -> str:
+    """下書き記事を削除します。
+
+    指定した下書き記事を削除します。公開済み記事は削除できません。
+
+    2段階確認フロー:
+    1. confirm=False: 削除対象の記事情報を表示（実際の削除は行わない）
+    2. confirm=True: 実際に削除を実行
+
+    **注意**: 削除は取り消しできません。
+
+    Args:
+        article_key: 削除する記事のキー
+        confirm: 削除を実行する場合はTrue（デフォルトはFalse）
+
+    Returns:
+        削除結果または確認メッセージ
+    """
+    session = _session_manager.load()
+    if session is None or session.is_expired():
+        return "セッションが無効です。note_loginでログインしてください。"
+
+    try:
+        result = await delete_draft(session, article_key, confirm=confirm)
+
+        # Check result type and format response
+        from note_mcp.models import DeletePreview, DeleteResult
+
+        if isinstance(result, DeletePreview):
+            return (
+                f"削除対象の記事:\n"
+                f"  タイトル: {result.article_title}\n"
+                f"  キー: {result.article_key}\n"
+                f"  ステータス: {result.status.value}\n\n"
+                f"{result.message}"
+            )
+        elif isinstance(result, DeleteResult):
+            return result.message
+
+        return str(result)
+
+    except NoteAPIError as e:
+        return f"削除に失敗しました: {e.message}"
+
+
+@mcp.tool()
+async def note_delete_all_drafts(
+    confirm: Annotated[bool, "削除を実行する場合はTrue、確認のみの場合はFalse"] = False,
+) -> str:
+    """すべての下書き記事を一括削除します。
+
+    認証ユーザーのすべての下書き記事を削除します。
+    公開済み記事は削除されません。
+
+    2段階確認フロー:
+    1. confirm=False: 削除対象の記事一覧を表示（実際の削除は行わない）
+    2. confirm=True: 実際に削除を実行
+
+    **注意**: 削除は取り消しできません。
+
+    Args:
+        confirm: 削除を実行する場合はTrue（デフォルトはFalse）
+
+    Returns:
+        削除結果または確認メッセージ
+    """
+    session = _session_manager.load()
+    if session is None or session.is_expired():
+        return "セッションが無効です。note_loginでログインしてください。"
+
+    try:
+        result = await delete_all_drafts(session, confirm=confirm)
+
+        # Check result type and format response
+        from note_mcp.models import BulkDeletePreview, BulkDeleteResult
+
+        if isinstance(result, BulkDeletePreview):
+            if result.total_count == 0:
+                return result.message
+
+            lines = [f"削除対象の下書き記事（{result.total_count}件）:"]
+            for article in result.articles:
+                lines.append(f"  - {article.title} (キー: {article.article_key})")
+            # Show remaining count if there are more articles than displayed
+            displayed_count = len(result.articles)
+            remaining_count = result.total_count - displayed_count
+            if remaining_count > 0:
+                lines.append(f"  ... 他 {remaining_count}件")
+            lines.append("")
+            lines.append(result.message)
+            return "\n".join(lines)
+
+        elif isinstance(result, BulkDeleteResult):
+            if result.total_count == 0:
+                return result.message
+
+            lines = [result.message]
+            if result.deleted_articles:
+                lines.append("")
+                lines.append("削除成功:")
+                for article in result.deleted_articles:
+                    lines.append(f"  - {article.title}")
+
+            if result.failed_articles:
+                lines.append("")
+                lines.append("削除失敗:")
+                for failed in result.failed_articles:
+                    lines.append(f"  - {failed.title}: {failed.error}")
+
+            return "\n".join(lines)
+
+        return str(result)
+
+    except NoteAPIError as e:
+        return f"一括削除に失敗しました: {e.message}"
 
 
 # Register investigator tools if in investigator mode

@@ -272,6 +272,157 @@ class LoginError(Exception):
         super().__init__(message)
 
 
+# =============================================================================
+# Issue #141: Delete Draft Models
+# =============================================================================
+
+# Delete operation error messages (T020)
+DELETE_ERROR_PUBLISHED_ARTICLE = "公開済み記事は削除できません。下書きのみ削除可能です。"
+DELETE_ERROR_NO_ACCESS = "この記事へのアクセス権がありません。"
+DELETE_ERROR_NOT_FOUND = "記事が見つかりません。キー: {article_key}"
+DELETE_CONFIRM_REQUIRED = "削除を実行するには confirm=True を指定してください。"
+
+
+class ArticleSummary(BaseModel):
+    """Summary information of an article.
+
+    Used in bulk delete preview/result to show article information
+    without the full body content.
+
+    Attributes:
+        article_id: Article ID (note.com internal ID)
+        article_key: Article key (used in URL path)
+        title: Article title
+    """
+
+    article_id: str
+    article_key: str
+    title: str
+
+
+class FailedArticle(BaseModel):
+    """Information about a failed deletion.
+
+    Used in BulkDeleteResult to provide details about articles
+    that could not be deleted and why.
+
+    Attributes:
+        article_id: Article ID
+        article_key: Article key
+        title: Article title
+        error: Error message explaining the failure
+    """
+
+    article_id: str
+    article_key: str
+    title: str
+    error: str
+
+
+class DeleteResult(BaseModel):
+    """Result of a single delete operation.
+
+    Returned when a delete operation completes (success or failure).
+
+    Attributes:
+        success: Whether the deletion was successful
+        article_id: ID of the deleted article
+        article_key: Key of the deleted article
+        article_title: Title of the deleted article
+        message: Result message for the user
+    """
+
+    success: bool
+    article_id: str
+    article_key: str
+    article_title: str
+    message: str
+
+
+class DeletePreview(BaseModel):
+    """Preview information before deletion.
+
+    Returned when confirm=False to show what will be deleted
+    and prompt for confirmation.
+
+    Attributes:
+        article_id: ID of the article to be deleted
+        article_key: Key of the article to be deleted
+        article_title: Title of the article to be deleted
+        status: Current status of the article
+        message: Confirmation prompt message
+    """
+
+    article_id: str
+    article_key: str
+    article_title: str
+    status: ArticleStatus
+    message: str
+
+
+class BulkDeletePreview(BaseModel):
+    """Preview information for bulk deletion.
+
+    Returned when confirm=False to show all drafts that will be deleted.
+
+    Attributes:
+        total_count: Total number of drafts to be deleted
+        articles: List of articles to be deleted
+        message: Confirmation prompt message
+    """
+
+    total_count: int
+    articles: list[ArticleSummary]
+    message: str
+
+
+class BulkDeleteResult(BaseModel):
+    """Result of bulk delete operation.
+
+    Provides detailed information about the bulk deletion,
+    including counts and lists of successful/failed deletions.
+
+    Attributes:
+        success: Whether all deletions were successful
+        total_count: Total number of articles targeted
+        deleted_count: Number of successfully deleted articles
+        failed_count: Number of failed deletions
+        deleted_articles: List of successfully deleted articles
+        failed_articles: List of articles that failed to delete
+        message: Summary message
+    """
+
+    success: bool
+    total_count: int
+    deleted_count: int
+    failed_count: int
+    deleted_articles: list[ArticleSummary]
+    failed_articles: list[FailedArticle]
+    message: str
+
+
+class DeleteDraftInput(BaseModel):
+    """Input for note_delete_draft MCP tool.
+
+    Attributes:
+        article_key: Key of the article to delete (format: nXXXXXXXXXXXX)
+        confirm: Confirmation flag (must be True to execute deletion)
+    """
+
+    article_key: str
+    confirm: bool = False
+
+
+class DeleteAllDraftsInput(BaseModel):
+    """Input for note_delete_all_drafts MCP tool.
+
+    Attributes:
+        confirm: Confirmation flag (must be True to execute deletion)
+    """
+
+    confirm: bool = False
+
+
 def from_api_response(data: dict[str, object]) -> Article:
     """Create an Article from note.com API response.
 

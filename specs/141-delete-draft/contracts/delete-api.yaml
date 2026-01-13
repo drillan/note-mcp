@@ -1,0 +1,347 @@
+openapi: 3.1.0
+info:
+  title: note-mcp Delete Draft API Contract
+  description: |
+    API contract for the delete draft feature of note-mcp MCP server.
+    This document describes the internal API functions and MCP tool interfaces.
+  version: 1.0.0
+  contact:
+    name: note-mcp
+    url: https://github.com/driller/note-mcp
+
+servers:
+  - url: https://note.com/api
+    description: note.com API server
+
+paths:
+  /v1/notes/n/{article_key}:
+    delete:
+      operationId: deleteArticle
+      summary: Delete a draft article
+      description: |
+        Deletes a draft article from note.com.
+        Only drafts can be deleted; published articles will return an error.
+        Requires authentication via session cookies.
+
+        Note: The path requires `/n/` prefix before the article key.
+        Verified endpoint: DELETE /v1/notes/n/{article_key} → 200 OK
+      parameters:
+        - name: article_key
+          in: path
+          required: true
+          description: Article key (format: nXXXXXXXXXXXX)
+          schema:
+            type: string
+            pattern: "^n[a-f0-9]+$"
+            examples:
+              - "n9056511e87fc"
+              - "n1234567890ab"
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Article deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteApiResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Access denied or article is published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Article not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: note_gql_auth_token
+      description: note.com authentication cookie
+
+  schemas:
+    DeleteApiResponse:
+      type: object
+      description: Response from note.com delete API
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: integer
+              description: Deleted article ID
+            key:
+              type: string
+              description: Deleted article key
+        success:
+          type: boolean
+          description: Whether the operation succeeded
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Error code
+            message:
+              type: string
+              description: Error message
+
+    # MCP Tool Input/Output schemas
+    DeleteDraftInput:
+      type: object
+      description: Input for note_delete_draft MCP tool
+      required:
+        - article_key
+        - confirm
+      properties:
+        article_key:
+          type: string
+          description: Key of the article to delete (format: nXXXXXXXXXXXX)
+          pattern: "^n[a-f0-9]+$"
+          examples:
+            - "n9056511e87fc"
+            - "n1234567890ab"
+        confirm:
+          type: boolean
+          description: |
+            Confirmation flag. Must be true to execute deletion.
+            When false, returns a preview of what will be deleted.
+          default: false
+
+    DeleteDraftOutput:
+      type: object
+      description: Output from note_delete_draft MCP tool
+      oneOf:
+        - $ref: "#/components/schemas/DeleteResult"
+        - $ref: "#/components/schemas/DeletePreview"
+        - $ref: "#/components/schemas/DeleteError"
+
+    DeleteResult:
+      type: object
+      description: Successful deletion result
+      required:
+        - success
+        - article_id
+        - article_key
+        - article_title
+        - message
+      properties:
+        success:
+          type: boolean
+          const: true
+        article_id:
+          type: string
+          description: ID of the deleted article
+        article_key:
+          type: string
+          description: Key of the deleted article
+        article_title:
+          type: string
+          description: Title of the deleted article
+        message:
+          type: string
+          description: Success message
+          examples:
+            - "下書き記事「テスト記事」(n1234567890ab)を削除しました。"
+
+    DeletePreview:
+      type: object
+      description: Preview shown when confirm=false
+      required:
+        - article_id
+        - article_key
+        - article_title
+        - status
+        - message
+      properties:
+        article_id:
+          type: string
+          description: ID of the article to be deleted
+        article_key:
+          type: string
+          description: Key of the article to be deleted
+        article_title:
+          type: string
+          description: Title of the article to be deleted
+        status:
+          type: string
+          enum: [draft, published, private]
+          description: Current status of the article
+        message:
+          type: string
+          description: Confirmation prompt
+          examples:
+            - "下書き記事「テスト記事」を削除しますか？confirm=True を指定して再度呼び出してください。"
+
+    DeleteError:
+      type: object
+      description: Error response
+      required:
+        - success
+        - error_code
+        - message
+      properties:
+        success:
+          type: boolean
+          const: false
+        error_code:
+          type: string
+          enum:
+            - not_authenticated
+            - article_not_found
+            - api_error
+            - invalid_input
+        message:
+          type: string
+          description: Error message
+
+    DeleteAllDraftsInput:
+      type: object
+      description: Input for note_delete_all_drafts MCP tool
+      required:
+        - confirm
+      properties:
+        confirm:
+          type: boolean
+          description: |
+            Confirmation flag. Must be true to execute deletion.
+            When false, returns a list of drafts that will be deleted.
+          default: false
+
+    DeleteAllDraftsOutput:
+      type: object
+      description: Output from note_delete_all_drafts MCP tool
+      oneOf:
+        - $ref: "#/components/schemas/BulkDeleteResult"
+        - $ref: "#/components/schemas/BulkDeletePreview"
+        - $ref: "#/components/schemas/DeleteError"
+
+    BulkDeletePreview:
+      type: object
+      description: Preview of all drafts that will be deleted
+      required:
+        - total_count
+        - articles
+        - message
+      properties:
+        total_count:
+          type: integer
+          description: Total number of drafts to be deleted
+          minimum: 0
+        articles:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArticleSummary"
+          description: List of drafts to be deleted
+        message:
+          type: string
+          description: Confirmation prompt
+          examples:
+            - "3件の下書き記事を削除しますか？confirm=True を指定して再度呼び出してください。"
+
+    BulkDeleteResult:
+      type: object
+      description: Result of bulk delete operation
+      required:
+        - success
+        - total_count
+        - deleted_count
+        - failed_count
+        - deleted_articles
+        - failed_articles
+        - message
+      properties:
+        success:
+          type: boolean
+          description: True if all deletions succeeded
+        total_count:
+          type: integer
+          description: Total number of articles targeted
+          minimum: 0
+        deleted_count:
+          type: integer
+          description: Number of successfully deleted articles
+          minimum: 0
+        failed_count:
+          type: integer
+          description: Number of failed deletions
+          minimum: 0
+        deleted_articles:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArticleSummary"
+          description: Successfully deleted articles
+        failed_articles:
+          type: array
+          items:
+            $ref: "#/components/schemas/FailedArticle"
+          description: Articles that failed to delete
+        message:
+          type: string
+          description: Summary message
+          examples:
+            - "3件の下書き記事を削除しました。"
+            - "3件中2件の下書き記事を削除しました。1件の削除に失敗しました。"
+
+    ArticleSummary:
+      type: object
+      description: Summary information of an article
+      required:
+        - article_id
+        - article_key
+        - title
+      properties:
+        article_id:
+          type: string
+          description: Article ID
+        article_key:
+          type: string
+          description: Article key
+        title:
+          type: string
+          description: Article title
+
+    FailedArticle:
+      type: object
+      description: Information about a failed deletion
+      required:
+        - article_id
+        - article_key
+        - title
+        - error
+      properties:
+        article_id:
+          type: string
+          description: Article ID
+        article_key:
+          type: string
+          description: Article key
+        title:
+          type: string
+          description: Article title
+        error:
+          type: string
+          description: Error message explaining the failure
