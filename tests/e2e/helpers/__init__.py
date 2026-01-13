@@ -17,6 +17,7 @@ from .constants import (
     LOGIN_TIMEOUT_SECONDS,
     NOTE_EDITOR_URL,
 )
+from .html_validator import HtmlValidator
 from .image_utils import ImageValidationResult, ImageValidator, create_test_png
 from .preview_helpers import open_preview_for_article_key, preview_page_context
 from .retry import with_retry
@@ -28,6 +29,7 @@ __all__ = [
     "DEFAULT_NAVIGATION_TIMEOUT_MS",
     "extract_article_id",
     "extract_article_key",
+    "HtmlValidator",
     "ImageValidationResult",
     "ImageValidator",
     "LOGIN_TIMEOUT_SECONDS",

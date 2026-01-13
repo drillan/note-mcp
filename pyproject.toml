@@ -25,11 +25,13 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "beautifulsoup4>=4.12.0",
     "mitmproxy>=11.0.2",
     "mypy>=1.19.1",
     "pytest>=8.4.1",
     "pytest-asyncio>=0.23.0",
     "ruff>=0.12.4",
+    "types-beautifulsoup4>=4.12.0",
     "types-pyyaml>=6.0.0",
 ]
 docs = [
@@ -79,4 +81,5 @@ markers = [
     "requires_auth: tests requiring real authentication",
     "e2e: end-to-end tests",
     "docker: tests requiring Docker environment with browser/proxy",
+    "playwright: tests requiring Playwright browser automation",
 ]
