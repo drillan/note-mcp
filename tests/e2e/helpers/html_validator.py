@@ -8,10 +8,15 @@ elements like TOC and KaTeX that require JavaScript execution.
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 from bs4 import BeautifulSoup, Tag
 
 from tests.e2e.helpers.validation import ValidationResult
+
+# Type aliases for constrained values
+HeadingLevel = Literal[2, 3]
+TextAlignment = Literal["center", "right", "left"]
 
 
 class HtmlValidator:
@@ -30,7 +35,12 @@ class HtmlValidator:
 
         Args:
             html: HTML content to validate
+
+        Raises:
+            ValueError: If HTML content is empty or whitespace-only
         """
+        if not html or not html.strip():
+            raise ValueError("HTML content cannot be empty")
         self._soup = BeautifulSoup(html, "html.parser")
 
     def _find_elements_with_text(
@@ -53,7 +63,7 @@ class HtmlValidator:
         elements = self._soup.find_all(tag_name, attrs=attrs or {})
         return [el for el in elements if isinstance(el, Tag) and text in el.get_text()]
 
-    async def validate_heading(self, level: int, text: str) -> ValidationResult:
+    async def validate_heading(self, level: HeadingLevel, text: str) -> ValidationResult:
         """Validate heading element.
 
         Args:
@@ -178,7 +188,7 @@ class HtmlValidator:
             message=f"No element found matching: <pre><code> containing '{code}'",
         )
 
-    async def validate_alignment(self, text: str, alignment: str) -> ValidationResult:
+    async def validate_alignment(self, text: str, alignment: TextAlignment) -> ValidationResult:
         """Validate text alignment.
 
         Args:

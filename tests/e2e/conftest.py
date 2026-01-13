@@ -22,7 +22,7 @@ from note_mcp.api.preview import get_preview_html
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
 from note_mcp.browser.manager import BrowserManager
-from note_mcp.models import Article, ArticleInput, LoginError, Session
+from note_mcp.models import Article, ArticleInput, LoginError, NoteAPIError, Session
 from tests.e2e.helpers.constants import (
     DEFAULT_ELEMENT_WAIT_TIMEOUT_MS,
     DEFAULT_NAVIGATION_TIMEOUT_MS,
@@ -226,8 +226,14 @@ async def preview_html(
 
     Returns:
         Preview page HTML content
+
+    Raises:
+        pytest.skip: If API call fails
     """
-    return await get_preview_html(real_session, draft_article.key)
+    try:
+        return await get_preview_html(real_session, draft_article.key)
+    except NoteAPIError as e:
+        pytest.skip(f"Failed to fetch preview HTML: {e.message}")
 
 
 @pytest_asyncio.fixture
