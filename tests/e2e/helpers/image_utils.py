@@ -257,3 +257,72 @@ class ImageValidator:
                 caption_text=None,
                 message=f"Playwright error: {e}",
             )
+
+    async def validate_image_src_contains(
+        self,
+        expected_substring: str,
+    ) -> ImageValidationResult:
+        """Validate that at least one image src contains the expected substring.
+
+        This is useful for verifying that local image paths have been
+        replaced with CDN URLs (e.g., "assets.st-note.com").
+
+        Args:
+            expected_substring: Expected substring in image src
+
+        Returns:
+            ImageValidationResult with validation details
+        """
+        try:
+            result = await self.page.evaluate(
+                """
+                (expectedSubstring) => {
+                    const images = document.querySelectorAll(
+                        'article img, .note-body img, figure img, [class*="body"] img'
+                    );
+                    const visibleImages = Array.from(images).filter(
+                        img => img.offsetParent !== null
+                    );
+                    const matchingImages = visibleImages.filter(
+                        img => img.src && img.src.includes(expectedSubstring)
+                    );
+                    return {
+                        count: matchingImages.length,
+                        totalImages: visibleImages.length,
+                        matches: matchingImages.length > 0,
+                        sampleSrc: visibleImages.length > 0 ? visibleImages[0].src : null
+                    };
+                }
+                """,
+                expected_substring,
+            )
+
+            count = result.get("count", 0)
+            total = result.get("totalImages", 0)
+            matches = result.get("matches", False)
+            sample_src = result.get("sampleSrc")
+
+            if matches:
+                return ImageValidationResult(
+                    success=True,
+                    image_count=count,
+                    has_caption=False,
+                    caption_text=None,
+                    message=f"Found {count}/{total} image(s) with '{expected_substring}' in src",
+                )
+            return ImageValidationResult(
+                success=False,
+                image_count=total,
+                has_caption=False,
+                caption_text=None,
+                message=f"No images found with '{expected_substring}' in src. Sample src: {sample_src}",
+            )
+
+        except PlaywrightError as e:
+            return ImageValidationResult(
+                success=False,
+                image_count=0,
+                has_caption=False,
+                caption_text=None,
+                message=f"Playwright error: {e}",
+            )

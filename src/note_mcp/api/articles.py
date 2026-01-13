@@ -213,7 +213,7 @@ def _build_article_payload(
 
     if include_body and html_body is not None:
         payload["body"] = html_body
-        payload["body_length"] = len(article_input.body)
+        payload["body_length"] = len(html_body)
 
     hashtags = _normalize_tags(article_input.tags)
     if hashtags:
