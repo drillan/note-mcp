@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import re
 
+from note_mcp.api.articles import get_article_raw_html
+from note_mcp.auth.session import SessionManager
+
 
 def extract_article_key(result: str) -> str:
     """Extract article_key from MCP tool result.
@@ -63,3 +66,31 @@ def extract_article_id(result: str) -> str:
     if not match:
         raise ValueError(f"Could not extract article ID from result: {result}")
     return match.group(1)
+
+
+async def get_article_html(article_key: str) -> str:
+    """Get article body as raw HTML (without Markdown conversion).
+
+    Uses get_article_raw_html() to retrieve the article body in its original
+    HTML format. This is useful for tests that need to validate HTML attributes
+    like embedded-service that are lost during Markdown conversion.
+
+    Args:
+        article_key: The article key (e.g., "n1234567890ab")
+
+    Returns:
+        The article body as raw HTML
+
+    Raises:
+        RuntimeError: If session is not available
+
+    Example:
+        >>> html = await get_article_html("n1234567890ab")
+        >>> assert 'embedded-service="youtube"' in html
+    """
+    session = SessionManager().load()
+    if session is None:
+        raise RuntimeError("Session not found. Please login first.")
+
+    article = await get_article_raw_html(session, article_key)
+    return article.body or ""

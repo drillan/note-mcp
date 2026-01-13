@@ -17,9 +17,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from note_mcp.server import note_create_draft, note_get_article
+from note_mcp.server import note_create_draft
 from tests.e2e.helpers import (
     extract_article_key,
+    get_article_html,
     preview_page_context,
 )
 
@@ -67,13 +68,14 @@ The video should appear above."""
 
         # Extract article key and verify content
         # Issue #154: API requires key format, not numeric ID
+        # Issue #165: Use get_article_html() to get raw HTML for embed attribute validation
         article_key = extract_article_key(result)
-        article_content = await note_get_article.fn(article_key)
+        article_html = await get_article_html(article_key)
 
-        # Verify embed figure is present
-        assert 'embedded-service="youtube"' in article_content
-        assert f'data-src="{youtube_url}"' in article_content
-        assert "embedded-content-key=" in article_content
+        # Verify embed figure is present (in raw HTML)
+        assert 'embedded-service="youtube"' in article_html
+        assert f'data-src="{youtube_url}"' in article_html
+        assert "embedded-content-key=" in article_html
 
     async def test_twitter_embed_via_api(
         self,
@@ -104,12 +106,13 @@ The tweet should appear above."""
 
         # Extract article key and verify content
         # Issue #154: API requires key format, not numeric ID
+        # Issue #165: Use get_article_html() to get raw HTML for embed attribute validation
         article_key = extract_article_key(result)
-        article_content = await note_get_article.fn(article_key)
+        article_html = await get_article_html(article_key)
 
-        # Verify embed figure is present
-        assert 'embedded-service="twitter"' in article_content
-        assert f'data-src="{twitter_url}"' in article_content
+        # Verify embed figure is present (in raw HTML)
+        assert 'embedded-service="twitter"' in article_html
+        assert f'data-src="{twitter_url}"' in article_html
 
     async def test_x_embed_via_api(
         self,
@@ -140,12 +143,13 @@ The post should appear above."""
 
         # Extract article key and verify content
         # Issue #154: API requires key format, not numeric ID
+        # Issue #165: Use get_article_html() to get raw HTML for embed attribute validation
         article_key = extract_article_key(result)
-        article_content = await note_get_article.fn(article_key)
+        article_html = await get_article_html(article_key)
 
-        # Verify embed figure is present (X URLs use twitter service)
-        assert 'embedded-service="twitter"' in article_content
-        assert f'data-src="{x_url}"' in article_content
+        # Verify embed figure is present (X URLs use twitter service, in raw HTML)
+        assert 'embedded-service="twitter"' in article_html
+        assert f'data-src="{x_url}"' in article_html
 
     async def test_note_embed_via_api(
         self,
@@ -176,12 +180,13 @@ The article card should appear above."""
 
         # Extract article key and verify content
         # Issue #154: API requires key format, not numeric ID
+        # Issue #165: Use get_article_html() to get raw HTML for embed attribute validation
         article_key = extract_article_key(result)
-        article_content = await note_get_article.fn(article_key)
+        article_html = await get_article_html(article_key)
 
-        # Verify embed figure is present
-        assert 'embedded-service="note"' in article_content
-        assert f'data-src="{note_url}"' in article_content
+        # Verify embed figure is present (in raw HTML)
+        assert 'embedded-service="note"' in article_html
+        assert f'data-src="{note_url}"' in article_html
 
     async def test_multiple_embeds_via_api(
         self,
@@ -216,13 +221,14 @@ Both should appear as embed cards."""
 
         # Extract article key and verify content
         # Issue #154: API requires key format, not numeric ID
+        # Issue #165: Use get_article_html() to get raw HTML for embed attribute validation
         article_key = extract_article_key(result)
-        article_content = await note_get_article.fn(article_key)
+        article_html = await get_article_html(article_key)
 
-        # Verify both embeds are present
-        assert 'embedded-service="youtube"' in article_content
-        assert 'embedded-service="twitter"' in article_content
-        assert article_content.count('embedded-service="') >= 2
+        # Verify both embeds are present (in raw HTML)
+        assert 'embedded-service="youtube"' in article_html
+        assert 'embedded-service="twitter"' in article_html
+        assert article_html.count('embedded-service="') >= 2
 
     async def test_embed_in_paragraph_not_converted(
         self,
@@ -249,13 +255,14 @@ Both should appear as embed cards."""
 
         # Extract article key and verify content
         # Issue #154: API requires key format, not numeric ID
+        # Issue #165: Use get_article_html() to get raw HTML for embed attribute validation
         article_key = extract_article_key(result)
-        article_content = await note_get_article.fn(article_key)
+        article_html = await get_article_html(article_key)
 
-        # URL should remain as link, not figure
-        assert 'embedded-service="youtube"' not in article_content
+        # URL should remain as link, not figure (in raw HTML)
+        assert 'embedded-service="youtube"' not in article_html
         # URL should be in an anchor tag
-        assert f'href="{youtube_url}"' in article_content
+        assert f'href="{youtube_url}"' in article_html
 
     async def test_embed_as_markdown_link_not_converted(
         self,
@@ -282,12 +289,13 @@ Both should appear as embed cards."""
 
         # Extract article key and verify content
         # Issue #154: API requires key format, not numeric ID
+        # Issue #165: Use get_article_html() to get raw HTML for embed attribute validation
         article_key = extract_article_key(result)
-        article_content = await note_get_article.fn(article_key)
+        article_html = await get_article_html(article_key)
 
-        # URL should be in anchor tag, not figure
-        assert 'embedded-service="youtube"' not in article_content
-        assert "Watch this video" in article_content
+        # URL should be in anchor tag, not figure (in raw HTML)
+        assert 'embedded-service="youtube"' not in article_html
+        assert "Watch this video" in article_html
 
 
 class TestEmbedPreviewRendering:
