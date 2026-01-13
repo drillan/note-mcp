@@ -86,3 +86,24 @@ class TestBuildArticlePayload:
 
         assert payload["hashtags"][0] == {"hashtag": {"name": "python"}}
         assert payload["hashtags"][1] == {"hashtag": {"name": "testing"}}
+
+    def test_body_not_included_when_html_body_is_none(self) -> None:
+        """body and body_length should not be set when html_body is None.
+
+        This handles the edge case where include_body=True (default) but
+        html_body is not provided. The payload should omit body fields
+        to avoid sending invalid data to the API.
+        """
+        article_input = ArticleInput(
+            title="Test Article",
+            body="Markdown content",
+        )
+
+        # html_body=None with include_body=True (default)
+        payload = _build_article_payload(article_input, html_body=None)
+
+        # body and body_length should NOT be in payload
+        assert "body" not in payload
+        assert "body_length" not in payload
+        # But title should still be included
+        assert payload["name"] == "Test Article"
