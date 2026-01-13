@@ -9,13 +9,101 @@ import httpx
 import pytest
 from playwright.async_api import Error as PlaywrightError
 
+from note_mcp.models import ErrorCode, NoteAPIError
 from tests.e2e.helpers.retry import (
     DEFAULT_BACKOFF_BASE,
     DEFAULT_MAX_ATTEMPTS,
     RETRYABLE_EXCEPTIONS,
+    is_rate_limited_error,
     is_retryable,
+    is_transient_access_denied_error,
     with_retry,
 )
+
+
+class TestIsTransientAccessDeniedError:
+    """Tests for is_transient_access_denied_error function."""
+
+    def test_403_with_access_denied_response_returns_true(self) -> None:
+        """403 error with 'Access denied' in response should return True."""
+        error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Access denied.",
+            details={"status_code": 403, "response": "Access denied"},
+        )
+        assert is_transient_access_denied_error(error) is True
+
+    def test_403_without_access_denied_response_returns_false(self) -> None:
+        """403 error without 'Access denied' in response should return False.
+
+        This distinguishes transient rate limiting from true permission errors.
+        """
+        error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Forbidden.",
+            details={"status_code": 403, "response": "Permission denied for this resource"},
+        )
+        assert is_transient_access_denied_error(error) is False
+
+    def test_403_with_empty_response_returns_false(self) -> None:
+        """403 error with empty response should return False."""
+        error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Access denied.",
+            details={"status_code": 403, "response": ""},
+        )
+        assert is_transient_access_denied_error(error) is False
+
+    def test_non_403_note_api_error_returns_false(self) -> None:
+        """NoteAPIError with non-403 status_code should return False."""
+        error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Server error.",
+            details={"status_code": 500, "response": "Access denied"},
+        )
+        assert is_transient_access_denied_error(error) is False
+
+    def test_note_api_error_without_status_code_returns_false(self) -> None:
+        """NoteAPIError without status_code in details should return False."""
+        error = NoteAPIError(
+            code=ErrorCode.INVALID_INPUT,
+            message="Invalid input.",
+            details={},
+        )
+        assert is_transient_access_denied_error(error) is False
+
+    def test_other_exception_returns_false(self) -> None:
+        """Non-NoteAPIError exceptions should return False."""
+        assert is_transient_access_denied_error(ValueError("error")) is False
+        assert is_transient_access_denied_error(TimeoutError("timeout")) is False
+        assert is_transient_access_denied_error(RuntimeError("runtime")) is False
+
+
+class TestIsRateLimitedError:
+    """Tests for is_rate_limited_error function."""
+
+    def test_rate_limited_error_returns_true(self) -> None:
+        """NoteAPIError with RATE_LIMITED code should return True."""
+        error = NoteAPIError(
+            code=ErrorCode.RATE_LIMITED,
+            message="Rate limit exceeded.",
+            details={"status_code": 429},
+        )
+        assert is_rate_limited_error(error) is True
+
+    def test_non_rate_limited_error_returns_false(self) -> None:
+        """NoteAPIError with non-RATE_LIMITED code should return False."""
+        error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Server error.",
+            details={"status_code": 500},
+        )
+        assert is_rate_limited_error(error) is False
+
+    def test_other_exception_returns_false(self) -> None:
+        """Non-NoteAPIError exceptions should return False."""
+        assert is_rate_limited_error(ValueError("error")) is False
+        assert is_rate_limited_error(TimeoutError("timeout")) is False
 
 
 class TestIsRetryable:
@@ -69,6 +157,42 @@ class TestIsRetryable:
     def test_runtime_error_not_retryable(self) -> None:
         """RuntimeError should not be retryable."""
         assert not is_retryable(RuntimeError("error"))
+
+    def test_note_api_error_transient_403_is_retryable(self) -> None:
+        """NoteAPIError with transient 403 (Access denied in response) should be retryable."""
+        error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Access denied.",
+            details={"status_code": 403, "response": "Access denied"},
+        )
+        assert is_retryable(error)
+
+    def test_note_api_error_non_transient_403_not_retryable(self) -> None:
+        """NoteAPIError with non-transient 403 should not be retryable."""
+        error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Forbidden.",
+            details={"status_code": 403, "response": "Permission denied"},
+        )
+        assert not is_retryable(error)
+
+    def test_note_api_error_rate_limited_is_retryable(self) -> None:
+        """NoteAPIError with RATE_LIMITED code should be retryable."""
+        error = NoteAPIError(
+            code=ErrorCode.RATE_LIMITED,
+            message="Rate limit exceeded.",
+            details={"status_code": 429},
+        )
+        assert is_retryable(error)
+
+    def test_note_api_error_non_403_not_retryable(self) -> None:
+        """NoteAPIError with non-403 status should not be retryable."""
+        error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Server error.",
+            details={"status_code": 500, "response": ""},
+        )
+        assert not is_retryable(error)
 
 
 class TestWithRetry:
@@ -263,6 +387,68 @@ class TestWithRetry:
 
         assert "connection timed out" in caplog.text
         assert "Attempt 1/3 failed" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_retry_on_transient_403(self) -> None:
+        """Should retry on transient 403 (Access denied in response) and succeed."""
+        access_denied_error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Access denied.",
+            details={"status_code": 403, "response": "Access denied"},
+        )
+        mock_func = AsyncMock(side_effect=[access_denied_error, "success"])
+
+        with patch("tests.e2e.helpers.retry.asyncio.sleep", new_callable=AsyncMock):
+            result = await with_retry(mock_func)
+
+        assert result == "success"
+        assert mock_func.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_no_retry_on_non_transient_403(self) -> None:
+        """Should not retry on non-transient 403 (permission error)."""
+        permission_error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Forbidden.",
+            details={"status_code": 403, "response": "Permission denied"},
+        )
+        mock_func = AsyncMock(side_effect=permission_error)
+
+        with pytest.raises(NoteAPIError, match="Forbidden."):
+            await with_retry(mock_func)
+
+        assert mock_func.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_retry_on_rate_limited_error(self) -> None:
+        """Should retry on RATE_LIMITED error and succeed."""
+        rate_limited_error = NoteAPIError(
+            code=ErrorCode.RATE_LIMITED,
+            message="Rate limit exceeded.",
+            details={"status_code": 429},
+        )
+        mock_func = AsyncMock(side_effect=[rate_limited_error, "success"])
+
+        with patch("tests.e2e.helpers.retry.asyncio.sleep", new_callable=AsyncMock):
+            result = await with_retry(mock_func)
+
+        assert result == "success"
+        assert mock_func.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_no_retry_on_note_api_error_non_403(self) -> None:
+        """Should not retry on NoteAPIError with non-403 status."""
+        server_error = NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Server error.",
+            details={"status_code": 500, "response": ""},
+        )
+        mock_func = AsyncMock(side_effect=server_error)
+
+        with pytest.raises(NoteAPIError, match="Server error."):
+            await with_retry(mock_func)
+
+        assert mock_func.call_count == 1
 
 
 class TestConstants:
