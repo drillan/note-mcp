@@ -59,7 +59,7 @@ def extract_article_key(result: str) -> str:
 
 def extract_article_id(result: str) -> str:
     """Extract article ID from MCP tool result."""
-    match = re.search(r"記事ID:\s*(\S+)", result)
+    match = re.search(r"(?:記事)?ID:\s*(\d+)", result)
     if not match:
         raise ValueError(f"Could not extract article ID from result: {result}")
     return match.group(1)
