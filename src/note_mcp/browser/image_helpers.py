@@ -4,7 +4,7 @@ This module provides functions to insert images at placeholder positions
 in the note.com ProseMirror editor.
 
 Workflow:
-1. typing_helpers.py detects image patterns ![alt](url) and inserts placeholders
+1. markdown_to_html.py processes Markdown and image patterns are preserved as placeholders
    (§§IMAGE:alt||url§§)
 2. This module finds all placeholders and replaces them with actual images
 3. For local files: uses browser automation to upload via note.com's UI
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # note.com editor selectors
 _EDITOR_SELECTOR = ".ProseMirror"
 
-# Placeholder markers (must match typing_helpers.py)
+# Placeholder markers used for image insertion
 _IMAGE_PLACEHOLDER_START = "§§IMAGE:"
 _IMAGE_PLACEHOLDER_SEPARATOR = "||"
 _IMAGE_PLACEHOLDER_END = "§§"

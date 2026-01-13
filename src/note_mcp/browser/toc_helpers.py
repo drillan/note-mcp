@@ -27,7 +27,7 @@ _TOC_MENU_ITEM_SELECTOR = 'button:has-text("目次")'
 _TOC_ELEMENT_SELECTOR = ".ProseMirror nav"
 
 # Placeholder marker (text marker, not HTML comment)
-# Must match _TOC_PLACEHOLDER in typing_helpers.py
+# Must match _TOC_PLACEHOLDER in markdown_to_html.py
 TOC_PLACEHOLDER = "§§TOC§§"
 
 

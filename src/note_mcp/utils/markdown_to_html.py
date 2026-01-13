@@ -20,7 +20,7 @@ from note_mcp.api.embeds import (
 # TOC pattern: [TOC] must be alone on a line
 _TOC_PATTERN = re.compile(r"^\[TOC\]$", re.MULTILINE)
 # TOC placeholder (text marker, not HTML comment)
-# Must match TOC_PLACEHOLDER in toc_helpers.py and _TOC_PLACEHOLDER in typing_helpers.py
+# Must match TOC_PLACEHOLDER in toc_helpers.py
 _TOC_PLACEHOLDER = "§§TOC§§"
 # Pattern to match TOC placeholder wrapped in paragraph tags (after Markdown conversion)
 _TOC_PLACEHOLDER_HTML_PATTERN = re.compile(
