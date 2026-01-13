@@ -337,7 +337,10 @@ async def insert_image_via_api(
 
     Args:
         session: Authenticated session
-        article_id: ID of the article to edit (numeric or key format)
+        article_id: Article key (e.g., "n1234567890ab").
+            Note: Key format is required due to note.com API limitations.
+            The /v3/notes/ endpoint does not support numeric IDs.
+            Use the article key returned from create_draft() or list_articles().
         file_path: Path to the image file to insert
         caption: Optional caption for the image
 
@@ -365,8 +368,20 @@ async def insert_image_via_api(
     # Step 1: Validate file (existence, extension, and size)
     validate_image_file(file_path)
 
-    # Step 2: Get article with raw HTML body
-    # Use get_article_raw_html to preserve HTML (no Markdown conversion)
+    # Step 2: Validate article_id format
+    # Issue #147: /v3/notes/ endpoint does not support numeric IDs
+    if article_id.isdigit():
+        raise NoteAPIError(
+            code=ErrorCode.INVALID_INPUT,
+            message=(
+                f"Numeric article ID '{article_id}' is not supported. "
+                "Please use the article key format (e.g., 'n1234567890ab'). "
+                "You can get the article key from create_draft() or list_articles()."
+            ),
+            details={"article_id": article_id},
+        )
+
+    # Step 3: Get article with raw HTML body
     try:
         article = await get_article_raw_html(session, article_id)
     except NoteAPIError as e:

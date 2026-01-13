@@ -75,12 +75,12 @@ class TestInsertImageViaApiE2E:
     ) -> None:
         """Test API-based image insertion without caption.
 
-        Uses article_id instead of article_key.
+        Uses article_key format (key format is required for /v3/notes/ API).
         Verifies API-only mode (no fallback).
         """
         result = await insert_image_via_api(
             session=real_session,
-            article_id=draft_article.id,
+            article_id=draft_article.key,  # Use key format (Issue #147)
             file_path=str(test_image_path),
             caption=None,
         )
@@ -102,7 +102,7 @@ class TestInsertImageViaApiE2E:
 
         result = await insert_image_via_api(
             session=real_session,
-            article_id=draft_article.id,
+            article_id=draft_article.key,  # Use key format (Issue #147)
             file_path=str(test_image_path),
             caption=test_caption,
         )
@@ -142,7 +142,7 @@ class TestInsertImageViaApiE2E:
         # Insert image via API
         await insert_image_via_api(
             session=real_session,
-            article_id=draft_article.id,
+            article_id=draft_article.key,  # Use key format (Issue #147)
             file_path=str(test_image_path),
             caption=None,
         )
@@ -177,7 +177,7 @@ class TestInsertImageViaApiE2E:
         # Insert image with caption via API
         result = await insert_image_via_api(
             session=real_session,
-            article_id=draft_article.id,
+            article_id=draft_article.key,  # Use key format (Issue #147)
             file_path=str(test_image_path),
             caption=test_caption,
         )
@@ -186,7 +186,7 @@ class TestInsertImageViaApiE2E:
         assert result["fallback_used"] is False
 
         # Verify caption is in the article body
-        article = await get_article_raw_html(real_session, draft_article.id)
+        article = await get_article_raw_html(real_session, draft_article.key)
         assert test_caption in article.body, f"Caption not found in article body: {article.body[:500]}..."
 
     async def test_api_only_no_playwright_required(
@@ -205,7 +205,7 @@ class TestInsertImageViaApiE2E:
         start = time.time()
         result = await insert_image_via_api(
             session=real_session,
-            article_id=draft_article.id,
+            article_id=draft_article.key,  # Use key format (Issue #147)
             file_path=str(test_image_path),
             caption=None,
         )

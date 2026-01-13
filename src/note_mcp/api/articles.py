@@ -181,14 +181,25 @@ async def update_article_raw_html(
         )
 
     # Parse and validate response
+    # Note: draft_save returns {result, note_days_count, updated_at}, not article data
     article_data = response.get("data", {})
-    if not article_data or not article_data.get("id"):
+    if not article_data or "result" not in article_data:
         raise NoteAPIError(
             code=ErrorCode.API_ERROR,
             message="Article update failed: API returned empty response",
             details={"article_id": article_id, "response": response},
         )
-    return from_api_response(article_data)
+
+    # Construct Article from input since draft_save doesn't return full article data
+    # Preserve key if article_id was in key format (not purely numeric)
+    article_key = article_id if not article_id.isdigit() else ""
+    return Article(
+        id=numeric_id,
+        key=article_key,
+        title=title,
+        body=html_body,
+        status=ArticleStatus.DRAFT,
+    )
 
 
 def _normalize_tags(tags: list[str] | None) -> list[dict[str, Any]] | None:

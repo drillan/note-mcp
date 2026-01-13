@@ -72,9 +72,10 @@ class TestInsertImageViaApi:
             mock_upload.return_value = mock_image
             mock_update.return_value = mock_updated_article
 
+            # Use key format to bypass numeric ID resolution (tested in Issue #147)
             result = await insert_image_via_api(
                 session=session,
-                article_id="12345",
+                article_id="n12345abcdef",  # Key format
                 file_path=str(file_path),
                 caption="Test caption",
             )
@@ -85,7 +86,7 @@ class TestInsertImageViaApi:
             assert result["image_url"] == mock_image.url
             assert result["fallback_used"] is False  # API-only mode
 
-            mock_get.assert_called_once_with(session, "12345")
+            mock_get.assert_called_once_with(session, "n12345abcdef")
             mock_upload.assert_called_once()
             mock_update.assert_called_once()
 
@@ -117,9 +118,10 @@ class TestInsertImageViaApi:
             )
 
             with pytest.raises(NoteAPIError) as exc_info:
+                # Use key format to bypass numeric ID resolution (tested in Issue #147)
                 await insert_image_via_api(
                     session=session,
-                    article_id="12345",
+                    article_id="n12345abcdef",  # Key format
                     file_path=str(file_path),
                 )
 
@@ -163,9 +165,10 @@ class TestInsertImageViaApi:
             )
 
             with pytest.raises(NoteAPIError) as exc_info:
+                # Use key format to bypass numeric ID resolution (tested in Issue #147)
                 await insert_image_via_api(
                     session=session,
-                    article_id="12345",
+                    article_id="n12345abcdef",  # Key format
                     file_path=str(file_path),
                 )
 
@@ -459,11 +462,9 @@ class TestUpdateArticleRawHtml:
 
         mock_response = {
             "data": {
-                "id": "12345",
-                "key": "n12345abcdef",
-                "name": "Updated Title",
-                "body": html_body,
-                "status": "draft",
+                "result": "saved",  # draft_save returns result, not id
+                "note_days_count": 1,
+                "updated_at": 1234567890,
             }
         }
 
@@ -501,11 +502,9 @@ class TestUpdateArticleRawHtml:
 
         mock_response = {
             "data": {
-                "id": "12345",
-                "key": "n12345abcdef",
-                "name": "Title",
-                "body": "<p>Content</p>",
-                "status": "draft",
+                "result": "saved",  # draft_save returns result, not id
+                "note_days_count": 1,
+                "updated_at": 1234567890,
             }
         }
 
@@ -569,13 +568,13 @@ class TestUpdateArticleRawHtml:
             assert "empty response" in exc_info.value.message.lower()
 
     @pytest.mark.asyncio
-    async def test_update_article_response_missing_id_raises_error(self) -> None:
-        """Test that response without id field raises NoteAPIError."""
+    async def test_update_article_response_missing_result_raises_error(self) -> None:
+        """Test that response without result field raises NoteAPIError."""
         from note_mcp.api.articles import update_article_raw_html
 
         session = create_mock_session()
 
-        # Response with data but no id field
+        # Response with data but no result field (draft_save returns {result, ...})
         mock_response = {"data": {"name": "Title", "body": "<p>Content</p>"}}
 
         with (
@@ -650,9 +649,10 @@ class TestInsertImageViaApiOnly:
             mock_append.return_value = "<p>Existing content</p><figure><img src='test'></figure>"
             mock_update.return_value = mock_updated_article
 
+            # Use key format to bypass numeric ID resolution (tested in Issue #147)
             result = await insert_image_via_api(
                 session=session,
-                article_id="12345",
+                article_id="n12345abcdef",  # Key format
                 file_path=str(file_path),
                 caption="Test caption",
             )
@@ -704,9 +704,10 @@ class TestInsertImageViaApiOnly:
             mock_upload.return_value = mock_image
             mock_update.return_value = mock_article
 
+            # Use key format to bypass numeric ID resolution (tested in Issue #147)
             result = await insert_image_via_api(
                 session=session,
-                article_id="12345",
+                article_id="n12345abcdef",  # Key format
                 file_path=str(file_path),
             )
 
@@ -757,9 +758,10 @@ class TestInsertImageViaApiOnly:
             mock_append.return_value = "<p>Content</p><figure>...</figure>"
             mock_update.return_value = mock_article
 
+            # Use key format to bypass numeric ID resolution (tested in Issue #147)
             await insert_image_via_api(
                 session=session,
-                article_id="12345",
+                article_id="n12345abcdef",  # Key format
                 file_path=str(file_path),
                 caption="My Caption",
             )
@@ -768,3 +770,138 @@ class TestInsertImageViaApiOnly:
             mock_gen.assert_called_once()
             call_kwargs = mock_gen.call_args.kwargs
             assert call_kwargs.get("caption") == "My Caption"
+
+
+# =============================================================================
+# Issue #147: Numeric ID to Key Format Resolution Tests
+# =============================================================================
+
+
+class TestInsertImageIdResolution:
+    """Tests for insert_image_via_api ID validation logic (Issue #147).
+
+    The insert_image_via_api function:
+    - Rejects numeric IDs with a clear error message
+    - Requires article key format (e.g., 'n1234567890ab')
+    - Works directly with key format IDs
+
+    Note: This behavior changed from the initial plan because the /v3/notes/
+    endpoint does not support numeric IDs and draft_save does not return
+    the article key in its response.
+    """
+
+    @pytest.mark.asyncio
+    async def test_insert_image_with_numeric_id_raises_error(self, tmp_path: Path) -> None:
+        """Numeric IDs should be rejected with a clear error message.
+
+        This is the fix for Issue #147: numeric IDs are not supported
+        because /v3/notes/ API returns 400 error for numeric IDs.
+        """
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        with pytest.raises(NoteAPIError) as exc_info:
+            await insert_image_via_api(
+                session=session,
+                article_id="12345",  # Numeric ID should be rejected
+                file_path=str(file_path),
+            )
+
+        assert exc_info.value.code == ErrorCode.INVALID_INPUT
+        assert "Numeric article ID" in exc_info.value.message
+        assert "n1234567890ab" in exc_info.value.message  # Suggests key format
+
+    @pytest.mark.asyncio
+    async def test_insert_image_with_key_format_direct(self, tmp_path: Path) -> None:
+        """Key format ID should be used directly without draft_save resolution.
+
+        When article_id is already in key format (starts with 'n'),
+        no draft_save call is needed for key resolution.
+        """
+        from note_mcp.models import Article, ArticleStatus, Image, ImageType
+
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        mock_article = Article(
+            id="12345",
+            key="n12345abcdef",
+            title="Test Article",
+            body="<p>Content</p>",
+            status=ArticleStatus.DRAFT,
+        )
+
+        mock_image = Image(
+            key="image_key_123",
+            url="https://cdn.note.com/images/123.jpg",
+            original_path=str(file_path),
+            uploaded_at=1234567890,
+            image_type=ImageType.BODY,
+        )
+
+        with (
+            patch("note_mcp.api.images.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles.get_article_raw_html") as mock_get,
+            patch("note_mcp.api.images.upload_body_image") as mock_upload,
+            patch("note_mcp.api.articles.update_article_raw_html") as mock_update,
+        ):
+            mock_get.return_value = mock_article
+            mock_upload.return_value = mock_image
+            mock_update.return_value = mock_article
+
+            result = await insert_image_via_api(
+                session=session,
+                article_id="n12345abcdef",  # Key format
+                file_path=str(file_path),
+            )
+
+            assert result["success"] is True
+            assert result["article_key"] == "n12345abcdef"
+
+            # Verify NoteAPIClient was NOT used for draft_save (key resolution)
+            # The only NoteAPIClient usage should be in upload_body_image
+            mock_client_class.assert_not_called()
+
+            # Verify get_article_raw_html was called with key format directly
+            mock_get.assert_called_once_with(session, "n12345abcdef")
+
+    @pytest.mark.asyncio
+    async def test_insert_image_invalid_numeric_id_error(self, tmp_path: Path) -> None:
+        """Invalid numeric ID should raise appropriate error.
+
+        When both get_article_raw_html and draft_save fail, an error should be raised
+        with a clear message.
+        """
+        from unittest.mock import MagicMock
+
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        # Mock draft_save response without key (invalid article)
+        mock_draft_save_response: dict[str, dict[str, str]] = {"data": {}}
+
+        with (
+            patch("note_mcp.api.images.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles.get_article_raw_html") as mock_get,
+        ):
+            # First get_article_raw_html fails
+            mock_get.side_effect = NoteAPIError(code=ErrorCode.API_ERROR, message="Article not found")
+
+            mock_client = MagicMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.post = AsyncMock(return_value=mock_draft_save_response)
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await insert_image_via_api(
+                    session=session,
+                    article_id="99999999",  # Invalid numeric ID
+                    file_path=str(file_path),
+                )
+
+            assert exc_info.value.code == ErrorCode.INVALID_INPUT
+            assert "99999999" in exc_info.value.message
