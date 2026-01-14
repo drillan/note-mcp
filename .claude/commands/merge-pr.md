@@ -197,11 +197,15 @@ git pull origin main
 Step 5.1で記録した`ORIGINAL_DIR`を使用して、元のworktreeを削除:
 
 ```bash
-# ORIGINAL_DIRがworktreeだった場合のみ削除
-if [ "$ORIGINAL_DIR" != "$(pwd)" ]; then
+# Step 5.2で判定したGIT_COMMON_DIRを使用してworktreeかどうかを確認
+if [ "$GIT_COMMON_DIR" != ".git" ]; then
     # worktreeを削除
-    git worktree remove "$ORIGINAL_DIR"
-    echo "🧹 worktreeを削除しました: $ORIGINAL_DIR"
+    if git worktree remove "$ORIGINAL_DIR" 2>/dev/null; then
+        echo "🧹 worktreeを削除しました: $ORIGINAL_DIR"
+    else
+        echo "⚠️ worktreeの削除に失敗しました"
+        echo "   手動で削除: git worktree remove $ORIGINAL_DIR --force"
+    fi
 
     # staleなworktree参照をクリーンアップ
     git worktree prune

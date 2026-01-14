@@ -171,4 +171,5 @@ git worktree remove ../note-mcp-feat-123-add-auth
 | `.claude/commands/start-issue.md` | リンク参照 | Step 3でロジックのみ記述 |
 | `.claude/commands/add-worktree.md` | リンク参照 | Worktree命名規則を参照 |
 | `.claude/skills/issue-reporter/SKILL.md` | リンク参照 | パースパターンを参照 |
+| `.claude/commands/merge-pr.md` | リンク参照 | worktree命名規則を参照 |
 | `docs/development/contributing.md` | リンク参照 | コントリビューションの流れ |
