@@ -29,6 +29,8 @@ allowed-tools: Bash Grep Read
 
 ### サポートされるパターン
 
+**標準パターン（推奨）:**
+
 | パターン例 | 抽出結果 |
 |-----------|---------|
 | `feat/121-xxx` | 121 |
@@ -38,14 +40,21 @@ allowed-tools: Bash Grep Read
 | `test/111-xxx` | 111 |
 | `chore/222-xxx` | 222 |
 
+**レガシーパターン（後方互換性）:**
+
+| パターン例 | 抽出結果 |
+|-----------|---------|
+| `feature/111-xxx` | 111 |
+| `bugfix/456-xxx` | 456 |
+
 ### 抽出ロジック
 
 ```bash
 # 現在のブランチ名を取得
 branch=$(git branch --show-current)
 
-# issue番号を抽出（プレフィックス後の数字列）
-issue_number=$(echo "$branch" | sed -n 's#^\(feat\|fix\|chore\|docs\|refactor\|test\)/\([0-9]\+\)-.*#\2#p')
+# issue番号を抽出（標準パターン + レガシーパターン対応）
+issue_number=$(echo "$branch" | sed -n 's#^\(feat\|fix\|chore\|docs\|refactor\|test\|feature\|bugfix\)/\([0-9]\+\)-.*#\2#p')
 
 # 先頭ゼロを除去（004 -> 4）
 if [ -n "$issue_number" ]; then
@@ -151,7 +160,7 @@ fi
 
 ```bash
 branch=$(git branch --show-current)
-issue_number=$(echo "$branch" | sed -n 's#^\(feat\|fix\|chore\|docs\|refactor\|test\)/\([0-9]\+\)-.*#\2#p')
+issue_number=$(echo "$branch" | sed -n 's#^\(feat\|fix\|chore\|docs\|refactor\|test\|feature\|bugfix\)/\([0-9]\+\)-.*#\2#p')
 if [ -n "$issue_number" ]; then
     issue_number=$((10#$issue_number))
 fi

@@ -40,10 +40,10 @@ $ARGUMENTS
 
 ### Step 2: issueの読み込み
 
-以下のコマンドでissue情報を取得:
+以下のコマンドでissue情報を取得（Step 1でパース済みのissue番号を使用）:
 
 ```bash
-gh issue view $ARGUMENTS --json number,title,body,labels,state
+gh issue view <issue番号> --json number,title,body,labels,state
 ```
 
 取得した情報を解析:
@@ -55,9 +55,9 @@ gh issue view $ARGUMENTS --json number,title,body,labels,state
 issueが見つからない場合はエラー:
 
 ```
-⚠️ Issue #$ARGUMENTS が見つかりません
+⚠️ Issue #<issue番号> が見つかりません
 
-gh issue view $ARGUMENTS でissueを確認してください。
+gh issue view <issue番号> でissueを確認してください。
 ```
 
 ### Step 3: ブランチタイプの決定
@@ -79,7 +79,7 @@ issueタイトルからブランチ名の説明部分を生成:
 3. スペースをハイフンに置換
 4. 連続ハイフンを単一に
 5. 先頭・末尾のハイフンを削除
-6. 40文字を超える場合は切り詰め
+6. 40文字を超える場合は切り詰め（Git refname制限対策、シェルでの扱いやすさ確保）
 
 例:
 - "Add delete draft feature" → `add-delete-draft-feature`

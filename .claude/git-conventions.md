@@ -52,7 +52,7 @@ issueからブランチタイプを自動判別する際のマッピング:
 
 | ラベル | プレフィックス |
 |--------|---------------|
-| `enhancement` | `feat/` |
+| `enhancement`, `feature` | `feat/` |
 | `bug` | `fix/` |
 | `refactoring`, `refactor` | `refactor/` |
 | `documentation`, `docs` | `docs/` |
@@ -147,8 +147,11 @@ chore: update dependencies to latest versions
 ### Commands
 
 ```bash
-# ワークツリーの作成
+# 既存ブランチのワークツリー作成
 git worktree add ../note-mcp-feat-123-add-auth feat/123-add-auth
+
+# 新規ブランチとワークツリーを同時作成
+git worktree add -b feat/123-add-auth ../note-mcp-feat-123-add-auth
 
 # ワークツリーの一覧
 git worktree list
