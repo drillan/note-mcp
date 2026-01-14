@@ -7,9 +7,12 @@ import pytest
 
 from note_mcp.api.articles import (
     _build_article_payload,
+    _create_draft_save_parser,
+    _execute_delete,
     _execute_get,
     _execute_post,
     _parse_article_response,
+    _parse_create_response,
     get_article_raw_html,
     get_article_via_api,
 )
@@ -353,3 +356,189 @@ class TestExecutePost:
 
             assert result == "published"
             mock_client.post.assert_called_once_with("/v3/notes/n123abc/publish", json=None)
+
+
+class TestExecuteDelete:
+    """Tests for _execute_delete helper function."""
+
+    @pytest.fixture
+    def mock_session(self) -> Session:
+        """Create a mock session for testing."""
+        return Session(
+            cookies={"note_gql_auth_token": "test_token", "XSRF-TOKEN": "test_xsrf"},
+            user_id="test_user",
+            username="testuser",
+            created_at=1700000000,
+        )
+
+    @pytest.mark.asyncio
+    async def test_execute_delete_calls_client_delete(self, mock_session: Session) -> None:
+        """_execute_delete should call client.delete with endpoint."""
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.delete = AsyncMock(return_value=None)
+
+            # _execute_delete returns None, just verify it doesn't raise
+            await _execute_delete(
+                mock_session,
+                "/v1/notes/n/n123abc",
+            )
+
+            mock_client.delete.assert_called_once_with("/v1/notes/n/n123abc")
+
+    @pytest.mark.asyncio
+    async def test_execute_delete_propagates_client_errors(self, mock_session: Session) -> None:
+        """_execute_delete should propagate NoteAPIError from client."""
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.delete = AsyncMock(
+                side_effect=NoteAPIError(
+                    code=ErrorCode.ARTICLE_NOT_FOUND,
+                    message="Article not found",
+                    details={"article_key": "n123abc"},
+                )
+            )
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await _execute_delete(mock_session, "/v1/notes/n/n123abc")
+
+            assert exc_info.value.code == ErrorCode.ARTICLE_NOT_FOUND
+            assert "Article not found" in exc_info.value.message
+
+
+class TestCreateDraftSaveParser:
+    """Tests for _create_draft_save_parser factory function."""
+
+    def test_parser_uses_provided_article_key(self) -> None:
+        """Parser should use article_key when explicitly provided."""
+        parser = _create_draft_save_parser(
+            article_id="123456",
+            numeric_id="123456",
+            title="Test Title",
+            html_body="<p>Content</p>",
+            article_key="n123abc",
+        )
+        response = {"data": {"result": True}}
+
+        article = parser(response)
+
+        assert isinstance(article, Article)
+        assert article.key == "n123abc"
+        assert article.id == "123456"
+        assert article.title == "Test Title"
+        assert article.body == "<p>Content</p>"
+        assert article.status == ArticleStatus.DRAFT
+
+    def test_parser_extracts_key_from_article_id_key_format(self) -> None:
+        """Parser should use article_id as key when in key format."""
+        parser = _create_draft_save_parser(
+            article_id="n789xyz",
+            numeric_id="789000",
+            title="Key Format Test",
+            html_body="<p>Body</p>",
+            article_key="",  # Empty, should derive from article_id
+        )
+        response = {"data": {"result": True}}
+
+        article = parser(response)
+
+        # article_id starts with "n" and is not numeric, so it should be used as key
+        assert article.key == "n789xyz"
+
+    def test_parser_returns_empty_key_for_numeric_id(self) -> None:
+        """Parser should return empty key when article_id is numeric."""
+        parser = _create_draft_save_parser(
+            article_id="123456789",
+            numeric_id="123456789",
+            title="Numeric ID Test",
+            html_body="<p>Body</p>",
+            article_key="",  # Empty
+        )
+        response = {"data": {"result": True}}
+
+        article = parser(response)
+
+        # article_id is numeric, so key should be empty
+        assert article.key == ""
+
+    def test_parser_raises_on_invalid_response(self) -> None:
+        """Parser should raise NoteAPIError when response is invalid."""
+        parser = _create_draft_save_parser(
+            article_id="123456",
+            numeric_id="123456",
+            title="Test",
+            html_body="<p>Test</p>",
+        )
+        # Missing "result" field in data
+        response: dict[str, Any] = {"data": {}}
+
+        with pytest.raises(NoteAPIError) as exc_info:
+            parser(response)
+
+        assert exc_info.value.code == ErrorCode.API_ERROR
+        assert "update failed" in exc_info.value.message
+
+
+class TestParseCreateResponse:
+    """Tests for _parse_create_response function."""
+
+    def test_parses_valid_response(self) -> None:
+        """_parse_create_response should extract id, key, and data from valid response."""
+        response = {
+            "data": {
+                "id": 123456789,
+                "key": "n1234567890ab",
+                "name": "Test Article",
+            }
+        }
+
+        article_id, article_key, article_data = _parse_create_response(response)
+
+        assert article_id == "123456789"
+        assert article_key == "n1234567890ab"
+        assert article_data["name"] == "Test Article"
+
+    def test_raises_when_id_missing(self) -> None:
+        """_parse_create_response should raise NoteAPIError when id is missing."""
+        response: dict[str, Any] = {
+            "data": {
+                "key": "n1234567890ab",
+                "name": "Test Article",
+            }
+        }
+
+        with pytest.raises(NoteAPIError) as exc_info:
+            _parse_create_response(response)
+
+        assert exc_info.value.code == ErrorCode.API_ERROR
+        assert "no article ID" in exc_info.value.message
+
+    def test_raises_when_key_missing(self) -> None:
+        """_parse_create_response should raise NoteAPIError when key is missing."""
+        response: dict[str, Any] = {
+            "data": {
+                "id": 123456789,
+                "name": "Test Article",
+            }
+        }
+
+        with pytest.raises(NoteAPIError) as exc_info:
+            _parse_create_response(response)
+
+        assert exc_info.value.code == ErrorCode.API_ERROR
+        assert "no article key" in exc_info.value.message
+
+    def test_raises_when_data_empty(self) -> None:
+        """_parse_create_response should raise NoteAPIError when data is empty."""
+        response: dict[str, Any] = {"data": {}}
+
+        with pytest.raises(NoteAPIError) as exc_info:
+            _parse_create_response(response)
+
+        assert exc_info.value.code == ErrorCode.API_ERROR

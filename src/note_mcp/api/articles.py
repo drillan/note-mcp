@@ -86,10 +86,13 @@ async def _execute_post[T](
         session: Authenticated session
         endpoint: API endpoint path
         response_parser: Function to parse response dict into result type
-        payload: JSON payload for request
+        payload: JSON payload for request (optional, defaults to None)
 
     Returns:
         Parsed result of type T
+
+    Raises:
+        NoteAPIError: If API request fails (401, 403, 404, 429, 5xx)
     """
     async with NoteAPIClient(session) as client:
         response = await client.post(endpoint, json=payload)
@@ -109,6 +112,12 @@ async def _execute_delete(
     Args:
         session: Authenticated session
         endpoint: API endpoint path
+
+    Returns:
+        None
+
+    Raises:
+        NoteAPIError: If API request fails (401, 403, 404, 429, 5xx)
     """
     async with NoteAPIClient(session) as client:
         await client.delete(endpoint)
