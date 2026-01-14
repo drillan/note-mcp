@@ -239,6 +239,34 @@ class TestDecoratorPreservesMetadata:
         assert my_function.__doc__ == "My docstring."
 
     @pytest.mark.asyncio
+    async def test_require_session_removes_session_from_signature(self) -> None:
+        """require_session should remove session param from signature.
+
+        This is critical for MCP schema generation - the session parameter
+        should not be exposed to MCP clients as it's injected by the decorator.
+        See: https://github.com/drillan/note-mcp/issues/238
+        """
+        import inspect
+
+        from note_mcp.decorators import require_session
+
+        @require_session
+        async def my_handler(session: Session, article_key: str, count: int = 10) -> str:
+            """Handler with session and other params."""
+            return f"{article_key}:{count}"
+
+        sig = inspect.signature(my_handler)
+        param_names = list(sig.parameters.keys())
+
+        # session should NOT be in the signature
+        assert "session" not in param_names
+        # Other parameters should be preserved
+        assert "article_key" in param_names
+        assert "count" in param_names
+        # Parameter order should be preserved (minus session)
+        assert param_names == ["article_key", "count"]
+
+    @pytest.mark.asyncio
     async def test_handle_api_error_preserves_name(self) -> None:
         """handle_api_error should preserve function name."""
         from note_mcp.decorators import handle_api_error

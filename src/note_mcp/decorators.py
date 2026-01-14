@@ -18,6 +18,7 @@ Decorator Order:
 
 from __future__ import annotations
 
+import inspect
 import logging
 from collections.abc import Awaitable, Callable
 from functools import wraps
@@ -64,6 +65,12 @@ def require_session[**P](
         if session is None or session.is_expired():
             return "セッションが無効です。note_loginでログインしてください。"
         return await func(session, *args, **kwargs)
+
+    # Remove 'session' parameter from the signature so it's not exposed in MCP schema
+    # See: https://github.com/drillan/note-mcp/issues/238
+    original_sig = inspect.signature(func)
+    new_params = [param for name, param in original_sig.parameters.items() if name != "session"]
+    wrapper.__signature__ = original_sig.replace(parameters=new_params)  # type: ignore[attr-defined]
 
     return wrapper
 
