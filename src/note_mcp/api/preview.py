@@ -7,12 +7,15 @@ and fetch preview page HTML.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import TYPE_CHECKING
 
 import httpx
 
 from note_mcp.api.articles import build_preview_url, get_preview_access_token
 from note_mcp.models import ErrorCode, NoteAPIError
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from note_mcp.models import Session
@@ -96,12 +99,23 @@ async def get_preview_html(
 
         # Handle auth errors: retry once with fresh token
         if status_code in auth_error_codes and not auth_retry_used:
+            logger.warning(
+                "Preview HTML fetch got auth error %d, retrying with fresh token",
+                status_code,
+            )
             auth_retry_used = True
             continue
 
         # Handle transient server errors: retry with exponential backoff
         if status_code in transient_error_codes and transient_retry_count < MAX_TRANSIENT_RETRIES:
             delay = min(BASE_DELAY * (2**transient_retry_count), MAX_DELAY)
+            logger.warning(
+                "Preview HTML fetch got transient error %d, retrying in %.1fs (%d/%d)",
+                status_code,
+                delay,
+                transient_retry_count + 1,
+                MAX_TRANSIENT_RETRIES,
+            )
             await asyncio.sleep(delay)
             transient_retry_count += 1
             continue
@@ -122,5 +136,7 @@ async def get_preview_html(
             "article_key": article_key,
             "status_code": last_response.status_code,
             "response_text": last_response.text[:500] if last_response.text else "(empty)",
+            "auth_retry_used": auth_retry_used,
+            "transient_retry_count": transient_retry_count,
         },
     )
