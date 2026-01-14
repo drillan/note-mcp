@@ -19,6 +19,7 @@ import pytest
 
 from note_mcp.server import note_create_draft
 from tests.e2e.helpers import (
+    delete_draft_with_retry,
     extract_article_key,
     get_article_html,
     preview_page_context,
@@ -68,12 +69,16 @@ The video should appear above."""
 
         # Issue #165: Use get_article_html() for raw HTML embed attribute validation
         article_key = extract_article_key(result)
-        article_html = await get_article_html(article_key)
+        try:
+            article_html = await get_article_html(article_key)
 
-        # Verify embed figure is present (in raw HTML)
-        assert 'embedded-service="youtube"' in article_html
-        assert f'data-src="{youtube_url}"' in article_html
-        assert "embedded-content-key=" in article_html
+            # Verify embed figure is present (in raw HTML)
+            assert 'embedded-service="youtube"' in article_html
+            assert f'data-src="{youtube_url}"' in article_html
+            assert "embedded-content-key=" in article_html
+        finally:
+            # Issue #210: Clean up created article
+            await delete_draft_with_retry(real_session, article_key)
 
     async def test_twitter_embed_via_api(
         self,
@@ -104,11 +109,15 @@ The tweet should appear above."""
 
         # Issue #165: Use get_article_html() for raw HTML embed attribute validation
         article_key = extract_article_key(result)
-        article_html = await get_article_html(article_key)
+        try:
+            article_html = await get_article_html(article_key)
 
-        # Verify embed figure is present (in raw HTML)
-        assert 'embedded-service="twitter"' in article_html
-        assert f'data-src="{twitter_url}"' in article_html
+            # Verify embed figure is present (in raw HTML)
+            assert 'embedded-service="twitter"' in article_html
+            assert f'data-src="{twitter_url}"' in article_html
+        finally:
+            # Issue #210: Clean up created article
+            await delete_draft_with_retry(real_session, article_key)
 
     async def test_x_embed_via_api(
         self,
@@ -139,11 +148,15 @@ The post should appear above."""
 
         # Issue #165: Use get_article_html() for raw HTML embed attribute validation
         article_key = extract_article_key(result)
-        article_html = await get_article_html(article_key)
+        try:
+            article_html = await get_article_html(article_key)
 
-        # Verify embed figure is present (X URLs use twitter service, in raw HTML)
-        assert 'embedded-service="twitter"' in article_html
-        assert f'data-src="{x_url}"' in article_html
+            # Verify embed figure is present (X URLs use twitter service, in raw HTML)
+            assert 'embedded-service="twitter"' in article_html
+            assert f'data-src="{x_url}"' in article_html
+        finally:
+            # Issue #210: Clean up created article
+            await delete_draft_with_retry(real_session, article_key)
 
     async def test_note_embed_via_api(
         self,
@@ -174,11 +187,15 @@ The article card should appear above."""
 
         # Issue #165: Use get_article_html() for raw HTML embed attribute validation
         article_key = extract_article_key(result)
-        article_html = await get_article_html(article_key)
+        try:
+            article_html = await get_article_html(article_key)
 
-        # Verify embed figure is present (in raw HTML)
-        assert 'embedded-service="note"' in article_html
-        assert f'data-src="{note_url}"' in article_html
+            # Verify embed figure is present (in raw HTML)
+            assert 'embedded-service="note"' in article_html
+            assert f'data-src="{note_url}"' in article_html
+        finally:
+            # Issue #210: Clean up created article
+            await delete_draft_with_retry(real_session, article_key)
 
     async def test_multiple_embeds_via_api(
         self,
@@ -213,12 +230,16 @@ Both should appear as embed cards."""
 
         # Issue #165: Use get_article_html() for raw HTML embed attribute validation
         article_key = extract_article_key(result)
-        article_html = await get_article_html(article_key)
+        try:
+            article_html = await get_article_html(article_key)
 
-        # Verify both embeds are present (in raw HTML)
-        assert 'embedded-service="youtube"' in article_html
-        assert 'embedded-service="twitter"' in article_html
-        assert article_html.count('embedded-service="') >= 2
+            # Verify both embeds are present (in raw HTML)
+            assert 'embedded-service="youtube"' in article_html
+            assert 'embedded-service="twitter"' in article_html
+            assert article_html.count('embedded-service="') >= 2
+        finally:
+            # Issue #210: Clean up created article
+            await delete_draft_with_retry(real_session, article_key)
 
     async def test_embed_in_paragraph_not_converted(
         self,
@@ -245,15 +266,19 @@ Both should appear as embed cards."""
 
         # Issue #165: Use get_article_html() for raw HTML embed attribute validation
         article_key = extract_article_key(result)
-        article_html = await get_article_html(article_key)
+        try:
+            article_html = await get_article_html(article_key)
 
-        # Issue #171: URL in paragraph should remain as plain text (not converted)
-        # URL should remain as plain text, not figure (in raw HTML)
-        assert 'embedded-service="youtube"' not in article_html
-        # URL should be in the paragraph as plain text (not converted to anchor)
-        assert youtube_url in article_html
-        # Explicitly verify NOT in anchor tag
-        assert f'href="{youtube_url}"' not in article_html
+            # Issue #171: URL in paragraph should remain as plain text (not converted)
+            # URL should remain as plain text, not figure (in raw HTML)
+            assert 'embedded-service="youtube"' not in article_html
+            # URL should be in the paragraph as plain text (not converted to anchor)
+            assert youtube_url in article_html
+            # Explicitly verify NOT in anchor tag
+            assert f'href="{youtube_url}"' not in article_html
+        finally:
+            # Issue #210: Clean up created article
+            await delete_draft_with_retry(real_session, article_key)
 
     async def test_embed_as_markdown_link_not_converted(
         self,
@@ -280,11 +305,15 @@ Both should appear as embed cards."""
 
         # Issue #165: Use get_article_html() for raw HTML embed attribute validation
         article_key = extract_article_key(result)
-        article_html = await get_article_html(article_key)
+        try:
+            article_html = await get_article_html(article_key)
 
-        # URL should be in anchor tag, not figure (in raw HTML)
-        assert 'embedded-service="youtube"' not in article_html
-        assert "Watch this video" in article_html
+            # URL should be in anchor tag, not figure (in raw HTML)
+            assert 'embedded-service="youtube"' not in article_html
+            assert "Watch this video" in article_html
+        finally:
+            # Issue #210: Clean up created article
+            await delete_draft_with_retry(real_session, article_key)
 
 
 class TestEmbedPreviewRendering:
@@ -318,7 +347,8 @@ class TestEmbedPreviewRendering:
         article_key = extract_article_key(result)
 
         # Verify preview rendering
-        async with preview_page_context(real_session, article_key) as page:
+        # Issue #210: Use cleanup_article=True to delete draft after test
+        async with preview_page_context(real_session, article_key, cleanup_article=True) as page:
             # Wait for embed to render (note.com renders iframes client-side)
             embed_figure = page.locator('figure[embedded-service="youtube"]')
             await embed_figure.wait_for(timeout=10000)
