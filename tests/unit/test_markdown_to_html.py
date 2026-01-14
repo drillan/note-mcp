@@ -1,6 +1,6 @@
 """Unit tests for Markdown conversion utility."""
 
-from note_mcp.utils.markdown_to_html import markdown_to_html
+from note_mcp.utils.markdown_to_html import has_embed_url, markdown_to_html
 
 
 class TestMarkdownToHtml:
@@ -714,6 +714,16 @@ class TestEmbedUrlConversion:
         assert 'embedded-service="note"' in result
         assert 'data-src="https://note.com/username/n/n1234567890ab"' in result
 
+    def test_gist_url_becomes_embed(self) -> None:
+        """GitHub GistのURLは埋め込みに変換される"""
+        markdown = "https://gist.github.com/defunkt/2059"
+        result = markdown_to_html(markdown)
+
+        assert "<figure" in result
+        assert 'embedded-service="gist"' in result
+        assert 'data-src="https://gist.github.com/defunkt/2059"' in result
+        assert "embedded-content-key=" in result
+
     def test_embed_url_with_surrounding_text(self) -> None:
         """テキストに囲まれた埋め込みURLも変換される"""
         markdown = """テスト文章です。
@@ -765,3 +775,44 @@ https://twitter.com/user/status/123"""
         assert "<figure" not in result
         assert "embedded-service" not in result
         assert "https://vimeo.com/123456" in result
+
+
+class TestHasEmbedUrl:
+    """has_embed_url関数のテスト"""
+
+    def test_youtube_url_detected(self) -> None:
+        """YouTubeのURLが検出される"""
+        assert has_embed_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ") is True
+        assert has_embed_url("https://youtu.be/dQw4w9WgXcQ") is True
+
+    def test_twitter_url_detected(self) -> None:
+        """Twitter/XのURLが検出される"""
+        assert has_embed_url("https://twitter.com/user/status/123") is True
+        assert has_embed_url("https://x.com/user/status/123") is True
+
+    def test_note_url_detected(self) -> None:
+        """note.comのURLが検出される"""
+        assert has_embed_url("https://note.com/user/n/n123") is True
+
+    def test_gist_url_detected(self) -> None:
+        """GitHub GistのURLが検出される"""
+        assert has_embed_url("https://gist.github.com/defunkt/2059") is True
+        assert has_embed_url("https://gist.github.com/user-name/abc123") is True
+
+    def test_unsupported_url_not_detected(self) -> None:
+        """サポートされていないURLは検出されない"""
+        assert has_embed_url("https://vimeo.com/123456") is False
+        assert has_embed_url("https://example.com") is False
+
+    def test_url_in_text_detected(self) -> None:
+        """テキスト内の埋め込みURLも検出される"""
+        content = """テスト文章です。
+
+https://gist.github.com/defunkt/2059
+
+テスト続きです。"""
+        assert has_embed_url(content) is True
+
+    def test_no_url_returns_false(self) -> None:
+        """URLがない場合はFalseを返す"""
+        assert has_embed_url("単なるテキスト") is False
