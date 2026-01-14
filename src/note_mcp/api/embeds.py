@@ -39,8 +39,8 @@ TWITTER_PATTERN = re.compile(r"^https?://(?:www\.)?(?:twitter\.com|x\.com)/\w+/s
 # note.com: note.com/user/n/xxx
 NOTE_PATTERN = re.compile(r"^https?://note\.com/\w+/n/\w+$")
 
-# GitHub Gist: gist.github.com/user/gist_id
-GIST_PATTERN = re.compile(r"^https?://gist\.github\.com/[\w-]+/[\w]+$")
+# GitHub Gist: gist.github.com/user/gist_id (with optional trailing slash and file fragment)
+GIST_PATTERN = re.compile(r"^https?://gist\.github\.com/[\w-]+/[\w]+/?(?:#[\w-]+)?$")
 
 
 def get_embed_service(url: str) -> str | None:
@@ -251,7 +251,7 @@ async def fetch_embed_key(
     if not embed_key or not html_for_embed:
         raise NoteAPIError(
             code=ErrorCode.API_ERROR,
-            message="Failed to fetch embed key: API returned empty response",
+            message=f"Failed to fetch {service} embed key: API returned empty response",
             details={"url": url, "article_key": article_key, "response": response},
         )
 

@@ -266,6 +266,29 @@ class TestEmbedPatterns:
         assert not GIST_PATTERN.match("https://github.com/user/repo")
         assert not GIST_PATTERN.match("https://gist.github.com/")
 
+    def test_gist_pattern_trailing_slash(self) -> None:
+        """Test that GIST_PATTERN accepts trailing slash (UX improvement).
+
+        When users copy Gist URLs from the browser, they may include a trailing slash.
+        """
+        from note_mcp.api.embeds import GIST_PATTERN
+
+        assert GIST_PATTERN.match("https://gist.github.com/defunkt/2059/")
+        assert GIST_PATTERN.match("https://gist.github.com/user-name/abc123def/")
+
+    def test_gist_pattern_file_fragment(self) -> None:
+        """Test that GIST_PATTERN accepts file fragment (UX improvement).
+
+        When users copy Gist URLs with a specific file selected, the URL includes
+        a fragment like #file-example-py. These should be accepted.
+        """
+        from note_mcp.api.embeds import GIST_PATTERN
+
+        assert GIST_PATTERN.match("https://gist.github.com/defunkt/2059#file-example-py")
+        assert GIST_PATTERN.match("https://gist.github.com/user/abc123#file-test-js")
+        # Edge case: trailing slash + fragment (unlikely but valid URL structure)
+        assert GIST_PATTERN.match("https://gist.github.com/user/abc123/#file-test-js")
+
 
 class TestFetchNoteEmbedKey:
     """Tests for _fetch_note_embed_key function (Issue #121).
