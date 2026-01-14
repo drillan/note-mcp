@@ -34,6 +34,21 @@
 3. テスト用アカウントでの動作確認を推奨します
 4. 過度なリクエストを送信しないでください（レート制限: 10リクエスト/分を目安）
 
+### 適切な使用について
+
+note-mcpは個人の記事管理を効率化するツールです。
+次のような**過度な使用や悪用**は避けてください。
+
+| 避けるべき使用方法 | 理由 |
+|------------------|------|
+| 短時間での大量リクエスト | サーバーへの負荷（noteクリエイター規約・禁止事項） |
+| 自動化による連続投稿 | スパム行為とみなされる可能性（noteクリエイター規約・ご利用の停止） |
+| 他者のコンテンツの無断複製 | 著作権侵害（noteクリエイター規約・禁止事項） |
+
+### 参考リンク
+
+- [note ご利用規約](https://terms.help-note.com/hc/ja/articles/44943817565465)
+
 ---
 
 ## English
@@ -69,6 +84,21 @@ Before using this tool:
 2. Back up important content separately
 3. Test with a test account first
 4. Avoid sending excessive requests (rate limit: ~10 requests/minute)
+
+### Appropriate Use
+
+note-mcp is a tool designed to streamline personal article management.
+Please avoid the following **excessive use or misuse**:
+
+| Usage to Avoid | Reason |
+|----------------|--------|
+| Bulk requests in short periods | Server load (note Creator Terms: Prohibited Actions) |
+| Automated continuous posting | May be considered spam (note Creator Terms: Service Suspension) |
+| Unauthorized copying of others' content | Copyright infringement (note Creator Terms: Prohibited Actions) |
+
+### Reference Links
+
+- [note Terms of Service](https://terms.help-note.com/hc/ja/articles/44943817565465) (Japanese)
 
 ---
 
