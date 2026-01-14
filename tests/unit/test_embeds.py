@@ -1946,3 +1946,319 @@ class TestResolveEmbedKeysGitHubRepo:
                 "https://github.com/anthropics/claude-code",
                 "n1234567890ab",
             )
+
+
+class TestGoogleSlidesPattern:
+    """Tests for Google Slides presentation URL pattern (Issue #224)."""
+
+    def test_google_slides_edit_url(self) -> None:
+        """Test Google Slides edit URL detection."""
+        from note_mcp.api.embeds import GOOGLE_SLIDES_PATTERN
+
+        # Valid Google Slides edit URLs
+        assert GOOGLE_SLIDES_PATTERN.match(
+            "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit"
+        )
+        assert GOOGLE_SLIDES_PATTERN.match(
+            "http://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit"
+        )
+
+    def test_google_slides_edit_url_with_fragment(self) -> None:
+        """Test Google Slides edit URL with slide fragment."""
+        from note_mcp.api.embeds import GOOGLE_SLIDES_PATTERN
+
+        # Edit URL with slide fragment
+        assert GOOGLE_SLIDES_PATTERN.match(
+            "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit#slide=id.p"
+        )
+        assert GOOGLE_SLIDES_PATTERN.match(
+            "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit#slide=id.g12345"
+        )
+
+    def test_google_slides_pub_url(self) -> None:
+        """Test Google Slides published URL detection."""
+        from note_mcp.api.embeds import GOOGLE_SLIDES_PATTERN
+
+        # Published URL
+        assert GOOGLE_SLIDES_PATTERN.match(
+            "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/pub"
+        )
+
+    def test_google_slides_view_url(self) -> None:
+        """Test Google Slides view URL detection."""
+        from note_mcp.api.embeds import GOOGLE_SLIDES_PATTERN
+
+        # View URL (also valid)
+        assert GOOGLE_SLIDES_PATTERN.match(
+            "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/view"
+        )
+
+    def test_google_slides_embed_url(self) -> None:
+        """Test Google Slides embed URL detection."""
+        from note_mcp.api.embeds import GOOGLE_SLIDES_PATTERN
+
+        # Embed URL (less common, but should work)
+        assert GOOGLE_SLIDES_PATTERN.match(
+            "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/embed"
+        )
+
+    def test_google_slides_url_with_query_params(self) -> None:
+        """Test Google Slides URL with query parameters."""
+        from note_mcp.api.embeds import GOOGLE_SLIDES_PATTERN
+
+        # URL with query parameters
+        assert GOOGLE_SLIDES_PATTERN.match(
+            "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit?usp=sharing"
+        )
+        assert GOOGLE_SLIDES_PATTERN.match(
+            "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/pub?start=true&loop=true"
+        )
+
+    def test_google_slides_base_url(self) -> None:
+        """Test Google Slides base URL (without trailing path) detection."""
+        from note_mcp.api.embeds import GOOGLE_SLIDES_PATTERN
+
+        # Base URL without /edit, /pub, /view suffix (should also match)
+        assert GOOGLE_SLIDES_PATTERN.match(
+            "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960"
+        )
+
+    def test_google_slides_pattern_rejects_invalid_urls(self) -> None:
+        """Test that invalid URLs are rejected."""
+        from note_mcp.api.embeds import GOOGLE_SLIDES_PATTERN
+
+        # Wrong domain
+        assert not GOOGLE_SLIDES_PATTERN.match("https://example.com/presentation/d/1W543BSd/edit")
+        # Google Docs (not Slides)
+        assert not GOOGLE_SLIDES_PATTERN.match("https://docs.google.com/document/d/1W543BSd/edit")
+        # Google Sheets (not Slides)
+        assert not GOOGLE_SLIDES_PATTERN.match("https://docs.google.com/spreadsheets/d/1W543BSd/edit")
+        # Missing presentation ID
+        assert not GOOGLE_SLIDES_PATTERN.match("https://docs.google.com/presentation/d/")
+        # Invalid path structure
+        assert not GOOGLE_SLIDES_PATTERN.match("https://docs.google.com/presentation/")
+
+
+class TestGetEmbedServiceGoogleSlides:
+    """Tests for get_embed_service function with Google Slides URLs (Issue #224)."""
+
+    def test_get_embed_service_returns_googlepresentation(self) -> None:
+        """Test that get_embed_service returns 'googlepresentation' for Google Slides URLs."""
+        from note_mcp.api.embeds import get_embed_service
+
+        assert (
+            get_embed_service(
+                "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit"
+            )
+            == "googlepresentation"
+        )
+        assert (
+            get_embed_service("https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/pub")
+            == "googlepresentation"
+        )
+        assert (
+            get_embed_service(
+                "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit#slide=id.p"
+            )
+            == "googlepresentation"
+        )
+
+
+class TestGenerateEmbedHtmlGoogleSlides:
+    """Tests for generate_embed_html function with Google Slides URLs (Issue #224)."""
+
+    def test_google_slides_embed_structure(self) -> None:
+        """Test Google Slides embed HTML structure."""
+        from note_mcp.api.embeds import generate_embed_html
+
+        url = "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit"
+        html = generate_embed_html(url)
+
+        # Verify required attributes
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="googlepresentation"' in html
+        assert 'contenteditable="false"' in html
+        assert "embedded-content-key=" in html
+        assert "</figure>" in html
+
+
+class TestIsEmbedUrlGoogleSlides:
+    """Tests for is_embed_url function with Google Slides URLs (Issue #224)."""
+
+    def test_google_slides_urls_are_embed_urls(self) -> None:
+        """Test that Google Slides URLs are recognized as embed URLs."""
+        from note_mcp.api.embeds import is_embed_url
+
+        assert (
+            is_embed_url("https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit")
+            is True
+        )
+        assert (
+            is_embed_url("https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/pub")
+            is True
+        )
+
+
+class TestFetchEmbedKeyGoogleSlides:
+    """Tests for fetch_embed_key function with Google Slides URLs (Issue #224)."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_google_slides_embed_key_uses_v2_endpoint(self) -> None:
+        """Test that Google Slides URL uses GET /v2/embed_by_external_api endpoint."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        mock_response = {
+            "data": {
+                "key": "embslides1234567890",
+                "html_for_embed": '<span><div style="..."><iframe src="https://docs.google.com/presentation/d/1W543BSd/embed"></iframe></div></span>',
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            embed_key, html_for_embed = await fetch_embed_key(
+                session,
+                "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit",
+                "n1234567890ab",
+            )
+
+            # Should use GET /v2/embed_by_external_api
+            mock_client.get.assert_called_once()
+            call_args = mock_client.get.call_args
+            assert "/v2/embed_by_external_api" in call_args[0][0]
+            # Verify POST was NOT called
+            mock_client.post.assert_not_called()
+            # Verify returned values
+            assert embed_key == "embslides1234567890"
+            assert "iframe" in html_for_embed
+
+    @pytest.mark.asyncio
+    async def test_fetch_google_slides_embed_key_sends_correct_service(self) -> None:
+        """Test that Google Slides embed sends 'googlepresentation' as service type."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        mock_response = {
+            "data": {
+                "key": "embslides123",
+                "html_for_embed": "<div>Google Slides preview</div>",
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            await fetch_embed_key(
+                session,
+                "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit",
+                "narticlekey",
+            )
+
+            # Verify the params include service="googlepresentation"
+            call_kwargs = mock_client.get.call_args[1]
+            params = call_kwargs.get("params", {})
+            assert params.get("service") == "googlepresentation"
+
+
+class TestGenerateEmbedHtmlWithKeyGoogleSlides:
+    """Tests for generate_embed_html_with_key function with Google Slides URLs (Issue #224)."""
+
+    def test_google_slides_embed_with_server_key(self) -> None:
+        """Test generating Google Slides embed HTML with server-registered key."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit"
+        embed_key = "embslides1234567890"
+        html = generate_embed_html_with_key(url, embed_key)
+
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="googlepresentation"' in html
+        assert f'embedded-content-key="{embed_key}"' in html
+        assert 'contenteditable="false"' in html
+        assert "</figure>" in html
+
+    def test_google_slides_embed_auto_detect_service(self) -> None:
+        """Test that service is auto-detected as 'googlepresentation' for Google Slides URLs."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/pub"
+        html = generate_embed_html_with_key(url, "embtest123")
+
+        assert 'embedded-service="googlepresentation"' in html
+
+
+class TestResolveEmbedKeysGoogleSlides:
+    """Tests for resolve_embed_keys function with Google Slides URLs (Issue #224)."""
+
+    @pytest.mark.asyncio
+    async def test_resolve_google_slides_embed(self) -> None:
+        """Test resolving a Google Slides embed key."""
+        import time
+        from unittest.mock import patch
+
+        from note_mcp.api.embeds import resolve_embed_keys
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        # HTML with random embed key for Google Slides
+        html_body = (
+            '<p name="p1" id="p1">Check out this presentation:</p>'
+            '<figure name="fig1" id="fig1" '
+            'data-src="https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit" '
+            'embedded-service="googlepresentation" '
+            'embedded-content-key="embrandomslides" '
+            'contenteditable="false"></figure>'
+        )
+
+        # Mock fetch_embed_key to return a server key
+        with patch("note_mcp.api.embeds.fetch_embed_key") as mock_fetch:
+            mock_fetch.return_value = ("embslidesserver123", "<div>Google Slides preview</div>")
+
+            result = await resolve_embed_keys(session, html_body, "n1234567890ab")
+
+            # Verify the key was replaced
+            assert 'embedded-content-key="embslidesserver123"' in result
+            assert 'embedded-content-key="embrandomslides"' not in result
+            mock_fetch.assert_called_once_with(
+                session,
+                "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit",
+                "n1234567890ab",
+            )
