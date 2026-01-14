@@ -127,7 +127,7 @@ noteマネー（money.note.com）の株価チャートを埋め込むことが�
 | 種類 | URLパターン | 例 |
 |------|------------|-----|
 | 日本株 | `https://money.note.com/companies/{証券コード}` | https://money.note.com/companies/5243 |
-| 米国株 | `https://money.note.com/us_companies/{ティッカー}` | https://money.note.com/us_companies/GOOG |
+| 米国株 | `https://money.note.com/us-companies/{ティッカー}` | https://money.note.com/us-companies/GOOG |
 | 指数 | `https://money.note.com/indices/{指数コード}` | https://money.note.com/indices/NKY |
 | 投資信託 | `https://money.note.com/investments/{ファンドコード}` | https://money.note.com/investments/0331418A |
 
@@ -146,7 +146,7 @@ note.comエディタと同様の記法も使用できます。記法は単独の
 | 記法 | 説明 | 変換先URL |
 |------|------|-----------|
 | `^{証券コード}` | 日本株（4-5桁） | `https://money.note.com/companies/{証券コード}` |
-| `${ティッカー}` | 米国株（大文字） | `https://money.note.com/us_companies/{ティッカー}` |
+| `${ティッカー}` | 米国株（大文字） | `https://money.note.com/us-companies/{ティッカー}` |
 
 ```markdown
 # 注目銘柄

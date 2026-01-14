@@ -309,7 +309,7 @@ def _convert_stock_notation(content: str) -> str:
 
     Converts stock notation markers BEFORE markdown conversion:
     - ^5243 (Japanese stock) → https://money.note.com/companies/5243
-    - $GOOG (US stock) → https://money.note.com/us_companies/GOOG
+    - $GOOG (US stock) → https://money.note.com/us-companies/GOOG
 
     Only converts notations that are alone on a line.
     Code blocks are protected from conversion.
@@ -325,8 +325,8 @@ def _convert_stock_notation(content: str) -> str:
     with _protect_code_blocks(content, "STOCK") as (protected, blocks):
         # Japanese stocks: ^5243 → https://money.note.com/companies/5243
         protected = _STOCK_JP_PATTERN.sub(r"https://money.note.com/companies/\1", protected)
-        # US stocks: $GOOG → https://money.note.com/us_companies/GOOG
-        protected = _STOCK_US_PATTERN.sub(r"https://money.note.com/us_companies/\1", protected)
+        # US stocks: $GOOG → https://money.note.com/us-companies/GOOG
+        protected = _STOCK_US_PATTERN.sub(r"https://money.note.com/us-companies/\1", protected)
 
     return _restore_code_blocks(protected, blocks)
 

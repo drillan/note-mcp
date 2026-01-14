@@ -1281,15 +1281,15 @@ class TestMoneyPattern:
         assert MONEY_PATTERN.match("https://money.note.com/companies/5243/")
 
     def test_money_us_companies_url(self) -> None:
-        """Test US stock URL detection (us_companies)."""
+        """Test US stock URL detection (us-companies)."""
         from note_mcp.api.embeds import MONEY_PATTERN
 
         # Valid US stock URLs
-        assert MONEY_PATTERN.match("https://money.note.com/us_companies/GOOG")
-        assert MONEY_PATTERN.match("https://money.note.com/us_companies/AAPL")
-        assert MONEY_PATTERN.match("https://money.note.com/us_companies/MSFT")
+        assert MONEY_PATTERN.match("https://money.note.com/us-companies/GOOG")
+        assert MONEY_PATTERN.match("https://money.note.com/us-companies/AAPL")
+        assert MONEY_PATTERN.match("https://money.note.com/us-companies/MSFT")
         # With trailing slash
-        assert MONEY_PATTERN.match("https://money.note.com/us_companies/GOOG/")
+        assert MONEY_PATTERN.match("https://money.note.com/us-companies/GOOG/")
 
     def test_money_indices_url(self) -> None:
         """Test index URL detection (indices)."""
@@ -1329,32 +1329,32 @@ class TestMoneyPattern:
 class TestGetEmbedServiceMoney:
     """Tests for get_embed_service function with noteマネー URLs."""
 
-    def test_get_embed_service_returns_money_for_companies(self) -> None:
-        """Test that get_embed_service returns 'money' for Japanese stock URLs."""
+    def test_get_embed_service_returns_oembed_for_companies(self) -> None:
+        """Test that get_embed_service returns 'oembed' for Japanese stock URLs."""
         from note_mcp.api.embeds import get_embed_service
 
-        assert get_embed_service("https://money.note.com/companies/5243") == "money"
-        assert get_embed_service("https://money.note.com/companies/7203") == "money"
+        assert get_embed_service("https://money.note.com/companies/5243") == "oembed"
+        assert get_embed_service("https://money.note.com/companies/7203") == "oembed"
 
-    def test_get_embed_service_returns_money_for_us_companies(self) -> None:
-        """Test that get_embed_service returns 'money' for US stock URLs."""
+    def test_get_embed_service_returns_oembed_for_us_companies(self) -> None:
+        """Test that get_embed_service returns 'oembed' for US stock URLs."""
         from note_mcp.api.embeds import get_embed_service
 
-        assert get_embed_service("https://money.note.com/us_companies/GOOG") == "money"
-        assert get_embed_service("https://money.note.com/us_companies/AAPL") == "money"
+        assert get_embed_service("https://money.note.com/us-companies/GOOG") == "oembed"
+        assert get_embed_service("https://money.note.com/us-companies/AAPL") == "oembed"
 
-    def test_get_embed_service_returns_money_for_indices(self) -> None:
-        """Test that get_embed_service returns 'money' for index URLs."""
+    def test_get_embed_service_returns_oembed_for_indices(self) -> None:
+        """Test that get_embed_service returns 'oembed' for index URLs."""
         from note_mcp.api.embeds import get_embed_service
 
-        assert get_embed_service("https://money.note.com/indices/NKY") == "money"
-        assert get_embed_service("https://money.note.com/indices/TOPX") == "money"
+        assert get_embed_service("https://money.note.com/indices/NKY") == "oembed"
+        assert get_embed_service("https://money.note.com/indices/TOPX") == "oembed"
 
-    def test_get_embed_service_returns_money_for_investments(self) -> None:
-        """Test that get_embed_service returns 'money' for investment trust URLs."""
+    def test_get_embed_service_returns_oembed_for_investments(self) -> None:
+        """Test that get_embed_service returns 'oembed' for investment trust URLs."""
         from note_mcp.api.embeds import get_embed_service
 
-        assert get_embed_service("https://money.note.com/investments/0331418A") == "money"
+        assert get_embed_service("https://money.note.com/investments/0331418A") == "oembed"
 
 
 class TestGenerateEmbedHtmlMoney:
@@ -1370,7 +1370,7 @@ class TestGenerateEmbedHtmlMoney:
         # Verify required attributes
         assert "<figure" in html
         assert f'data-src="{url}"' in html
-        assert 'embedded-service="money"' in html
+        assert 'embedded-service="oembed"' in html
         assert 'contenteditable="false"' in html
         assert "embedded-content-key=" in html
         assert "</figure>" in html
@@ -1379,10 +1379,10 @@ class TestGenerateEmbedHtmlMoney:
         """Test US stock embed HTML structure."""
         from note_mcp.api.embeds import generate_embed_html
 
-        url = "https://money.note.com/us_companies/GOOG"
+        url = "https://money.note.com/us-companies/GOOG"
         html = generate_embed_html(url)
 
-        assert 'embedded-service="money"' in html
+        assert 'embedded-service="oembed"' in html
         assert f'data-src="{url}"' in html
 
     def test_money_indices_embed_structure(self) -> None:
@@ -1392,7 +1392,7 @@ class TestGenerateEmbedHtmlMoney:
         url = "https://money.note.com/indices/NKY"
         html = generate_embed_html(url)
 
-        assert 'embedded-service="money"' in html
+        assert 'embedded-service="oembed"' in html
         assert f'data-src="{url}"' in html
 
     def test_money_investments_embed_structure(self) -> None:
@@ -1402,7 +1402,7 @@ class TestGenerateEmbedHtmlMoney:
         url = "https://money.note.com/investments/0331418A"
         html = generate_embed_html(url)
 
-        assert 'embedded-service="money"' in html
+        assert 'embedded-service="oembed"' in html
         assert f'data-src="{url}"' in html
 
 
@@ -1414,6 +1414,6 @@ class TestIsEmbedUrlMoney:
         from note_mcp.api.embeds import is_embed_url
 
         assert is_embed_url("https://money.note.com/companies/5243") is True
-        assert is_embed_url("https://money.note.com/us_companies/GOOG") is True
+        assert is_embed_url("https://money.note.com/us-companies/GOOG") is True
         assert is_embed_url("https://money.note.com/indices/NKY") is True
         assert is_embed_url("https://money.note.com/investments/0331418A") is True

@@ -820,7 +820,7 @@ https://gist.github.com/defunkt/2059
     def test_money_url_detected(self) -> None:
         """noteマネーのURLが検出される"""
         assert has_embed_url("https://money.note.com/companies/5243") is True
-        assert has_embed_url("https://money.note.com/us_companies/GOOG") is True
+        assert has_embed_url("https://money.note.com/us-companies/GOOG") is True
         assert has_embed_url("https://money.note.com/indices/NKY") is True
         assert has_embed_url("https://money.note.com/investments/0331418A") is True
 
@@ -832,28 +832,28 @@ class TestStockNotationConversion:
         """日本株記法 (^5243) がURLに変換される."""
         result = markdown_to_html("^5243")
         # Should be converted to money.note.com URL and embedded
-        assert 'embedded-service="money"' in result
+        assert 'embedded-service="oembed"' in result
         assert 'data-src="https://money.note.com/companies/5243"' in result
 
     def test_jp_stock_notation_5_digits(self) -> None:
         """5桁の日本株記法も変換される."""
         result = markdown_to_html("^12345")
-        assert 'embedded-service="money"' in result
+        assert 'embedded-service="oembed"' in result
         assert 'data-src="https://money.note.com/companies/12345"' in result
 
     def test_us_stock_notation_converted_to_url(self) -> None:
         """米国株記法 ($GOOG) がURLに変換される."""
         result = markdown_to_html("$GOOG")
-        assert 'embedded-service="money"' in result
-        assert 'data-src="https://money.note.com/us_companies/GOOG"' in result
+        assert 'embedded-service="oembed"' in result
+        assert 'data-src="https://money.note.com/us-companies/GOOG"' in result
 
     def test_us_stock_notation_various_tickers(self) -> None:
         """様々な米国株ティッカーが変換される."""
         result_aapl = markdown_to_html("$AAPL")
-        assert 'data-src="https://money.note.com/us_companies/AAPL"' in result_aapl
+        assert 'data-src="https://money.note.com/us-companies/AAPL"' in result_aapl
 
         result_msft = markdown_to_html("$MSFT")
-        assert 'data-src="https://money.note.com/us_companies/MSFT"' in result_msft
+        assert 'data-src="https://money.note.com/us-companies/MSFT"' in result_msft
 
     def test_jp_stock_notation_in_code_block_not_converted(self) -> None:
         """コードブロック内の日本株記法は変換されない."""
@@ -862,7 +862,7 @@ class TestStockNotationConversion:
 ```"""
         result = markdown_to_html(markdown)
         # Should remain as code, not embedded
-        assert 'embedded-service="money"' not in result
+        assert 'embedded-service="oembed"' not in result
         assert "^5243" in result
 
     def test_us_stock_notation_in_code_block_not_converted(self) -> None:
@@ -872,34 +872,34 @@ $GOOG
 ```"""
         result = markdown_to_html(markdown)
         # Should remain as code, not embedded
-        assert 'embedded-service="money"' not in result
+        assert 'embedded-service="oembed"' not in result
         assert "$GOOG" in result
 
     def test_jp_stock_notation_inline_code_not_converted(self) -> None:
         """インラインコード内の日本株記法は変換されない."""
         result = markdown_to_html("Use `^5243` for note stock")
         # Should remain as inline code
-        assert 'embedded-service="money"' not in result
+        assert 'embedded-service="oembed"' not in result
         assert "^5243" in result
 
     def test_us_stock_notation_inline_code_not_converted(self) -> None:
         """インラインコード内の米国株記法は変換されない."""
         result = markdown_to_html("Use `$GOOG` for Google stock")
         # Should remain as inline code
-        assert 'embedded-service="money"' not in result
+        assert 'embedded-service="oembed"' not in result
         assert "$GOOG" in result
 
     def test_jp_stock_in_text_not_converted(self) -> None:
         """文中の日本株記法は変換されない（単独行のみ対応）."""
         result = markdown_to_html("Stock code is ^5243 for note")
         # Should not be converted - only standalone lines are supported
-        assert 'embedded-service="money"' not in result
+        assert 'embedded-service="oembed"' not in result
 
     def test_us_stock_in_text_not_converted(self) -> None:
         """文中の米国株記法は変換されない（単独行のみ対応）."""
         result = markdown_to_html("Google stock is $GOOG today")
         # Should not be converted - only standalone lines are supported
-        assert 'embedded-service="money"' not in result
+        assert 'embedded-service="oembed"' not in result
 
     def test_multiple_stock_notations_converted(self) -> None:
         """複数の株価記法がそれぞれ変換される."""
@@ -913,18 +913,18 @@ $GOOG
 """
         result = markdown_to_html(markdown)
         # Both should be converted
-        assert result.count('embedded-service="money"') == 2
+        assert result.count('embedded-service="oembed"') == 2
         assert 'data-src="https://money.note.com/companies/5243"' in result
-        assert 'data-src="https://money.note.com/us_companies/GOOG"' in result
+        assert 'data-src="https://money.note.com/us-companies/GOOG"' in result
 
     def test_jp_stock_notation_invalid_length_not_converted(self) -> None:
         """3桁以下の日本株記法は変換されない."""
         result = markdown_to_html("^123")
         # 3 digits - should not match (4-5 digits required)
-        assert 'embedded-service="money"' not in result
+        assert 'embedded-service="oembed"' not in result
 
     def test_us_stock_notation_lowercase_not_converted(self) -> None:
         """小文字の米国株記法は変換されない."""
         result = markdown_to_html("$goog")
         # Lowercase - should not match (uppercase required)
-        assert 'embedded-service="money"' not in result
+        assert 'embedded-service="oembed"' not in result

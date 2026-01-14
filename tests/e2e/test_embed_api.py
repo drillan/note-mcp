@@ -371,7 +371,7 @@ class TestMoneyEmbedApiConversion:
 
         - ブラウザを起動せずにAPIのみで下書き作成
         - noteマネーURLがfigure要素に変換される
-        - embedded-service="money"属性が設定される
+        - embedded-service="oembed"属性が設定される
         """
         # Arrange - Use note社 (証券コード: 5243) as test URL
         money_url = "https://money.note.com/companies/5243"
@@ -398,7 +398,7 @@ class TestMoneyEmbedApiConversion:
             article_html = await get_article_html(article_key)
 
             # Verify embed figure is present (in raw HTML)
-            assert 'embedded-service="money"' in article_html
+            assert 'embedded-service="oembed"' in article_html
             assert f'data-src="{money_url}"' in article_html
             assert "embedded-content-key=" in article_html
         finally:
@@ -412,7 +412,7 @@ class TestMoneyEmbedApiConversion:
         """noteマネー指数URLがAPIでfigure要素に変換される.
 
         - 指数（日経平均: NKY）のURLがfigure要素に変換される
-        - embedded-service="money"属性が設定される
+        - embedded-service="oembed"属性が設定される
         """
         # Arrange - Use 日経平均 (NKY) as test URL
         money_url = "https://money.note.com/indices/NKY"
@@ -438,7 +438,7 @@ class TestMoneyEmbedApiConversion:
             article_html = await get_article_html(article_key)
 
             # Verify embed figure is present
-            assert 'embedded-service="money"' in article_html
+            assert 'embedded-service="oembed"' in article_html
             assert f'data-src="{money_url}"' in article_html
         finally:
             # Clean up created article
@@ -451,7 +451,7 @@ class TestMoneyEmbedApiConversion:
         """noteマネー投資信託URLがAPIでfigure要素に変換される.
 
         - 投資信託（eMAXIS Slim: 0331418A）のURLがfigure要素に変換される
-        - embedded-service="money"属性が設定される
+        - embedded-service="oembed"属性が設定される
         """
         # Arrange - Use eMAXIS Slim as test URL
         money_url = "https://money.note.com/investments/0331418A"
@@ -477,7 +477,7 @@ class TestMoneyEmbedApiConversion:
             article_html = await get_article_html(article_key)
 
             # Verify embed figure is present
-            assert 'embedded-service="money"' in article_html
+            assert 'embedded-service="oembed"' in article_html
             assert f'data-src="{money_url}"' in article_html
         finally:
             # Clean up created article
@@ -495,7 +495,7 @@ class TestStockNotationEmbedApiConversion:
 
         - 株価記法 ^5243 がURLに変換される
         - noteマネーURLがfigure要素に変換される
-        - embedded-service="money"属性が設定される
+        - embedded-service="oembed"属性が設定される
         """
         # Arrange - Use Japanese stock notation for note社 (証券コード: 5243)
         body = """株価記法埋め込みテスト
@@ -521,7 +521,7 @@ class TestStockNotationEmbedApiConversion:
             article_html = await get_article_html(article_key)
 
             # Verify embed figure is present (notation converted to URL then embedded)
-            assert 'embedded-service="money"' in article_html
+            assert 'embedded-service="oembed"' in article_html
             assert 'data-src="https://money.note.com/companies/5243"' in article_html
             assert "embedded-content-key=" in article_html
         finally:
@@ -536,7 +536,7 @@ class TestStockNotationEmbedApiConversion:
 
         - 株価記法 $GOOG がURLに変換される
         - noteマネーURLがfigure要素に変換される
-        - embedded-service="money"属性が設定される
+        - embedded-service="oembed"属性が設定される
         """
         # Arrange - Use US stock notation for Google
         body = """米国株記法埋め込みテスト
@@ -561,8 +561,8 @@ $GOOG
             article_html = await get_article_html(article_key)
 
             # Verify embed figure is present
-            assert 'embedded-service="money"' in article_html
-            assert 'data-src="https://money.note.com/us_companies/GOOG"' in article_html
+            assert 'embedded-service="oembed"' in article_html
+            assert 'data-src="https://money.note.com/us-companies/GOOG"' in article_html
         finally:
             # Clean up created article
             await delete_draft_with_retry(real_session, article_key)
@@ -605,9 +605,9 @@ $GOOG
             article_html = await get_article_html(article_key)
 
             # Both should be converted
-            assert article_html.count('embedded-service="money"') >= 2
+            assert article_html.count('embedded-service="oembed"') >= 2
             assert 'data-src="https://money.note.com/companies/5243"' in article_html
-            assert 'data-src="https://money.note.com/us_companies/GOOG"' in article_html
+            assert 'data-src="https://money.note.com/us-companies/GOOG"' in article_html
         finally:
             # Clean up created article
             await delete_draft_with_retry(real_session, article_key)
@@ -647,7 +647,7 @@ $GOOG
             article_html = await get_article_html(article_key)
 
             # Code block content should NOT be converted to embeds
-            assert 'embedded-service="money"' not in article_html
+            assert 'embedded-service="oembed"' not in article_html
             # Original notation should be preserved in code block
             assert "^5243" in article_html
             assert "$GOOG" in article_html
