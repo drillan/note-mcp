@@ -42,9 +42,9 @@ NOTE_PATTERN = re.compile(r"^https?://note\.com/\w+/n/\w+$")
 # GitHub Gist: gist.github.com/user/gist_id (with optional trailing slash and file fragment)
 GIST_PATTERN = re.compile(r"^https?://gist\.github\.com/[\w-]+/[\w]+/?(?:#[\w-]+)?$")
 
-# noteマネー (stock chart): money.note.com/companies|us_companies|indices|investments/xxx
+# noteマネー (stock chart): money.note.com/companies|us-companies|indices|investments/xxx
 # Supports Japanese stocks, US stocks, indices, and investment trusts
-MONEY_PATTERN = re.compile(r"^https?://money\.note\.com/(companies|us_companies|indices|investments)/[\w-]+/?$")
+MONEY_PATTERN = re.compile(r"^https?://money\.note\.com/(companies|us-companies|indices|investments)/[\w-]+/?$")
 
 
 def get_embed_service(url: str) -> str | None:
@@ -54,7 +54,7 @@ def get_embed_service(url: str) -> str | None:
         url: The URL to check.
 
     Returns:
-        Service type ('youtube', 'twitter', 'note', 'gist', 'money') or None if unsupported.
+        Service type ('youtube', 'twitter', 'note', 'gist', 'oembed') or None if unsupported.
     """
     if YOUTUBE_PATTERN.match(url):
         return "youtube"
@@ -65,7 +65,7 @@ def get_embed_service(url: str) -> str | None:
     if GIST_PATTERN.match(url):
         return "gist"
     if MONEY_PATTERN.match(url):
-        return "money"
+        return "oembed"
     return None
 
 
@@ -94,7 +94,7 @@ def _build_embed_figure_html(
     Args:
         url: Original URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー).
         embed_key: Embed key (random for placeholder, server-registered for final).
-        service: Service type ('youtube', 'twitter', 'note', 'gist', 'money').
+        service: Service type ('youtube', 'twitter', 'note', 'gist', 'oembed').
 
     Returns:
         HTML figure element string.
@@ -126,7 +126,7 @@ def generate_embed_html(url: str, service: str | None = None) -> str:
 
     Args:
         url: Original URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー).
-        service: Service type ('youtube', 'twitter', 'note', 'gist', 'money').
+        service: Service type ('youtube', 'twitter', 'note', 'gist', 'oembed').
                  If None, auto-detected from URL.
 
     Returns:
@@ -238,7 +238,7 @@ async def fetch_embed_key(
     if service == "note":
         return await _fetch_note_embed_key(session, url, article_key)
 
-    # YouTube/Twitter/Gist/Money: use existing /v2/embed_by_external_api endpoint
+    # YouTube/Twitter/Gist/noteマネー: use existing /v2/embed_by_external_api endpoint
     params = {
         "url": url,
         "service": service,
@@ -277,7 +277,7 @@ def generate_embed_html_with_key(
     Args:
         url: Original URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー).
         embed_key: Server-registered embed key from fetch_embed_key().
-        service: Service type ('youtube', 'twitter', 'note', 'gist', 'money').
+        service: Service type ('youtube', 'twitter', 'note', 'gist', 'oembed').
                  If None, auto-detected from URL.
 
     Returns:
