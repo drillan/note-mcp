@@ -41,9 +41,9 @@ note-mcpは個人の記事管理を効率化するツールです。
 
 | 避けるべき使用方法 | 理由 |
 |------------------|------|
-| 短時間での大量リクエスト | サーバーへの負荷（規約 10.1.7） |
-| 自動化による連続投稿 | スパム行為とみなされる可能性（規約 10.1.4） |
-| 他者のコンテンツの無断複製 | 著作権侵害（規約 9.1.1） |
+| 短時間での大量リクエスト | サーバーへの負荷（noteクリエイター規約・禁止事項） |
+| 自動化による連続投稿 | スパム行為とみなされる可能性（noteクリエイター規約・ご利用の停止） |
+| 他者のコンテンツの無断複製 | 著作権侵害（noteクリエイター規約・禁止事項） |
 
 ### 参考リンク
 
@@ -92,9 +92,9 @@ Please avoid the following **excessive use or misuse**:
 
 | Usage to Avoid | Reason |
 |----------------|--------|
-| Bulk requests in short periods | Server load (Terms 10.1.7) |
-| Automated continuous posting | May be considered spam (Terms 10.1.4) |
-| Unauthorized copying of others' content | Copyright infringement (Terms 9.1.1) |
+| Bulk requests in short periods | Server load (note Creator Terms: Prohibited Actions) |
+| Automated continuous posting | May be considered spam (note Creator Terms: Service Suspension) |
+| Unauthorized copying of others' content | Copyright infringement (note Creator Terms: Prohibited Actions) |
 
 ### Reference Links
 
