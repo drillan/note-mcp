@@ -146,6 +146,23 @@ start_vnc() {
     setsid websockify --web=/usr/share/novnc/ ${novnc_port} localhost:${rfb_port} \
         </dev/null >/dev/null 2>&1 &
 
+    # Start window manager in a new session (setsid) so it survives exec
+    # Required for browser windows to display properly in VNC
+    if command -v openbox >/dev/null 2>&1; then
+        OPENBOX_LOG="/tmp/openbox.log"
+        setsid openbox </dev/null >>"$OPENBOX_LOG" 2>&1 &
+        OPENBOX_PID=$!
+        sleep 0.5
+        if kill -0 "$OPENBOX_PID" 2>/dev/null; then
+            log_info "Window manager (openbox) started successfully (PID: $OPENBOX_PID)"
+        else
+            log_error "Window manager (openbox) failed to start - check $OPENBOX_LOG"
+        fi
+    else
+        log_warn "Window manager (openbox) not found - browser windows may not display correctly"
+        log_warn "To fix: Install openbox or use headless mode with NOTE_MCP_TEST_HEADLESS=true"
+    fi
+
     log_info "Connect with: vncviewer localhost:$port"
     log_info "Or use noVNC: http://localhost:${novnc_port}/vnc.html"
 }

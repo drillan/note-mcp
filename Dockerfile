@@ -53,9 +53,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     novnc \
     websockify \
     gnome-keyring \
+    # Window manager for VNC (required for browser windows to display)
+    openbox \
     # Fonts for proper rendering
     fonts-noto-cjk \
     fonts-noto-color-emoji \
+    xfonts-base \
     # Clean up
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
