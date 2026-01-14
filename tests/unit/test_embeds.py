@@ -1675,3 +1675,274 @@ class TestIsEmbedUrlMoney:
         assert is_embed_url("https://money.note.com/us-companies/GOOG") is True
         assert is_embed_url("https://money.note.com/indices/NKY") is True
         assert is_embed_url("https://money.note.com/investments/0331418A") is True
+
+
+class TestGitHubRepoPattern:
+    """Tests for GitHub repository URL pattern (Issue #226)."""
+
+    def test_github_repo_url(self) -> None:
+        """Test GitHub repository URL detection."""
+        from note_mcp.api.embeds import GITHUB_REPO_PATTERN
+
+        # Valid GitHub repository URLs
+        assert GITHUB_REPO_PATTERN.match("https://github.com/anthropics/claude-code")
+        assert GITHUB_REPO_PATTERN.match("https://github.com/python/cpython")
+        assert GITHUB_REPO_PATTERN.match("http://github.com/user/repo")
+        assert GITHUB_REPO_PATTERN.match("https://github.com/user-name/repo.name")
+        assert GITHUB_REPO_PATTERN.match("https://github.com/user_name/repo_name")
+
+    def test_github_repo_trailing_slash(self) -> None:
+        """Test GitHub repository URL with trailing slash."""
+        from note_mcp.api.embeds import GITHUB_REPO_PATTERN
+
+        # Trailing slash should be accepted
+        assert GITHUB_REPO_PATTERN.match("https://github.com/python/cpython/")
+        assert GITHUB_REPO_PATTERN.match("https://github.com/anthropics/claude-code/")
+
+    def test_github_repo_pattern_rejects_invalid_urls(self) -> None:
+        """Test that invalid URLs are rejected."""
+        from note_mcp.api.embeds import GITHUB_REPO_PATTERN
+
+        # Wrong domain
+        assert not GITHUB_REPO_PATTERN.match("https://example.com/user/repo")
+        # Missing repo
+        assert not GITHUB_REPO_PATTERN.match("https://github.com/user")
+        assert not GITHUB_REPO_PATTERN.match("https://github.com/user/")
+        # gist.github.com should NOT match (handled by GIST_PATTERN)
+        assert not GITHUB_REPO_PATTERN.match("https://gist.github.com/user/abc123")
+        # Subpaths should NOT match (e.g., issues, pull, blob)
+        assert not GITHUB_REPO_PATTERN.match("https://github.com/user/repo/issues")
+        assert not GITHUB_REPO_PATTERN.match("https://github.com/user/repo/pull/123")
+        assert not GITHUB_REPO_PATTERN.match("https://github.com/user/repo/blob/main/file.py")
+
+    def test_github_repo_pattern_accepts_www(self) -> None:
+        """Test that www.github.com is also accepted."""
+        from note_mcp.api.embeds import GITHUB_REPO_PATTERN
+
+        # www.github.com should be accepted
+        assert GITHUB_REPO_PATTERN.match("https://www.github.com/user/repo")
+        assert GITHUB_REPO_PATTERN.match("http://www.github.com/user/repo")
+
+    def test_github_repo_pattern_with_uppercase(self) -> None:
+        """Test that repository URLs with uppercase characters are accepted."""
+        from note_mcp.api.embeds import GITHUB_REPO_PATTERN
+
+        # Uppercase in owner/repo names should be accepted
+        assert GITHUB_REPO_PATTERN.match("https://github.com/Anthropic/Claude")
+        assert GITHUB_REPO_PATTERN.match("https://github.com/Microsoft/TypeScript")
+        assert GITHUB_REPO_PATTERN.match("https://github.com/OWNER/REPO")
+
+
+class TestGetEmbedServiceGitHubRepo:
+    """Tests for get_embed_service function with GitHub repository URLs (Issue #226)."""
+
+    def test_get_embed_service_returns_github_repository(self) -> None:
+        """Test that get_embed_service returns 'githubRepository' for GitHub repo URLs."""
+        from note_mcp.api.embeds import get_embed_service
+
+        assert get_embed_service("https://github.com/anthropics/claude-code") == "githubRepository"
+        assert get_embed_service("https://github.com/python/cpython") == "githubRepository"
+        assert get_embed_service("https://github.com/python/cpython/") == "githubRepository"
+
+    def test_gist_not_confused_with_repo(self) -> None:
+        """Test that gist.github.com is not confused with github.com repos."""
+        from note_mcp.api.embeds import get_embed_service
+
+        # Gist should return 'gist', not 'githubRepository'
+        assert get_embed_service("https://gist.github.com/defunkt/2059") == "gist"
+        assert get_embed_service("https://gist.github.com/user/abc123") == "gist"
+
+
+class TestGenerateEmbedHtmlGitHubRepo:
+    """Tests for generate_embed_html function with GitHub repository URLs (Issue #226)."""
+
+    def test_github_repo_embed_structure(self) -> None:
+        """Test GitHub repository embed HTML structure."""
+        from note_mcp.api.embeds import generate_embed_html
+
+        url = "https://github.com/anthropics/claude-code"
+        html = generate_embed_html(url)
+
+        # Verify required attributes
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="githubRepository"' in html
+        assert 'contenteditable="false"' in html
+        assert "embedded-content-key=" in html
+        assert "</figure>" in html
+
+
+class TestIsEmbedUrlGitHubRepo:
+    """Tests for is_embed_url function with GitHub repository URLs (Issue #226)."""
+
+    def test_github_repo_urls_are_embed_urls(self) -> None:
+        """Test that GitHub repository URLs are recognized as embed URLs."""
+        from note_mcp.api.embeds import is_embed_url
+
+        assert is_embed_url("https://github.com/anthropics/claude-code") is True
+        assert is_embed_url("https://github.com/python/cpython") is True
+        assert is_embed_url("https://github.com/user/repo/") is True
+
+
+class TestFetchEmbedKeyGitHubRepo:
+    """Tests for fetch_embed_key function with GitHub repository URLs (Issue #226)."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_github_repo_embed_key_uses_v2_endpoint(self) -> None:
+        """Test that GitHub repository URL uses GET /v2/embed_by_external_api endpoint."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        mock_response = {
+            "data": {
+                "key": "embrepo1234567890",
+                "html_for_embed": '<span><div class="iframely-embed">GitHub repo preview</div></span>',
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            embed_key, html_for_embed = await fetch_embed_key(
+                session,
+                "https://github.com/anthropics/claude-code",
+                "n1234567890ab",
+            )
+
+            # Should use GET /v2/embed_by_external_api
+            mock_client.get.assert_called_once()
+            call_args = mock_client.get.call_args
+            assert "/v2/embed_by_external_api" in call_args[0][0]
+            # Verify POST was NOT called
+            mock_client.post.assert_not_called()
+            # Verify returned values
+            assert embed_key == "embrepo1234567890"
+            assert "iframely-embed" in html_for_embed
+
+    @pytest.mark.asyncio
+    async def test_fetch_github_repo_embed_key_sends_correct_service(self) -> None:
+        """Test that GitHub repository embed sends 'githubRepository' as service type."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        mock_response = {
+            "data": {
+                "key": "embrepo123",
+                "html_for_embed": "<div>GitHub preview</div>",
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            await fetch_embed_key(
+                session,
+                "https://github.com/anthropics/claude-code",
+                "narticlekey",
+            )
+
+            # Verify the params include service="githubRepository"
+            call_kwargs = mock_client.get.call_args[1]
+            params = call_kwargs.get("params", {})
+            assert params.get("service") == "githubRepository"
+
+
+class TestGenerateEmbedHtmlWithKeyGitHubRepo:
+    """Tests for generate_embed_html_with_key function with GitHub repository URLs (Issue #226)."""
+
+    def test_github_repo_embed_with_server_key(self) -> None:
+        """Test generating GitHub repository embed HTML with server-registered key."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://github.com/anthropics/claude-code"
+        embed_key = "embrepo1234567890"
+        html = generate_embed_html_with_key(url, embed_key)
+
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="githubRepository"' in html
+        assert f'embedded-content-key="{embed_key}"' in html
+        assert 'contenteditable="false"' in html
+        assert "</figure>" in html
+
+    def test_github_repo_embed_auto_detect_service(self) -> None:
+        """Test that service is auto-detected as 'githubRepository' for GitHub repo URLs."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://github.com/python/cpython"
+        html = generate_embed_html_with_key(url, "embtest123")
+
+        assert 'embedded-service="githubRepository"' in html
+
+
+class TestResolveEmbedKeysGitHubRepo:
+    """Tests for resolve_embed_keys function with GitHub repository URLs (Issue #226)."""
+
+    @pytest.mark.asyncio
+    async def test_resolve_github_repo_embed(self) -> None:
+        """Test resolving a GitHub repository embed key."""
+        import time
+        from unittest.mock import patch
+
+        from note_mcp.api.embeds import resolve_embed_keys
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        # HTML with random embed key for GitHub repository
+        html_body = (
+            '<p name="p1" id="p1">Check out this repo:</p>'
+            '<figure name="fig1" id="fig1" '
+            'data-src="https://github.com/anthropics/claude-code" '
+            'embedded-service="githubRepository" '
+            'embedded-content-key="embrandomrepo" '
+            'contenteditable="false"></figure>'
+        )
+
+        # Mock fetch_embed_key to return a server key
+        with patch("note_mcp.api.embeds.fetch_embed_key") as mock_fetch:
+            mock_fetch.return_value = ("embreposerver123", "<div>GitHub preview</div>")
+
+            result = await resolve_embed_keys(session, html_body, "n1234567890ab")
+
+            # Verify the key was replaced
+            assert 'embedded-content-key="embreposerver123"' in result
+            assert 'embedded-content-key="embrandomrepo"' not in result
+            mock_fetch.assert_called_once_with(
+                session,
+                "https://github.com/anthropics/claude-code",
+                "n1234567890ab",
+            )
