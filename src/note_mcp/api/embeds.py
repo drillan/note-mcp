@@ -79,14 +79,13 @@ GOOGLE_SLIDES_PATTERN = re.compile(
 SPEAKERDECK_PATTERN = re.compile(r"^https?://speakerdeck\.com/[\w-]+/[\w-]+$")
 
 # Data-driven pattern to service mapping (Issue #235: DRY principle)
-# Order matters: GIST_PATTERN must be checked before GITHUB_REPO_PATTERN
-# because gist.github.com URLs would also match the general github.com pattern
-# if the patterns weren't mutually exclusive by design.
+# Note: GIST_PATTERN and GITHUB_REPO_PATTERN are mutually exclusive by design
+# (GIST_PATTERN matches gist.github.com, GITHUB_REPO_PATTERN matches github.com only).
 EMBED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (YOUTUBE_PATTERN, "youtube"),
     (TWITTER_PATTERN, "twitter"),
     (NOTE_PATTERN, "note"),
-    (GIST_PATTERN, "gist"),  # Must be before GITHUB_REPO_PATTERN (more specific)
+    (GIST_PATTERN, "gist"),  # gist.github.com (distinct from github.com)
     (GITHUB_REPO_PATTERN, "githubRepository"),
     (GOOGLE_SLIDES_PATTERN, "googlepresentation"),
     (SPEAKERDECK_PATTERN, "speakerdeck"),
