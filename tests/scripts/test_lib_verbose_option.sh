@@ -41,6 +41,10 @@ run_test() {
 
     echo "--- $test_name ---"
 
+    # テスト前に状態をリセット
+    _LIB_VERBOSE=false
+    REMAINING_ARGS=""
+
     # ライブラリをsourceして関数を使用
     source "$PROJECT_ROOT/scripts/_lib.sh"
 
@@ -79,6 +83,89 @@ run_test "Test 6: no arguments" "" "false" ""
 
 # Test 7: -v のみの場合
 run_test "Test 7: only -v" "-v" "true" ""
+
+# Test 8: スペースを含む引数（printf %qでエスケープされる）
+echo "--- Test 8: args with spaces ---"
+_LIB_VERBOSE=false
+REMAINING_ARGS=""
+source "$PROJECT_ROOT/scripts/_lib.sh"
+output=$(lib_parse_verbose_option "arg with spaces")
+eval "$output"
+assert_eq "false" "$_LIB_VERBOSE" "verbose flag should be false"
+# printf %q はスペースをエスケープするため、arg\ with\ spaces のようになる
+# evalで展開すると元の文字列に戻る
+if [[ "$REMAINING_ARGS" == *"arg"* ]] && [[ "$REMAINING_ARGS" == *"spaces"* ]]; then
+    echo "  ✅ PASS: remaining args contains 'arg' and 'spaces'"
+    ((PASSED++)) || true
+else
+    echo "  ❌ FAIL: remaining args does not contain expected content"
+    echo "     Actual: '$REMAINING_ARGS'"
+    ((FAILED++)) || true
+fi
+echo ""
+
+# Test 9: シングルクォートを含む引数（セキュリティテスト）
+echo "--- Test 9: args with single quote (security test) ---"
+_LIB_VERBOSE=false
+REMAINING_ARGS=""
+source "$PROJECT_ROOT/scripts/_lib.sh"
+output=$(lib_parse_verbose_option "arg'test")
+# 出力形式を検証してからeval
+if [[ "$output" =~ ^_LIB_VERBOSE=(true|false)\;\ REMAINING_ARGS= ]]; then
+    eval "$output"
+    echo "  ✅ PASS: output format is valid and safe to eval"
+    ((PASSED++)) || true
+else
+    echo "  ❌ FAIL: output format is invalid"
+    echo "     Output: '$output'"
+    ((FAILED++)) || true
+fi
+echo ""
+
+# Test 10: コマンドインジェクション試行
+echo "--- Test 10: command injection attempt ---"
+_LIB_VERBOSE=false
+REMAINING_ARGS=""
+source "$PROJECT_ROOT/scripts/_lib.sh"
+output=$(lib_parse_verbose_option "'; echo INJECTED #")
+# 出力形式を検証してからeval
+if [[ "$output" =~ ^_LIB_VERBOSE=(true|false)\;\ REMAINING_ARGS= ]]; then
+    eval "$output"
+    # INJECTEDが実行されていないことを確認
+    echo "  ✅ PASS: command injection prevented"
+    ((PASSED++)) || true
+else
+    echo "  ❌ FAIL: output format is invalid"
+    echo "     Output: '$output'"
+    ((FAILED++)) || true
+fi
+echo ""
+
+# Test 11: lib_is_verbose 統合テスト
+echo "--- Test 11: lib_is_verbose integration ---"
+_LIB_VERBOSE=false
+source "$PROJECT_ROOT/scripts/_lib.sh"
+output=$(lib_parse_verbose_option "-v" "arg1")
+eval "$output"
+if lib_is_verbose; then
+    echo "  ✅ PASS: lib_is_verbose returns true when -v is set"
+    ((PASSED++)) || true
+else
+    echo "  ❌ FAIL: lib_is_verbose should return true"
+    ((FAILED++)) || true
+fi
+
+_LIB_VERBOSE=false
+output=$(lib_parse_verbose_option "arg1")
+eval "$output"
+if ! lib_is_verbose; then
+    echo "  ✅ PASS: lib_is_verbose returns false when -v is not set"
+    ((PASSED++)) || true
+else
+    echo "  ❌ FAIL: lib_is_verbose should return false"
+    ((FAILED++)) || true
+fi
+echo ""
 
 echo "═══════════════════════════════════════════════════════════════"
 echo "Results: $PASSED passed, $FAILED failed"

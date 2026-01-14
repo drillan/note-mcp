@@ -43,6 +43,11 @@ _LIB_VERBOSE=false
 #   _LIB_VERBOSE=true; REMAINING_ARGS='arg1 arg2'
 #   または
 #   _LIB_VERBOSE=false; REMAINING_ARGS='arg1 arg2'
+#
+# 注意:
+#   - printf %q を使用してシェルエスケープを適用
+#   - スペースを含む引数は適切にエスケープされる
+#   - シングルクォートやメタ文字も安全に処理される
 lib_parse_verbose_option() {
     local args=()
     local verbose_flag=false
@@ -58,12 +63,13 @@ lib_parse_verbose_option() {
                 ;;
         esac
     done
-    # evalで評価可能な形式で出力
+    # evalで評価可能な形式で出力（printf %qで安全にエスケープ）
     local remaining_str=""
     if [[ ${#args[@]} -gt 0 ]]; then
         remaining_str="${args[*]}"
     fi
-    echo "_LIB_VERBOSE=$verbose_flag; REMAINING_ARGS='$remaining_str'"
+    # printf %q を使用してコマンドインジェクションを防止
+    printf '_LIB_VERBOSE=%s; REMAINING_ARGS=%q\n' "$verbose_flag" "$remaining_str"
 }
 
 # verboseモードかどうかを確認

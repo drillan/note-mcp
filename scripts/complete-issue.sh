@@ -15,8 +15,13 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
 # オプション解析（evalで _LIB_VERBOSE と REMAINING_ARGS を設定）
 OUTPUT=$(lib_parse_verbose_option "$@")
+# 出力形式を検証してからeval
+if [[ ! "$OUTPUT" =~ ^_LIB_VERBOSE=(true|false)\;\ REMAINING_ARGS= ]]; then
+    echo "ERROR: Option parsing failed" >&2
+    exit 1
+fi
 eval "$OUTPUT"
-eval set -- $REMAINING_ARGS
+eval set -- "$REMAINING_ARGS"
 
 # 不明なオプションのチェック
 if [[ $# -gt 0 ]]; then
