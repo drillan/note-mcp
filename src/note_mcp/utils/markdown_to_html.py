@@ -12,6 +12,7 @@ from markdown_it import MarkdownIt
 
 from note_mcp.api.embeds import (
     GIST_PATTERN,
+    GITHUB_REPO_PATTERN,
     GOOGLE_SLIDES_PATTERN,
     MONEY_PATTERN,
     NOTE_PATTERN,
@@ -188,9 +189,9 @@ def _restore_code_blocks(content: str, blocks: list[tuple[str, str]]) -> str:
 def has_embed_url(content: str) -> bool:
     """Check if content contains URLs that should be embedded.
 
-    Detects YouTube, Twitter/X, note.com article, GitHub Gist, noteマネー, Zenn.dev,
-    Google Slides, and SpeakerDeck URLs that appear alone on a line (indicating they
-    should be embedded, not linked).
+    Detects YouTube, Twitter/X, note.com article, GitHub Gist, GitHub Repository,
+    noteマネー, Zenn.dev, Google Slides, and SpeakerDeck URLs that appear alone on
+    a line (indicating they should be embedded, not linked).
 
     Args:
         content: Markdown content to check.
@@ -207,6 +208,7 @@ def has_embed_url(content: str) -> bool:
             or TWITTER_PATTERN.match(url)
             or NOTE_PATTERN.match(url)
             or GIST_PATTERN.match(url)
+            or GITHUB_REPO_PATTERN.match(url)
             or MONEY_PATTERN.match(url)
             or ZENN_PATTERN.match(url)
             or GOOGLE_SLIDES_PATTERN.match(url)
@@ -229,8 +231,8 @@ def _convert_standalone_embed_urls(html: str) -> str:
     """Convert standalone embed URLs to figure elements.
 
     Detects standalone URLs (URLs that are alone in a paragraph) and converts
-    supported embed URLs (YouTube, Twitter, note.com, GitHub Gist, noteマネー,
-    Zenn.dev, Google Slides, SpeakerDeck) to figure elements.
+    supported embed URLs (YouTube, Twitter, note.com, GitHub Gist, GitHub Repository,
+    noteマネー, Zenn.dev, Google Slides, SpeakerDeck) to figure elements.
 
     This function should be called after markdown conversion and UUID addition,
     but before code block processing.

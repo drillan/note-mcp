@@ -18,6 +18,9 @@ Issue #222: Zenn.dev article embed support added. Zenn URLs use
 
 Issue #226: GitHub Repository embed support added. Repository URLs use
 'githubRepository' service type via the same /v2/embed_by_external_api endpoint.
+
+Issue #223: SpeakerDeck presentation embed support added. SpeakerDeck URLs use
+'speakerdeck' service type via the same /v2/embed_by_external_api endpoint.
 """
 
 from __future__ import annotations
