@@ -14,8 +14,9 @@ set -euo pipefail
 # 共通ライブラリを読み込む
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
-# オプション解析
-REMAINING_ARGS=$(lib_parse_verbose_option "$@")
+# オプション解析（evalで _LIB_VERBOSE と REMAINING_ARGS を設定）
+OUTPUT=$(lib_parse_verbose_option "$@")
+eval "$OUTPUT"
 eval set -- $REMAINING_ARGS
 
 # 不明なオプションのチェック

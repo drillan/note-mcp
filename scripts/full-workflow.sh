@@ -22,8 +22,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT=$(lib_get_project_root)
 
-# オプション解析
-REMAINING_ARGS=$(lib_parse_verbose_option "$@")
+# オプション解析（evalで _LIB_VERBOSE と REMAINING_ARGS を設定）
+OUTPUT=$(lib_parse_verbose_option "$@")
+eval "$OUTPUT"
 eval set -- $REMAINING_ARGS
 
 ISSUE_NUM="${1:-}"
