@@ -96,6 +96,18 @@ start_vnc() {
 
     log_info "Starting TigerVNC server on port $port"
 
+    # Clean up any existing VNC processes from previous runs
+    # This prevents "port already in use" errors on rapid container restarts
+    pkill -x Xvnc 2>/dev/null || true
+    pkill -x websockify 2>/dev/null || true
+
+    # Remove stale X11 lock files
+    rm -f /tmp/.X${display_num}-lock 2>/dev/null || true
+    rm -f /tmp/.X11-unix/X${display_num} 2>/dev/null || true
+
+    # Brief delay to ensure port is released
+    sleep 0.5
+
     # Create VNC password file (empty password for no authentication)
     mkdir -p ~/.vnc
     echo "" | vncpasswd -f > ~/.vnc/passwd 2>/dev/null || true
