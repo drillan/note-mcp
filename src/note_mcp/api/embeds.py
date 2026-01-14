@@ -50,7 +50,8 @@ GIST_PATTERN = re.compile(r"^https?://gist\.github\.com/[\w-]+/[\w]+/?(?:#[\w-]+
 # Supports Japanese stocks, US stocks, indices, and investment trusts
 MONEY_PATTERN = re.compile(r"^https?://money\.note\.com/(companies|us-companies|indices|investments)/[\w-]+/?$")
 
-# Zenn.dev: zenn.dev/user/articles/xxx (Issue #222)
+# Zenn.dev: zenn.dev/username/articles/article-slug
+# Example: https://zenn.dev/zenn/articles/markdown-guide (Issue #222)
 ZENN_PATTERN = re.compile(r"^https?://zenn\.dev/[\w-]+/articles/[\w-]+$")
 
 

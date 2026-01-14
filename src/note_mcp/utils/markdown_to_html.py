@@ -224,7 +224,8 @@ def _convert_standalone_embed_urls(html: str) -> str:
     """Convert standalone embed URLs to figure elements.
 
     Detects standalone URLs (URLs that are alone in a paragraph) and converts
-    supported embed URLs (YouTube, Twitter, note.com, GitHub Gist) to figure elements.
+    supported embed URLs (YouTube, Twitter, note.com, GitHub Gist, noteマネー,
+    Zenn.dev) to figure elements.
 
     This function should be called after markdown conversion and UUID addition,
     but before code block processing.
