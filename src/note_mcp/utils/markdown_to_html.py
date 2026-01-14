@@ -15,6 +15,7 @@ from note_mcp.api.embeds import (
     GOOGLE_SLIDES_PATTERN,
     MONEY_PATTERN,
     NOTE_PATTERN,
+    SPEAKERDECK_PATTERN,
     TWITTER_PATTERN,
     YOUTUBE_PATTERN,
     ZENN_PATTERN,
@@ -188,8 +189,8 @@ def has_embed_url(content: str) -> bool:
     """Check if content contains URLs that should be embedded.
 
     Detects YouTube, Twitter/X, note.com article, GitHub Gist, noteマネー, Zenn.dev,
-    and Google Slides URLs that appear alone on a line (indicating they should be
-    embedded, not linked).
+    Google Slides, and SpeakerDeck URLs that appear alone on a line (indicating they
+    should be embedded, not linked).
 
     Args:
         content: Markdown content to check.
@@ -209,6 +210,7 @@ def has_embed_url(content: str) -> bool:
             or MONEY_PATTERN.match(url)
             or ZENN_PATTERN.match(url)
             or GOOGLE_SLIDES_PATTERN.match(url)
+            or SPEAKERDECK_PATTERN.match(url)
         ):
             return True
     return False
@@ -228,7 +230,7 @@ def _convert_standalone_embed_urls(html: str) -> str:
 
     Detects standalone URLs (URLs that are alone in a paragraph) and converts
     supported embed URLs (YouTube, Twitter, note.com, GitHub Gist, noteマネー,
-    Zenn.dev) to figure elements.
+    Zenn.dev, Google Slides, SpeakerDeck) to figure elements.
 
     This function should be called after markdown conversion and UUID addition,
     but before code block processing.

@@ -852,6 +852,11 @@ https://gist.github.com/defunkt/2059
             is True
         )
 
+    def test_speakerdeck_url_detected(self) -> None:
+        """SpeakerDeckのURLが検出される (Issue #223)."""
+        assert has_embed_url("https://speakerdeck.com/user/slide-name") is True
+        assert has_embed_url("https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing") is True
+
 
 class TestZennEmbedUrlConversion:
     """Zenn.dev記事埋め込みURL変換のテスト (Issue #222)."""
@@ -1022,6 +1027,35 @@ https://docs.google.com/presentation/d/1W543BSd_0cL-Y3p7eRn-JWvr2_Dfo7wZGKJp6RbP
 
         assert "<figure" in result
         assert 'embedded-service="googlepresentation"' in result
+        # 前後のテキストも保持される
+        assert "テスト文章です" in result
+        assert "テスト続きです" in result
+
+
+class TestSpeakerDeckEmbedUrlConversion:
+    """SpeakerDeck埋め込みURL変換のテスト (Issue #223)."""
+
+    def test_speakerdeck_url_becomes_embed(self) -> None:
+        """SpeakerDeckのURLは埋め込みに変換される."""
+        markdown = "https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing"
+        result = markdown_to_html(markdown)
+
+        assert "<figure" in result
+        assert 'embedded-service="speakerdeck"' in result
+        assert 'data-src="https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing"' in result
+        assert "embedded-content-key=" in result
+
+    def test_speakerdeck_url_with_surrounding_text(self) -> None:
+        """テキストに囲まれたSpeakerDeck URLも変換される."""
+        markdown = """テスト文章です。
+
+https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing
+
+テスト続きです。"""
+        result = markdown_to_html(markdown)
+
+        assert "<figure" in result
+        assert 'embedded-service="speakerdeck"' in result
         # 前後のテキストも保持される
         assert "テスト文章です" in result
         assert "テスト続きです" in result

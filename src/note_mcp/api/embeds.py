@@ -1,7 +1,7 @@
 """Embed URL detection and HTML generation for note.com.
 
 This module provides functions for detecting embed URLs (YouTube, Twitter, note.com,
-GitHub Gist, GitHub Repository, noteマネー, Zenn.dev, Google Slides) and generating
+GitHub Gist, GitHub Repository, noteマネー, Zenn.dev, Google Slides, SpeakerDeck) and generating
 the required HTML structure for note.com embeds.
 
 This is the single source of truth for embed URL patterns (DRY principle).
@@ -71,6 +71,10 @@ GOOGLE_SLIDES_PATTERN = re.compile(
     r"^https?://docs\.google\.com/presentation/d/[\w-]+(?:/[^?#]*)?(?:\?[^#]*)?(?:#.*)?$"
 )
 
+# SpeakerDeck: speakerdeck.com/user/slide-name
+# Example: https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing (Issue #223)
+SPEAKERDECK_PATTERN = re.compile(r"^https?://speakerdeck\.com/[\w-]+/[\w-]+$")
+
 
 def get_embed_service(url: str) -> str | None:
     """Get embed service type from URL.
@@ -80,7 +84,7 @@ def get_embed_service(url: str) -> str | None:
 
     Returns:
         Service type ('youtube', 'twitter', 'note', 'gist', 'githubRepository',
-        'googlepresentation', 'oembed', 'external-article') or None if unsupported.
+        'googlepresentation', 'speakerdeck', 'oembed', 'external-article') or None if unsupported.
     """
     if YOUTUBE_PATTERN.match(url):
         return "youtube"
@@ -96,6 +100,8 @@ def get_embed_service(url: str) -> str | None:
         return "githubRepository"
     if GOOGLE_SLIDES_PATTERN.match(url):
         return "googlepresentation"
+    if SPEAKERDECK_PATTERN.match(url):
+        return "speakerdeck"
     if MONEY_PATTERN.match(url):
         return "oembed"
     if ZENN_PATTERN.match(url):
@@ -127,10 +133,10 @@ def _build_embed_figure_html(
 
     Args:
         url: Original URL (YouTube, Twitter, note.com, GitHub Gist, GitHub Repository,
-             noteマネー, Zenn.dev, Google Slides).
+             noteマネー, Zenn.dev, Google Slides, SpeakerDeck).
         embed_key: Embed key (random for placeholder, server-registered for final).
         service: Service type ('youtube', 'twitter', 'note', 'gist', 'githubRepository',
-                 'googlepresentation', 'oembed', 'external-article').
+                 'googlepresentation', 'speakerdeck', 'oembed', 'external-article').
 
     Returns:
         HTML figure element string.
@@ -162,9 +168,9 @@ def generate_embed_html(url: str, service: str | None = None) -> str:
 
     Args:
         url: Original URL (YouTube, Twitter, note.com, GitHub Gist, GitHub Repository,
-             noteマネー, Zenn.dev, Google Slides).
+             noteマネー, Zenn.dev, Google Slides, SpeakerDeck).
         service: Service type ('youtube', 'twitter', 'note', 'gist', 'githubRepository',
-                 'googlepresentation', 'oembed', 'external-article'). If None, auto-detected from URL.
+                 'googlepresentation', 'speakerdeck', 'oembed', 'external-article'). If None, auto-detected from URL.
 
     Returns:
         HTML figure element string.
@@ -250,12 +256,12 @@ async def fetch_embed_key(
 
     Issue #121: Different endpoints are used for different services:
     - note.com articles: POST /v1/embed
-    - YouTube/Twitter/GitHub Gist/GitHub Repository/noteマネー/Zenn.dev/Google Slides: GET /v2/embed_by_external_api
+    - Other services (YouTube/Twitter/Gist/etc.): GET /v2/embed_by_external_api
 
     Args:
         session: Authenticated session with valid cookies.
         url: Embed URL (YouTube, Twitter, note.com, GitHub Gist, GitHub Repository,
-             noteマネー, Zenn.dev, Google Slides).
+             noteマネー, Zenn.dev, Google Slides, SpeakerDeck).
         article_key: Article key where the embed will be inserted
                      (e.g., "n1234567890ab").
 
@@ -276,7 +282,7 @@ async def fetch_embed_key(
     if service == "note":
         return await _fetch_note_embed_key(session, url, article_key)
 
-    # YouTube/Twitter/Gist/GitHub Repo/noteマネー/Zenn.dev/Google Slides: use /v2/embed_by_external_api endpoint
+    # External services: use /v2/embed_by_external_api endpoint
     params = {
         "url": url,
         "service": service,
@@ -314,10 +320,10 @@ def generate_embed_html_with_key(
 
     Args:
         url: Original URL (YouTube, Twitter, note.com, GitHub Gist, GitHub Repository,
-             noteマネー, Zenn.dev, Google Slides).
+             noteマネー, Zenn.dev, Google Slides, SpeakerDeck).
         embed_key: Server-registered embed key from fetch_embed_key().
         service: Service type ('youtube', 'twitter', 'note', 'gist', 'githubRepository',
-                 'googlepresentation', 'oembed', 'external-article'). If None, auto-detected from URL.
+                 'googlepresentation', 'speakerdeck', 'oembed', 'external-article'). If None, auto-detected from URL.
 
     Returns:
         HTML figure element string with server-registered key.
