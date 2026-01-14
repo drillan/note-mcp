@@ -198,7 +198,12 @@ async def draft_article(
         logger.debug("Deleted test article: %s", article.key)
     except Exception as e:
         # Don't fail the test if cleanup fails
-        logger.warning("Failed to delete test article %s: %s", article.key, e)
+        logger.warning(
+            "Failed to delete test article %s: %s: %s",
+            article.key,
+            type(e).__name__,
+            e,
+        )
 
 
 async def _inject_session_cookies(page: Page, session: Session) -> None:
