@@ -510,12 +510,13 @@ async def note_create_from_file(
 ) -> str:
     """Markdownファイルから下書き記事を作成します。
 
-    ファイルからタイトル、本文、タグ、ローカル画像を抽出し、
+    ファイルからタイトル、本文、タグ、ローカル画像、アイキャッチ画像を抽出し、
     note.comに下書きを作成します。
 
     YAMLフロントマターがある場合:
     - titleフィールドからタイトルを取得
     - tagsフィールドからタグを取得
+    - eyecatchフィールドからアイキャッチ画像パスを取得
 
     フロントマターがない場合:
     - 最初のH1見出しをタイトルとして使用（本文から削除）
@@ -523,6 +524,9 @@ async def note_create_from_file(
 
     ローカル画像（./images/example.pngなど）は自動的にアップロードされ、
     本文内のパスがnote.comのURLに置換されます。
+
+    アイキャッチ画像が指定されている場合、自動的にアップロードされ、
+    記事のアイキャッチとして設定されます。
 
     Args:
         file_path: Markdownファイルのパス
@@ -587,6 +591,23 @@ async def note_create_from_file(
             )
             await update_article(session, article.key, updated_input)
 
+        # Upload eyecatch image if specified
+        eyecatch_uploaded = False
+        eyecatch_error: str | None = None
+        if upload_images and parsed.eyecatch:
+            if parsed.eyecatch.exists():
+                try:
+                    await upload_eyecatch_image(
+                        session,
+                        str(parsed.eyecatch),
+                        article.id,
+                    )
+                    eyecatch_uploaded = True
+                except NoteAPIError as e:
+                    eyecatch_error = f"{parsed.eyecatch.name}: {e}"
+            else:
+                eyecatch_error = f"ファイルが見つかりません: {parsed.eyecatch}"
+
         result_lines = [
             "✅ 下書きを作成しました",
             f"   タイトル: {article.title}",
@@ -597,10 +618,16 @@ async def note_create_from_file(
         if uploaded_count > 0:
             result_lines.append(f"   アップロードした画像: {uploaded_count}件")
 
+        if eyecatch_uploaded:
+            result_lines.append("   アイキャッチ画像: アップロード完了")
+
         if failed_images:
             result_lines.append(f"   ⚠️ 画像アップロード失敗: {len(failed_images)}件")
             for msg in failed_images:
                 result_lines.append(f"      - {msg}")
+
+        if eyecatch_error:
+            result_lines.append(f"   ⚠️ アイキャッチ画像アップロード失敗: {eyecatch_error}")
 
         return "\n".join(result_lines)
 

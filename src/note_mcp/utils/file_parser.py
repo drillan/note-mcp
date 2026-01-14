@@ -39,6 +39,7 @@ class ParsedArticle:
         tags: List of tags for the article
         local_images: List of local images detected in the content
         source_path: Path to the source Markdown file
+        eyecatch: Path to the eyecatch (header) image, if specified
     """
 
     title: str
@@ -46,6 +47,7 @@ class ParsedArticle:
     tags: list[str] = field(default_factory=list)
     local_images: list[LocalImage] = field(default_factory=list)
     source_path: Path | None = None
+    eyecatch: Path | None = None
 
 
 # Pattern to match YAML frontmatter (must start at beginning of file)
@@ -70,6 +72,7 @@ def parse_markdown_file(file_path: Path | str) -> ParsedArticle:
     - Tags: From YAML frontmatter (optional)
     - Body: The Markdown content (frontmatter stripped, title heading removed)
     - Local images: Paths to local image files (not URLs)
+    - Eyecatch: Path to eyecatch image from YAML frontmatter (optional)
 
     Args:
         file_path: Path to the Markdown file (str or Path)
@@ -104,6 +107,9 @@ def parse_markdown_file(file_path: Path | str) -> ParsedArticle:
     # Get tags from frontmatter
     tags = _get_tags(frontmatter_data)
 
+    # Get eyecatch image path from frontmatter
+    eyecatch = _get_eyecatch(frontmatter_data, path.parent)
+
     # Detect local images
     local_images = _detect_local_images(body, path.parent)
 
@@ -116,6 +122,7 @@ def parse_markdown_file(file_path: Path | str) -> ParsedArticle:
         tags=tags,
         local_images=local_images,
         source_path=path,
+        eyecatch=eyecatch,
     )
 
 
@@ -250,6 +257,25 @@ def _get_tags(frontmatter: dict[str, Any]) -> list[str]:
         return [str(tag).strip() for tag in tags if tag]
 
     return []
+
+
+def _get_eyecatch(frontmatter: dict[str, Any], base_dir: Path) -> Path | None:
+    """Extract eyecatch image path from frontmatter.
+
+    Args:
+        frontmatter: Parsed YAML frontmatter
+        base_dir: Base directory for resolving relative paths
+
+    Returns:
+        Resolved absolute path to eyecatch image, or None if not specified
+    """
+    eyecatch = frontmatter.get("eyecatch", "")
+
+    if not eyecatch or not str(eyecatch).strip():
+        return None
+
+    eyecatch_str = str(eyecatch).strip()
+    return (base_dir / eyecatch_str).resolve()
 
 
 def _detect_local_images(body: str, base_dir: Path) -> list[LocalImage]:

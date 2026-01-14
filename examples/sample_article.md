@@ -4,6 +4,7 @@ tags:
   - note-mcp
   - サンプル
   - Markdown
+eyecatch: ./images/sample_image.png
 ---
 
 この記事は `note_create_from_file` MCPツールの機能をテストするためのサンプルです。
@@ -16,8 +17,9 @@ note-mcpを使うと、ローカルのMarkdownファイルからnote.comの記�
 
 ### 主な機能
 
-- **YAMLフロントマター**からタイトルとタグを抽出
+- **YAMLフロントマター**からタイトル、タグ、アイキャッチ画像を抽出
 - **ローカル画像**を自動アップロード
+- **アイキャッチ画像**を自動設定（フロントマターで`eyecatch`を指定）
 - **目次（TOC）**の自動挿入
 - **Markdown記法**をnote.com形式に変換
 
@@ -140,14 +142,15 @@ $${\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}}$$
 
 このサンプルファイルで以下の機能をテストできます：
 
-1. YAMLフロントマターからのメタデータ抽出
+1. YAMLフロントマターからのメタデータ抽出（タイトル、タグ、アイキャッチ）
 2. 各種Markdown記法の変換
 3. ローカル画像の自動アップロード
-4. 目次の自動挿入
-5. テキスト配置（中央・右・左寄せ）
-6. 数式（KaTeX）記法
-7. ルビ（ふりがな）記法
-8. 埋め込み（YouTube、Twitter/X、note.com記事、GitHub Gist）
+4. アイキャッチ画像の自動設定
+5. 目次の自動挿入
+6. テキスト配置（中央・右・左寄せ）
+7. 数式（KaTeX）記法
+8. ルビ（ふりがな）記法
+9. 埋め込み（YouTube、Twitter/X、note.com記事、GitHub Gist）
 
 ---
 

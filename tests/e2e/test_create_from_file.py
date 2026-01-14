@@ -176,6 +176,37 @@ More content after math.
 
 
 @pytest.fixture
+def md_with_eyecatch(tmp_path: Path, test_image_path: Path) -> Path:
+    """アイキャッチ画像を指定したMarkdownファイルを作成。
+
+    YAMLフロントマターのeyecatchフィールドでローカル画像を指定。
+    """
+    # Create images directory and copy test image
+    images_dir = tmp_path / "images"
+    images_dir.mkdir()
+    eyecatch_image = images_dir / "eyecatch.png"
+    eyecatch_image.write_bytes(test_image_path.read_bytes())
+
+    content = """---
+title: "[E2E-TEST] Article with Eyecatch"
+tags:
+  - e2e-test
+  - eyecatch
+eyecatch: ./images/eyecatch.png
+---
+
+This article has an eyecatch image set via frontmatter.
+
+## Section 1
+
+Some content here.
+"""
+    md_file = tmp_path / "eyecatch_test.md"
+    md_file.write_text(content, encoding="utf-8")
+    return md_file
+
+
+@pytest.fixture
 def md_with_toc_and_image(tmp_path: Path, test_image_path: Path) -> Path:
     """[TOC]と画像を含むMarkdownファイルを作成。
 
@@ -412,6 +443,31 @@ class TestCreateFromFile:
             # Verify image src is from note.com CDN (not a local path)
             cdn_result = await image_validator.validate_image_src_contains("assets.st-note.com")
             assert cdn_result.success, f"Image CDN validation failed: {cdn_result.message}"
+
+    async def test_create_with_eyecatch_image(
+        self,
+        real_session: Session,
+        md_with_eyecatch: Path,
+    ) -> None:
+        """アイキャッチ画像付きファイルから記事を作成しeyecatchをアップロードできる。
+
+        YAMLフロントマターのeyecatchフィールドで指定した画像が
+        自動でアップロードされることを検証。
+        """
+        # Act
+        result = await note_create_from_file.fn(
+            file_path=str(md_with_eyecatch),
+            upload_images=True,
+        )
+
+        # Assert API response
+        assert "下書きを作成しました" in result
+        assert "[E2E-TEST] Article with Eyecatch" in result
+        assert "アイキャッチ画像: アップロード完了" in result
+
+        # Cleanup (Issue #200)
+        article_key = extract_article_key(result)
+        await delete_draft_with_retry(real_session, article_key)
 
 
 class TestCreateFromFileErrors:
