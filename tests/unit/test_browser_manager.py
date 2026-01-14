@@ -41,6 +41,7 @@ class TestBrowserManager:
             mock_browser = AsyncMock()
             mock_context = AsyncMock()
             mock_page = AsyncMock()
+            mock_page.is_closed = MagicMock(return_value=False)
 
             mock_pw = AsyncMock()
             mock_pw.chromium.launch = AsyncMock(return_value=mock_browser)
