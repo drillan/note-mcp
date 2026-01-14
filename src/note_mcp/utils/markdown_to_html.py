@@ -11,15 +11,6 @@ from contextlib import contextmanager
 from markdown_it import MarkdownIt
 
 from note_mcp.api.embeds import (
-    GIST_PATTERN,
-    GITHUB_REPO_PATTERN,
-    GOOGLE_SLIDES_PATTERN,
-    MONEY_PATTERN,
-    NOTE_PATTERN,
-    SPEAKERDECK_PATTERN,
-    TWITTER_PATTERN,
-    YOUTUBE_PATTERN,
-    ZENN_PATTERN,
     generate_embed_html,
     get_embed_service,
 )
@@ -193,6 +184,8 @@ def has_embed_url(content: str) -> bool:
     noteマネー, Zenn.dev, Google Slides, and SpeakerDeck URLs that appear alone on
     a line (indicating they should be embedded, not linked).
 
+    Uses get_embed_service() for URL detection (Issue #235: DRY principle).
+
     Args:
         content: Markdown content to check.
 
@@ -203,17 +196,7 @@ def has_embed_url(content: str) -> bool:
     for match in _STANDALONE_URL_PATTERN.finditer(content):
         url = match.group(1)
         # Check if this URL matches any embed pattern (using api.embeds patterns)
-        if (
-            YOUTUBE_PATTERN.match(url)
-            or TWITTER_PATTERN.match(url)
-            or NOTE_PATTERN.match(url)
-            or GIST_PATTERN.match(url)
-            or GITHUB_REPO_PATTERN.match(url)
-            or MONEY_PATTERN.match(url)
-            or ZENN_PATTERN.match(url)
-            or GOOGLE_SLIDES_PATTERN.match(url)
-            or SPEAKERDECK_PATTERN.match(url)
-        ):
+        if get_embed_service(url) is not None:
             return True
     return False
 

@@ -78,9 +78,26 @@ GOOGLE_SLIDES_PATTERN = re.compile(
 # Example: https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing (Issue #223)
 SPEAKERDECK_PATTERN = re.compile(r"^https?://speakerdeck\.com/[\w-]+/[\w-]+$")
 
+# Data-driven pattern to service mapping (Issue #235: DRY principle)
+# Note: GIST_PATTERN and GITHUB_REPO_PATTERN are mutually exclusive by design
+# (GIST_PATTERN matches gist.github.com, GITHUB_REPO_PATTERN matches github.com only).
+EMBED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (YOUTUBE_PATTERN, "youtube"),
+    (TWITTER_PATTERN, "twitter"),
+    (NOTE_PATTERN, "note"),
+    (GIST_PATTERN, "gist"),  # gist.github.com (distinct from github.com)
+    (GITHUB_REPO_PATTERN, "githubRepository"),
+    (GOOGLE_SLIDES_PATTERN, "googlepresentation"),
+    (SPEAKERDECK_PATTERN, "speakerdeck"),
+    (MONEY_PATTERN, "oembed"),
+    (ZENN_PATTERN, "external-article"),
+]
+
 
 def get_embed_service(url: str) -> str | None:
     """Get embed service type from URL.
+
+    Uses data-driven pattern matching from EMBED_PATTERNS (Issue #235: DRY principle).
 
     Args:
         url: The URL to check.
@@ -89,26 +106,9 @@ def get_embed_service(url: str) -> str | None:
         Service type ('youtube', 'twitter', 'note', 'gist', 'githubRepository',
         'googlepresentation', 'speakerdeck', 'oembed', 'external-article') or None if unsupported.
     """
-    if YOUTUBE_PATTERN.match(url):
-        return "youtube"
-    if TWITTER_PATTERN.match(url):
-        return "twitter"
-    if NOTE_PATTERN.match(url):
-        return "note"
-    # GIST_PATTERN is checked before GITHUB_REPO_PATTERN for clarity,
-    # though the patterns are mutually exclusive (gist.github.com vs github.com)
-    if GIST_PATTERN.match(url):
-        return "gist"
-    if GITHUB_REPO_PATTERN.match(url):
-        return "githubRepository"
-    if GOOGLE_SLIDES_PATTERN.match(url):
-        return "googlepresentation"
-    if SPEAKERDECK_PATTERN.match(url):
-        return "speakerdeck"
-    if MONEY_PATTERN.match(url):
-        return "oembed"
-    if ZENN_PATTERN.match(url):
-        return "external-article"
+    for pattern, service in EMBED_PATTERNS:
+        if pattern.match(url):
+            return service
     return None
 
 
