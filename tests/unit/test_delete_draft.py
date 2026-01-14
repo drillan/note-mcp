@@ -221,6 +221,70 @@ class TestDeleteDraftPublishedArticle:
             mock_client.delete.assert_not_called()
 
 
+class TestDeleteDraftDeletedArticle:
+    """Unit tests for delete_draft with deleted article.
+
+    Issue #209: delete_draft should raise an error when attempting to
+    delete an already deleted article.
+    """
+
+    @pytest.mark.asyncio
+    async def test_delete_draft_deleted_article_raises_error(self) -> None:
+        """Test that attempting to delete a deleted article raises an error."""
+        session = create_mock_session()
+        article_data = create_mock_article_data(status="deleted")
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.get.return_value = {"data": article_data}
+            mock_client_cls.return_value = mock_client
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await delete_draft(session, "n1234567890ab", confirm=True)
+
+            assert exc_info.value.code == ErrorCode.ARTICLE_NOT_FOUND
+            assert "deleted" in exc_info.value.message.lower()
+
+    @pytest.mark.asyncio
+    async def test_delete_draft_deleted_article_no_delete_call(self) -> None:
+        """Test that delete API is NOT called for deleted articles."""
+        session = create_mock_session()
+        article_data = create_mock_article_data(status="deleted")
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.get.return_value = {"data": article_data}
+            mock_client_cls.return_value = mock_client
+
+            with pytest.raises(NoteAPIError):
+                await delete_draft(session, "n1234567890ab", confirm=True)
+
+            # Verify delete was NOT called
+            mock_client.delete.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_draft_deleted_article_preview_mode(self) -> None:
+        """Test that confirm=False also raises error for deleted article."""
+        session = create_mock_session()
+        article_data = create_mock_article_data(status="deleted")
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.get.return_value = {"data": article_data}
+            mock_client_cls.return_value = mock_client
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await delete_draft(session, "n1234567890ab", confirm=False)
+
+            assert exc_info.value.code == ErrorCode.ARTICLE_NOT_FOUND
+
+
 class TestDeleteDraftNotFound:
     """T039: Unit tests for delete_draft when article not found."""
 
