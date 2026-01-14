@@ -128,8 +128,10 @@ note-mcp/
 
 ### 2. ブランチの作成
 
+> 命名規則の詳細は `.claude/git-conventions.md` を参照してください。
+
 ```bash
-git checkout -b feature/your-feature-name
+git checkout -b feat/123-your-feature-name
 ```
 
 ### 3. 開発

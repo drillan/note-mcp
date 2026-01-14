@@ -25,14 +25,27 @@ allowed-tools: Bash Grep Read
 
 ## ブランチ名からのissue番号抽出
 
+> ブランチ命名規則の詳細は `.claude/git-conventions.md` を参照してください。
+
 ### サポートされるパターン
+
+**標準パターン（推奨）:**
 
 | パターン例 | 抽出結果 |
 |-----------|---------|
 | `feat/121-xxx` | 121 |
 | `fix/121-xxx` | 121 |
-| `feature/004-image-caption` | 4 |
-| `bugfix/123-xxx` | 123 |
+| `refactor/123-xxx` | 123 |
+| `docs/101-xxx` | 101 |
+| `test/111-xxx` | 111 |
+| `chore/222-xxx` | 222 |
+
+**レガシーパターン（後方互換性）:**
+
+| パターン例 | 抽出結果 |
+|-----------|---------|
+| `feature/111-xxx` | 111 |
+| `bugfix/456-xxx` | 456 |
 
 ### 抽出ロジック
 
@@ -40,8 +53,8 @@ allowed-tools: Bash Grep Read
 # 現在のブランチ名を取得
 branch=$(git branch --show-current)
 
-# issue番号を抽出（プレフィックス後の数字列）
-issue_number=$(echo "$branch" | sed -n 's#^\(feat\|fix\|feature\|bugfix\|chore\|docs\|refactor\|test\)/\([0-9]\+\)-.*#\2#p')
+# issue番号を抽出（標準パターン + レガシーパターン対応）
+issue_number=$(echo "$branch" | sed -n 's#^\(feat\|fix\|chore\|docs\|refactor\|test\|feature\|bugfix\)/\([0-9]\+\)-.*#\2#p')
 
 # 先頭ゼロを除去（004 -> 4）
 if [ -n "$issue_number" ]; then
@@ -147,7 +160,7 @@ fi
 
 ```bash
 branch=$(git branch --show-current)
-issue_number=$(echo "$branch" | sed -n 's#^\(feat\|fix\|feature\|bugfix\|chore\|docs\|refactor\|test\)/\([0-9]\+\)-.*#\2#p')
+issue_number=$(echo "$branch" | sed -n 's#^\(feat\|fix\|chore\|docs\|refactor\|test\|feature\|bugfix\)/\([0-9]\+\)-.*#\2#p')
 if [ -n "$issue_number" ]; then
     issue_number=$((10#$issue_number))
 fi
