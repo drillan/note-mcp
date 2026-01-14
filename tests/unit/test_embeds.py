@@ -2262,3 +2262,251 @@ class TestResolveEmbedKeysGoogleSlides:
                 "https://docs.google.com/presentation/d/1W543BSd-hHANrJOzCPyNf-r3x0s5s7ljc9xA7a7x960/edit",
                 "n1234567890ab",
             )
+
+
+class TestSpeakerDeckPattern:
+    """Tests for SpeakerDeck presentation URL pattern (Issue #223)."""
+
+    def test_speakerdeck_url(self) -> None:
+        """Test SpeakerDeck URL detection."""
+        from note_mcp.api.embeds import SPEAKERDECK_PATTERN
+
+        # Valid SpeakerDeck URLs
+        assert SPEAKERDECK_PATTERN.match(
+            "https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing"
+        )
+        assert SPEAKERDECK_PATTERN.match("https://speakerdeck.com/user/slide-name")
+        assert SPEAKERDECK_PATTERN.match("http://speakerdeck.com/user/presentation")
+        assert SPEAKERDECK_PATTERN.match("https://speakerdeck.com/user-name/slide-with-dashes")
+
+    def test_speakerdeck_url_with_trailing_slash(self) -> None:
+        """Test SpeakerDeck URL with trailing slash."""
+        from note_mcp.api.embeds import SPEAKERDECK_PATTERN
+
+        # Trailing slash should NOT be matched
+        assert not SPEAKERDECK_PATTERN.match("https://speakerdeck.com/user/slide/")
+
+    def test_speakerdeck_pattern_rejects_invalid_urls(self) -> None:
+        """Test that invalid URLs are rejected."""
+        from note_mcp.api.embeds import SPEAKERDECK_PATTERN
+
+        # Different domain
+        assert not SPEAKERDECK_PATTERN.match("https://example.com/user/slide")
+        # Only username (no slide)
+        assert not SPEAKERDECK_PATTERN.match("https://speakerdeck.com/user")
+        # Only domain
+        assert not SPEAKERDECK_PATTERN.match("https://speakerdeck.com/")
+        assert not SPEAKERDECK_PATTERN.match("https://speakerdeck.com")
+        # Subpath beyond user/slide
+        assert not SPEAKERDECK_PATTERN.match("https://speakerdeck.com/user/slide/extra")
+
+
+class TestGetEmbedServiceSpeakerDeck:
+    """Tests for get_embed_service function with SpeakerDeck URLs (Issue #223)."""
+
+    def test_get_embed_service_returns_speakerdeck(self) -> None:
+        """Test that get_embed_service returns 'speakerdeck' for SpeakerDeck URLs."""
+        from note_mcp.api.embeds import get_embed_service
+
+        assert (
+            get_embed_service("https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing")
+            == "speakerdeck"
+        )
+        assert get_embed_service("https://speakerdeck.com/user/slide") == "speakerdeck"
+        assert get_embed_service("http://speakerdeck.com/user/presentation") == "speakerdeck"
+
+
+class TestGenerateEmbedHtmlSpeakerDeck:
+    """Tests for generate_embed_html function with SpeakerDeck URLs (Issue #223)."""
+
+    def test_speakerdeck_embed_structure(self) -> None:
+        """Test SpeakerDeck embed HTML structure."""
+        from note_mcp.api.embeds import generate_embed_html
+
+        url = "https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing"
+        html = generate_embed_html(url)
+
+        # Verify required attributes
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="speakerdeck"' in html
+        assert 'contenteditable="false"' in html
+        assert "embedded-content-key=" in html
+        assert "</figure>" in html
+
+
+class TestIsEmbedUrlSpeakerDeck:
+    """Tests for is_embed_url function with SpeakerDeck URLs (Issue #223)."""
+
+    def test_speakerdeck_urls_are_embed_urls(self) -> None:
+        """Test that SpeakerDeck URLs are recognized as embed URLs."""
+        from note_mcp.api.embeds import is_embed_url
+
+        assert is_embed_url("https://speakerdeck.com/user/slide") is True
+        assert is_embed_url("https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing") is True
+
+
+class TestFetchEmbedKeySpeakerDeck:
+    """Tests for fetch_embed_key function with SpeakerDeck URLs (Issue #223)."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_speakerdeck_embed_key_uses_v2_endpoint(self) -> None:
+        """Test that SpeakerDeck URL uses GET /v2/embed_by_external_api endpoint."""
+        import time
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        mock_client_instance = MagicMock()
+        mock_client_instance.get = AsyncMock(
+            return_value={
+                "data": {
+                    "key": "embspeakerdeck123",
+                    "html_for_embed": '<div style="..."><iframe src="https://speakerdeck.com/player/..."></iframe></div>',
+                }
+            }
+        )
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client_class.return_value = mock_client_instance
+
+            embed_key, html_for_embed = await fetch_embed_key(
+                session,
+                "https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing",
+                "n1234567890ab",
+            )
+
+            # Verify the result
+            assert embed_key == "embspeakerdeck123"
+
+            # Verify the API was called with correct params
+            mock_client_instance.get.assert_called_once_with(
+                "/v2/embed_by_external_api",
+                params={
+                    "url": "https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing",
+                    "service": "speakerdeck",
+                    "embeddable_key": "n1234567890ab",
+                    "embeddable_type": "Note",
+                },
+            )
+
+    @pytest.mark.asyncio
+    async def test_fetch_speakerdeck_embed_key_sends_correct_service(self) -> None:
+        """Test that SpeakerDeck embed sends 'speakerdeck' as service type."""
+        import time
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        mock_client_instance = MagicMock()
+        mock_client_instance.get = AsyncMock(
+            return_value={
+                "data": {
+                    "key": "embspeakerdeck456",
+                    "html_for_embed": "<div>SpeakerDeck preview</div>",
+                }
+            }
+        )
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client_class.return_value = mock_client_instance
+
+            await fetch_embed_key(
+                session,
+                "https://speakerdeck.com/user/slide",
+                "n1234567890ab",
+            )
+
+            # Verify the params include service="speakerdeck"
+            call_args = mock_client_instance.get.call_args
+            params = call_args[1]["params"]
+            assert params.get("service") == "speakerdeck"
+
+
+class TestGenerateEmbedHtmlWithKeySpeakerDeck:
+    """Tests for generate_embed_html_with_key function with SpeakerDeck URLs (Issue #223)."""
+
+    def test_speakerdeck_embed_with_server_key(self) -> None:
+        """Test generating SpeakerDeck embed HTML with server-registered key."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing"
+        embed_key = "embspeakerdeck123456"
+        html = generate_embed_html_with_key(url, embed_key)
+
+        assert f'data-src="{url}"' in html
+        assert f'embedded-content-key="{embed_key}"' in html
+        assert 'embedded-service="speakerdeck"' in html
+
+    def test_speakerdeck_embed_auto_detect_service(self) -> None:
+        """Test that service is auto-detected as 'speakerdeck' for SpeakerDeck URLs."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://speakerdeck.com/user/slide"
+        html = generate_embed_html_with_key(url, "embtest123")
+
+        assert 'embedded-service="speakerdeck"' in html
+
+
+class TestResolveEmbedKeysSpeakerDeck:
+    """Tests for resolve_embed_keys function with SpeakerDeck URLs (Issue #223)."""
+
+    @pytest.mark.asyncio
+    async def test_resolve_speakerdeck_embed(self) -> None:
+        """Test resolving a SpeakerDeck embed key."""
+        import time
+        from unittest.mock import patch
+
+        from note_mcp.api.embeds import resolve_embed_keys
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        # HTML with random embed key for SpeakerDeck
+        html_body = (
+            '<figure name="test-uuid" id="test-uuid" '
+            'data-src="https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing" '
+            'embedded-service="speakerdeck" '
+            'embedded-content-key="embrandomspeakerdeck" '
+            'contenteditable="false"></figure>'
+        )
+
+        # Mock fetch_embed_key to return a server key
+        with patch("note_mcp.api.embeds.fetch_embed_key") as mock_fetch:
+            mock_fetch.return_value = ("embspeakerdeckserver", "<div>SpeakerDeck preview</div>")
+
+            result = await resolve_embed_keys(session, html_body, "n1234567890ab")
+
+            # Verify the key was replaced
+            assert 'embedded-content-key="embspeakerdeckserver"' in result
+            assert 'embedded-content-key="embrandomspeakerdeck"' not in result
+            mock_fetch.assert_called_once_with(
+                session,
+                "https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing",
+                "n1234567890ab",
+            )
