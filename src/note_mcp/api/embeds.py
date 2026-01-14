@@ -1,7 +1,8 @@
 """Embed URL detection and HTML generation for note.com.
 
 This module provides functions for detecting embed URLs (YouTube, Twitter, note.com,
-GitHub Gist, noteマネー) and generating the required HTML structure for note.com embeds.
+GitHub Gist, noteマネー, Zenn.dev) and generating the required HTML structure for
+note.com embeds.
 
 This is the single source of truth for embed URL patterns (DRY principle).
 
@@ -11,6 +12,9 @@ with keys registered via the embed_by_external_api endpoint.
 
 Issue #195: GitHub Gist embed support added. Gist URLs use the same
 /v2/embed_by_external_api endpoint as YouTube and Twitter.
+
+Issue #222: Zenn.dev article embed support added. Zenn URLs use
+'external-article' service type via the same /v2/embed_by_external_api endpoint.
 """
 
 from __future__ import annotations
@@ -46,6 +50,10 @@ GIST_PATTERN = re.compile(r"^https?://gist\.github\.com/[\w-]+/[\w]+/?(?:#[\w-]+
 # Supports Japanese stocks, US stocks, indices, and investment trusts
 MONEY_PATTERN = re.compile(r"^https?://money\.note\.com/(companies|us-companies|indices|investments)/[\w-]+/?$")
 
+# Zenn.dev: zenn.dev/username/articles/article-slug
+# Example: https://zenn.dev/zenn/articles/markdown-guide (Issue #222)
+ZENN_PATTERN = re.compile(r"^https?://zenn\.dev/[\w-]+/articles/[\w-]+$")
+
 
 def get_embed_service(url: str) -> str | None:
     """Get embed service type from URL.
@@ -54,7 +62,8 @@ def get_embed_service(url: str) -> str | None:
         url: The URL to check.
 
     Returns:
-        Service type ('youtube', 'twitter', 'note', 'gist', 'oembed') or None if unsupported.
+        Service type ('youtube', 'twitter', 'note', 'gist', 'oembed', 'external-article')
+        or None if unsupported.
     """
     if YOUTUBE_PATTERN.match(url):
         return "youtube"
@@ -66,6 +75,8 @@ def get_embed_service(url: str) -> str | None:
         return "gist"
     if MONEY_PATTERN.match(url):
         return "oembed"
+    if ZENN_PATTERN.match(url):
+        return "external-article"
     return None
 
 
@@ -92,9 +103,9 @@ def _build_embed_figure_html(
     This is the single source of truth for embed figure HTML format (DRY).
 
     Args:
-        url: Original URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー).
+        url: Original URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー, Zenn.dev).
         embed_key: Embed key (random for placeholder, server-registered for final).
-        service: Service type ('youtube', 'twitter', 'note', 'gist', 'oembed').
+        service: Service type ('youtube', 'twitter', 'note', 'gist', 'oembed', 'external-article').
 
     Returns:
         HTML figure element string.
@@ -125,8 +136,8 @@ def generate_embed_html(url: str, service: str | None = None) -> str:
     during markdown-to-html conversion (key is replaced later via API).
 
     Args:
-        url: Original URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー).
-        service: Service type ('youtube', 'twitter', 'note', 'gist', 'oembed').
+        url: Original URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー, Zenn.dev).
+        service: Service type ('youtube', 'twitter', 'note', 'gist', 'oembed', 'external-article').
                  If None, auto-detected from URL.
 
     Returns:
@@ -213,11 +224,11 @@ async def fetch_embed_key(
 
     Issue #121: Different endpoints are used for different services:
     - note.com articles: POST /v1/embed
-    - YouTube/Twitter/GitHub Gist/noteマネー: GET /v2/embed_by_external_api
+    - YouTube/Twitter/GitHub Gist/noteマネー/Zenn.dev: GET /v2/embed_by_external_api
 
     Args:
         session: Authenticated session with valid cookies.
-        url: Embed URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー).
+        url: Embed URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー, Zenn.dev).
         article_key: Article key where the embed will be inserted
                      (e.g., "n1234567890ab").
 
@@ -238,7 +249,7 @@ async def fetch_embed_key(
     if service == "note":
         return await _fetch_note_embed_key(session, url, article_key)
 
-    # YouTube/Twitter/Gist/noteマネー: use existing /v2/embed_by_external_api endpoint
+    # YouTube/Twitter/Gist/noteマネー/Zenn.dev: use /v2/embed_by_external_api endpoint
     params = {
         "url": url,
         "service": service,
@@ -275,9 +286,9 @@ def generate_embed_html_with_key(
     which enables proper iframe rendering by note.com's frontend.
 
     Args:
-        url: Original URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー).
+        url: Original URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー, Zenn.dev).
         embed_key: Server-registered embed key from fetch_embed_key().
-        service: Service type ('youtube', 'twitter', 'note', 'gist', 'oembed').
+        service: Service type ('youtube', 'twitter', 'note', 'gist', 'oembed', 'external-article').
                  If None, auto-detected from URL.
 
     Returns:

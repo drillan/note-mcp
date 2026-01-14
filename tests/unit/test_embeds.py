@@ -1266,6 +1266,264 @@ class TestFetchNoteEmbedKeyArticle6Compliance:
             assert html_for_embed == "<div>embed content</div>"
 
 
+class TestZennPattern:
+    """Tests for Zenn.dev article URL pattern (Issue #222)."""
+
+    def test_zenn_article_url(self) -> None:
+        """Test Zenn.dev article URL detection."""
+        from note_mcp.api.embeds import ZENN_PATTERN
+
+        # Valid Zenn article URLs
+        assert ZENN_PATTERN.match("https://zenn.dev/zenn/articles/markdown-guide")
+        assert ZENN_PATTERN.match("https://zenn.dev/user_name/articles/abc123def")
+        assert ZENN_PATTERN.match("http://zenn.dev/user/articles/article123")
+
+    def test_zenn_pattern_rejects_invalid_urls(self) -> None:
+        """Test that invalid URLs are rejected."""
+        from note_mcp.api.embeds import ZENN_PATTERN
+
+        # Wrong domain
+        assert not ZENN_PATTERN.match("https://example.com/user/articles/abc")
+        # Wrong path structure
+        assert not ZENN_PATTERN.match("https://zenn.dev/user")
+        assert not ZENN_PATTERN.match("https://zenn.dev/user/books/abc")
+        assert not ZENN_PATTERN.match("https://zenn.dev/user/scraps/abc")
+        # Missing article id
+        assert not ZENN_PATTERN.match("https://zenn.dev/user/articles/")
+        assert not ZENN_PATTERN.match("https://zenn.dev/user/articles")
+
+
+class TestGetEmbedServiceZenn:
+    """Tests for get_embed_service function with Zenn.dev URLs (Issue #222)."""
+
+    def test_get_embed_service_returns_external_article_for_zenn(self) -> None:
+        """Test that get_embed_service returns 'external-article' for Zenn URLs."""
+        from note_mcp.api.embeds import get_embed_service
+
+        assert get_embed_service("https://zenn.dev/zenn/articles/markdown-guide") == "external-article"
+        assert get_embed_service("https://zenn.dev/user/articles/abc123") == "external-article"
+
+
+class TestGenerateEmbedHtmlZenn:
+    """Tests for generate_embed_html function with Zenn.dev URLs (Issue #222)."""
+
+    def test_zenn_embed_structure(self) -> None:
+        """Test Zenn embed HTML structure."""
+        from note_mcp.api.embeds import generate_embed_html
+
+        url = "https://zenn.dev/zenn/articles/markdown-guide"
+        html = generate_embed_html(url)
+
+        # Verify required attributes
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="external-article"' in html
+        assert 'contenteditable="false"' in html
+        assert "embedded-content-key=" in html
+        assert "</figure>" in html
+
+
+class TestIsEmbedUrlZenn:
+    """Tests for is_embed_url function with Zenn.dev URLs (Issue #222)."""
+
+    def test_zenn_urls_are_embed_urls(self) -> None:
+        """Test that Zenn URLs are recognized as embed URLs."""
+        from note_mcp.api.embeds import is_embed_url
+
+        assert is_embed_url("https://zenn.dev/zenn/articles/markdown-guide") is True
+        assert is_embed_url("https://zenn.dev/user/articles/abc123") is True
+
+
+class TestZennPatternEdgeCases:
+    """Edge case tests for Zenn.dev article URL pattern (Issue #222)."""
+
+    def test_zenn_pattern_rejects_trailing_slash(self) -> None:
+        """Test that Zenn URLs with trailing slash are rejected.
+
+        Unlike Gist URLs, Zenn article URLs should not have trailing slashes.
+        """
+        from note_mcp.api.embeds import ZENN_PATTERN
+
+        # Trailing slash should be rejected
+        assert not ZENN_PATTERN.match("https://zenn.dev/user/articles/abc123/")
+        assert not ZENN_PATTERN.match("https://zenn.dev/zenn/articles/markdown-guide/")
+
+    def test_zenn_pattern_rejects_query_parameters(self) -> None:
+        """Test that Zenn URLs with query parameters are rejected.
+
+        Query parameters are not part of valid Zenn article URLs.
+        """
+        from note_mcp.api.embeds import ZENN_PATTERN
+
+        # Query parameters should be rejected
+        assert not ZENN_PATTERN.match("https://zenn.dev/user/articles/abc123?ref=twitter")
+        assert not ZENN_PATTERN.match("https://zenn.dev/zenn/articles/markdown-guide?utm_source=share")
+
+
+class TestFetchEmbedKeyZenn:
+    """Tests for fetch_embed_key function with Zenn.dev URLs (Issue #222)."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_zenn_embed_key_uses_v2_endpoint(self) -> None:
+        """Test that Zenn.dev URL uses GET /v2/embed_by_external_api endpoint."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        mock_response = {
+            "data": {
+                "key": "embzenn1234567890",
+                "html_for_embed": '<div class="iframely-embed">Zenn article preview</div>',
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            embed_key, html_for_embed = await fetch_embed_key(
+                session,
+                "https://zenn.dev/zenn/articles/markdown-guide",
+                "n1234567890ab",
+            )
+
+            # Should use GET /v2/embed_by_external_api (same as YouTube/Twitter)
+            mock_client.get.assert_called_once()
+            call_args = mock_client.get.call_args
+            assert "/v2/embed_by_external_api" in call_args[0][0]
+            # Verify POST was NOT called
+            mock_client.post.assert_not_called()
+            # Verify returned values
+            assert embed_key == "embzenn1234567890"
+            assert "iframely-embed" in html_for_embed
+
+    @pytest.mark.asyncio
+    async def test_fetch_zenn_embed_key_sends_correct_service(self) -> None:
+        """Test that Zenn embed sends 'external-article' as service type."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        mock_response = {
+            "data": {
+                "key": "embzenn123",
+                "html_for_embed": "<div>Zenn preview</div>",
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            await fetch_embed_key(
+                session,
+                "https://zenn.dev/user/articles/article123",
+                "narticlekey",
+            )
+
+            # Verify the params include service="external-article"
+            call_kwargs = mock_client.get.call_args[1]
+            params = call_kwargs.get("params", {})
+            assert params.get("service") == "external-article"
+
+
+class TestGenerateEmbedHtmlWithKeyZenn:
+    """Tests for generate_embed_html_with_key function with Zenn.dev URLs (Issue #222)."""
+
+    def test_zenn_embed_with_server_key(self) -> None:
+        """Test generating Zenn embed HTML with server-registered key."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://zenn.dev/zenn/articles/markdown-guide"
+        embed_key = "embzenn1234567890"
+        html = generate_embed_html_with_key(url, embed_key)
+
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="external-article"' in html
+        assert f'embedded-content-key="{embed_key}"' in html
+        assert 'contenteditable="false"' in html
+        assert "</figure>" in html
+
+    def test_zenn_embed_auto_detect_service(self) -> None:
+        """Test that service is auto-detected as 'external-article' for Zenn URLs."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://zenn.dev/user/articles/abc123"
+        html = generate_embed_html_with_key(url, "embtest123")
+
+        assert 'embedded-service="external-article"' in html
+
+
+class TestResolveEmbedKeysZenn:
+    """Tests for resolve_embed_keys function with Zenn.dev URLs (Issue #222)."""
+
+    @pytest.mark.asyncio
+    async def test_resolve_zenn_embed(self) -> None:
+        """Test resolving a Zenn.dev embed key."""
+        import time
+        from unittest.mock import patch
+
+        from note_mcp.api.embeds import resolve_embed_keys
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        # HTML with random embed key for Zenn article
+        html_body = (
+            '<p name="p1" id="p1">Check out this article:</p>'
+            '<figure name="fig1" id="fig1" '
+            'data-src="https://zenn.dev/zenn/articles/markdown-guide" '
+            'embedded-service="external-article" '
+            'embedded-content-key="embrandomzenn" '
+            'contenteditable="false"></figure>'
+        )
+
+        # Mock fetch_embed_key to return a server key
+        with patch("note_mcp.api.embeds.fetch_embed_key") as mock_fetch:
+            mock_fetch.return_value = ("embzennserver123", "<div>Zenn preview</div>")
+
+            result = await resolve_embed_keys(session, html_body, "n1234567890ab")
+
+            # Verify the key was replaced
+            assert 'embedded-content-key="embzennserver123"' in result
+            assert 'embedded-content-key="embrandomzenn"' not in result
+            mock_fetch.assert_called_once_with(
+                session,
+                "https://zenn.dev/zenn/articles/markdown-guide",
+                "n1234567890ab",
+            )
+
+
 class TestMoneyPattern:
     """Tests for noteマネー (stock chart) URL pattern."""
 
