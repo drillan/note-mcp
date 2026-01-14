@@ -2,6 +2,8 @@
 
 import time
 
+import pytest
+
 from note_mcp.models import (
     Article,
     ArticleInput,
@@ -11,6 +13,7 @@ from note_mcp.models import (
     NoteAPIError,
     Session,
     Tag,
+    from_api_response,
 )
 
 
@@ -251,3 +254,126 @@ class TestNoteAPIError:
             message="Rate limited, please wait",
         )
         assert str(error) == "Rate limited, please wait"
+
+
+class TestFromApiResponse:
+    """Tests for from_api_response function.
+
+    Article 6 (Data Accuracy Mandate) compliance tests:
+    - Required fields (id, key, status) must be present
+    - No implicit fallback to default values for required fields
+    """
+
+    def test_from_api_response_missing_id_raises_error(self) -> None:
+        """Test that missing 'id' field raises NoteAPIError."""
+        data: dict[str, object] = {
+            "key": "test-key",
+            "status": "draft",
+            "name": "Test Article",
+            "body": "<p>Content</p>",
+        }
+        with pytest.raises(NoteAPIError) as exc_info:
+            from_api_response(data)
+        assert exc_info.value.code == ErrorCode.API_ERROR
+        assert "id" in exc_info.value.message.lower()
+
+    def test_from_api_response_missing_key_raises_error(self) -> None:
+        """Test that missing 'key' field raises NoteAPIError."""
+        data: dict[str, object] = {
+            "id": "123",
+            "status": "draft",
+            "name": "Test Article",
+            "body": "<p>Content</p>",
+        }
+        with pytest.raises(NoteAPIError) as exc_info:
+            from_api_response(data)
+        assert exc_info.value.code == ErrorCode.API_ERROR
+        assert "key" in exc_info.value.message.lower()
+
+    def test_from_api_response_missing_status_raises_error(self) -> None:
+        """Test that missing 'status' field raises NoteAPIError."""
+        data: dict[str, object] = {
+            "id": "123",
+            "key": "test-key",
+            "name": "Test Article",
+            "body": "<p>Content</p>",
+        }
+        with pytest.raises(NoteAPIError) as exc_info:
+            from_api_response(data)
+        assert exc_info.value.code == ErrorCode.API_ERROR
+        assert "status" in exc_info.value.message.lower()
+
+    def test_from_api_response_invalid_status_raises_error(self) -> None:
+        """Test that invalid 'status' value raises NoteAPIError."""
+        data: dict[str, object] = {
+            "id": "123",
+            "key": "test-key",
+            "status": "",
+            "name": "Test Article",
+            "body": "<p>Content</p>",
+        }
+        with pytest.raises(NoteAPIError) as exc_info:
+            from_api_response(data)
+        assert exc_info.value.code == ErrorCode.API_ERROR
+        assert "status" in exc_info.value.message.lower()
+
+    def test_from_api_response_with_valid_data_succeeds(self) -> None:
+        """Test that valid API response data creates Article successfully."""
+        data: dict[str, object] = {
+            "id": "123",
+            "key": "test-article",
+            "status": "draft",
+            "name": "Test Article",
+            "body": "<p>Content</p>",
+            "hashtags": [
+                {"hashtag": {"name": "python"}},
+                {"hashtag": {"name": "programming"}},
+            ],
+        }
+        article = from_api_response(data)
+        assert article.id == "123"
+        assert article.key == "test-article"
+        assert article.title == "Test Article"
+        assert article.status == ArticleStatus.DRAFT
+        assert article.tags == ["python", "programming"]
+
+    def test_from_api_response_empty_body_is_valid(self) -> None:
+        """Test that empty body is a valid value (not a missing field)."""
+        data: dict[str, object] = {
+            "id": "123",
+            "key": "test-article",
+            "status": "draft",
+            "name": "Test Article",
+            "body": "",
+        }
+        article = from_api_response(data)
+        assert article.body == ""
+
+    def test_from_api_response_hashtag_without_name_is_skipped(self) -> None:
+        """Test that hashtags without name are silently skipped."""
+        data: dict[str, object] = {
+            "id": "123",
+            "key": "test-article",
+            "status": "draft",
+            "name": "Test",
+            "body": "",
+            "hashtags": [
+                {"hashtag": {"name": "valid"}},
+                {"hashtag": {}},
+                {"hashtag": {"name": ""}},
+            ],
+        }
+        article = from_api_response(data)
+        assert article.tags == ["valid"]
+
+    def test_from_api_response_title_from_note_draft(self) -> None:
+        """Test that title can be extracted from noteDraft.name for drafts."""
+        data: dict[str, object] = {
+            "id": "123",
+            "key": "test-article",
+            "status": "draft",
+            "body": "",
+            "noteDraft": {"name": "Draft Title"},
+        }
+        article = from_api_response(data)
+        assert article.title == "Draft Title"

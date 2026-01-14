@@ -179,12 +179,28 @@ async def _upload_image_internal(
     async with NoteAPIClient(session) as client:
         response = await client.post(endpoint, files=files, data=data)
 
-    # Parse response
+    # Parse response - Article 6: validate required fields, no fallback
     image_data = response.get("data", {})
 
+    image_key = image_data.get("key")
+    if not image_key:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Image upload failed: API response missing required field 'key'",
+            details={"response": response},
+        )
+
+    image_url = image_data.get("url")
+    if not image_url:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Image upload failed: API response missing required field 'url'",
+            details={"response": response},
+        )
+
     return Image(
-        key=image_data.get("key", ""),
-        url=image_data.get("url", ""),
+        key=str(image_key),
+        url=str(image_url),
         original_path=file_path,
         size_bytes=file_size,
         uploaded_at=int(time.time()),
@@ -270,17 +286,34 @@ async def upload_body_image(
     with open(file_path, "rb") as f:
         file_content = f.read()
 
+    # Article 6: Validate required S3 presigned POST fields
+    required_s3_fields = [
+        "key",
+        "policy",
+        "x-amz-credential",
+        "x-amz-algorithm",
+        "x-amz-date",
+        "x-amz-signature",
+    ]
+    for field in required_s3_fields:
+        if not post_fields.get(field):
+            raise NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message=f"Presigned POST missing required S3 field: {field}",
+                details={"response": response, "missing_field": field},
+            )
+
     # Build multipart form data with S3 required fields
     # Order matters for S3 - policy fields first, then file
     files_data: dict[str, tuple[None, str] | tuple[str, bytes, str]] = {
-        "key": (None, post_fields.get("key", "")),
-        "acl": (None, post_fields.get("acl", "")),
-        "Expires": (None, post_fields.get("Expires", "")),
-        "policy": (None, post_fields.get("policy", "")),
-        "x-amz-credential": (None, post_fields.get("x-amz-credential", "")),
-        "x-amz-algorithm": (None, post_fields.get("x-amz-algorithm", "")),
-        "x-amz-date": (None, post_fields.get("x-amz-date", "")),
-        "x-amz-signature": (None, post_fields.get("x-amz-signature", "")),
+        "key": (None, str(post_fields["key"])),
+        "acl": (None, str(post_fields.get("acl", ""))),
+        "Expires": (None, str(post_fields.get("Expires", ""))),
+        "policy": (None, str(post_fields["policy"])),
+        "x-amz-credential": (None, str(post_fields["x-amz-credential"])),
+        "x-amz-algorithm": (None, str(post_fields["x-amz-algorithm"])),
+        "x-amz-date": (None, str(post_fields["x-amz-date"])),
+        "x-amz-signature": (None, str(post_fields["x-amz-signature"])),
     }
 
     # Determine content type
@@ -306,8 +339,9 @@ async def upload_body_image(
                 details={"status": s3_response.status_code, "response": s3_response.text},
             )
 
+    # key is validated above in required_s3_fields check
     return Image(
-        key=post_fields.get("key", ""),
+        key=str(post_fields["key"]),
         url=image_url,
         original_path=file_path,
         size_bytes=file_size,

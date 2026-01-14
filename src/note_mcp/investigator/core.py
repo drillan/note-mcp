@@ -23,6 +23,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Timeout constants (Article 6: named constants for all timeouts)
+PROXY_STOP_TIMEOUT_SEC: int = 5  # Timeout for stopping proxy process
+PAGE_CLOSE_WAIT_TIMEOUT_MS: int = 0  # Immediate timeout for page close check
+MITMDUMP_READ_TIMEOUT_SEC: int = 30  # Timeout for reading mitmdump output
+PAGE_NAVIGATION_TIMEOUT_MS: int = 30000  # Timeout for page navigation
+
 
 @dataclass
 class CapturedRequest:
@@ -113,7 +119,7 @@ class ProxyManager:
         if self.process:
             self.process.terminate()
             try:
-                self.process.wait(timeout=5)
+                self.process.wait(timeout=PROXY_STOP_TIMEOUT_SEC)
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait()
@@ -277,7 +283,7 @@ class CaptureSession:
         if self._page:
             # Wait indefinitely for page close (suppress if page already closed)
             with contextlib.suppress(Exception):
-                await self._page.wait_for_event("close", timeout=0)
+                await self._page.wait_for_event("close", timeout=PAGE_CLOSE_WAIT_TIMEOUT_MS)
 
     async def close(self) -> None:
         """Close browser and stop proxy."""
@@ -411,7 +417,7 @@ class CaptureSession:
                 ],
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=MITMDUMP_READ_TIMEOUT_SEC,
             )
 
             # Parse output lines
@@ -633,7 +639,7 @@ async def run_capture_session(
         # Try to navigate, but don't fail if it times out
         # User can manually navigate if automatic navigation fails
         try:
-            await page.goto(initial_url, timeout=30000, wait_until="domcontentloaded")
+            await page.goto(initial_url, timeout=PAGE_NAVIGATION_TIMEOUT_MS, wait_until="domcontentloaded")
         except Exception as nav_error:
             import logging
 

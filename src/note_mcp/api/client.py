@@ -21,6 +21,10 @@ if TYPE_CHECKING:
 # API base URL
 NOTE_API_BASE = "https://note.com/api"
 
+# Editor origin and referer for mutating API requests
+NOTE_EDITOR_ORIGIN = "https://editor.note.com"
+NOTE_EDITOR_REFERER = "https://editor.note.com/"
+
 # Common User-Agent string for API requests
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
 
@@ -95,8 +99,8 @@ class NoteAPIClient:
                 if xsrf_token:
                     headers["X-XSRF-TOKEN"] = xsrf_token
                 # Required headers for editor API
-                headers["Origin"] = "https://editor.note.com"
-                headers["Referer"] = "https://editor.note.com/"
+                headers["Origin"] = NOTE_EDITOR_ORIGIN
+                headers["Referer"] = NOTE_EDITOR_REFERER
                 headers["X-Requested-With"] = "XMLHttpRequest"
                 # Sec-Fetch headers (browser security headers)
                 headers["Sec-Fetch-Site"] = "same-site"
