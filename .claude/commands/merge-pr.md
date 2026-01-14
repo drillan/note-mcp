@@ -119,7 +119,41 @@ gh pr view <PR番号> --json mergeable,mergeStateStatus
 PRの要件を確認してください。
 ```
 
-### Step 5: マージの実行
+### Step 5: メインリポジトリへの移動（worktree対応）
+
+**重要**: worktreeディレクトリ内で`gh pr merge --delete-branch`を実行すると、ローカルブランチ削除時に`main`にチェックアウトしようとして失敗する（`main`が別のworktreeで使用されているため）。マージ実行前にメインリポジトリに移動することで、この問題を回避する。
+
+#### 5.1 現在の作業ディレクトリを記録
+
+後処理でworktreeを削除するために、現在のパスを記録:
+
+```bash
+ORIGINAL_DIR=$(pwd)
+```
+
+#### 5.2 worktreeかどうかを判定
+
+```bash
+GIT_COMMON_DIR=$(git rev-parse --git-common-dir)
+```
+
+- メインリポジトリ: `.git` を返す
+- worktree: メインリポジトリの`.git`への絶対パスを返す（例: `/home/user/repo/note-mcp/.git`）
+
+#### 5.3 メインリポジトリに移動
+
+worktreeで作業している場合のみ移動:
+
+```bash
+if [ "$GIT_COMMON_DIR" != ".git" ]; then
+    # worktreeの場合、メインリポジトリに移動
+    MAIN_REPO=$(echo "$GIT_COMMON_DIR" | sed 's/\/.git$//')
+    cd "$MAIN_REPO"
+    echo "📂 メインリポジトリに移動しました: $MAIN_REPO"
+fi
+```
+
+### Step 6: マージの実行
 
 すべての条件を満たしたらマージを実行:
 
@@ -144,33 +178,11 @@ gh pr merge <PR番号> --rebase --delete-branch
 リモートブランチ: 削除済み
 ```
 
-### Step 6: 後処理
+### Step 7: 後処理
 
-**重要**: worktreeディレクトリ内で`git worktree remove`を実行するとカレントディレクトリが削除され、その後のgitコマンドが失敗する。必ず**メインリポジトリに移動してから**後処理を行う。
+Step 5でメインリポジトリに移動済みのため、そのまま後処理を実行する。
 
-#### 6.1 現在の作業ディレクトリを確認
-
-```bash
-# 現在のディレクトリがworktreeかどうかを確認
-git rev-parse --git-common-dir
-```
-
-- メインリポジトリ: `.git` を返す
-- worktree: メインリポジトリの`.git`への絶対パスを返す（例: `/home/user/repo/note-mcp/.git`）
-
-#### 6.2 メインリポジトリに移動
-
-worktreeで作業している場合は、まずメインリポジトリに移動:
-
-```bash
-# メインリポジトリのパスを取得
-MAIN_REPO=$(git rev-parse --git-common-dir | sed 's/\/.git$//')
-
-# メインリポジトリに移動
-cd "$MAIN_REPO"
-```
-
-#### 6.3 mainブランチに切り替え
+#### 7.1 mainブランチに切り替え
 
 ```bash
 # mainブランチに切り替え
@@ -180,31 +192,23 @@ git checkout main
 git pull origin main
 ```
 
-#### 6.4 worktreeの削除
+#### 7.2 worktreeの削除
 
-マージしたブランチに対応するworktreeがある場合は削除:
+Step 5.1で記録した`ORIGINAL_DIR`を使用して、元のworktreeを削除:
 
 ```bash
-# worktree一覧を取得
-git worktree list
+# ORIGINAL_DIRがworktreeだった場合のみ削除
+if [ "$ORIGINAL_DIR" != "$(pwd)" ]; then
+    # worktreeを削除
+    git worktree remove "$ORIGINAL_DIR"
+    echo "🧹 worktreeを削除しました: $ORIGINAL_DIR"
 
-# 対応するworktreeがあるか確認（ブランチ名で検索）
-# 例: feat/123-add-feature → ../note-mcp-feat-123-add-feature
-
-# worktreeがあれば削除（メインリポジトリから実行）
-git worktree remove <worktree-path>
-
-# staleなworktree参照をクリーンアップ
-git worktree prune
+    # staleなworktree参照をクリーンアップ
+    git worktree prune
+fi
 ```
 
-成功時:
-
-```
-🧹 worktreeを削除しました: ../note-mcp-feat-123-add-feature
-```
-
-#### 6.5 ローカルブランチの削除
+#### 7.3 ローカルブランチの削除
 
 worktree削除後にブランチを削除:
 
@@ -235,4 +239,5 @@ git branch -d <headRefName>
 - worktreeの自動削除は`.claude/git-conventions.md`の命名規則に基づいて検出する
 - CIが進行中の場合、`gh pr checks --watch`により完了まで待機する
 - すべてのチェックがパスしないとマージは実行されない
-- **後処理の順序が重要**: メインリポジトリに移動 → mainにチェックアウト → worktree削除 → ブランチ削除
+- **worktree対応**: マージ実行前にメインリポジトリに移動することで、`--delete-branch`がローカルブランチを正常に削除できる
+- **後処理の順序**: mainにチェックアウト → worktree削除 → ブランチ削除
