@@ -23,8 +23,19 @@ Use `gh` CLI to get review threads and comments. **Important**: Two different ID
 1. **Thread ID** (GraphQL node_id like `PRRT_xxx`): Used for resolving threads
 2. **Comment ID** (REST API numeric like `2604837472`): Used for replying to comments
 
+**Step 1a: Get repository information**
+
+First, get the owner and repository name. **Do NOT guess these values** - always retrieve them using the command below:
+
 ```bash
-# Step 1a: Get thread IDs (for resolving) via GraphQL
+gh repo view --json owner,name --jq '"\(.owner.login)/\(.name)"'
+```
+
+Use the output (e.g., `drillan/note-mcp`) for `{owner}` and `{repo}` in subsequent commands.
+Replace placeholders: `{owner}` → `drillan`, `{repo}` → `note-mcp`.
+
+```bash
+# Step 1b: Get thread IDs (for resolving) via GraphQL
 gh api graphql -f query='
 query {
   repository(owner: "{owner}", name: "{repo}") {
@@ -47,7 +58,7 @@ query {
   }
 }'
 
-# Step 1b: Get numeric comment IDs (for replying) via REST API
+# Step 1c: Get numeric comment IDs (for replying) via REST API
 gh api repos/{owner}/{repo}/pulls/$ARGUMENTS/comments --jq '.[] | "\(.id) \(.path):\(.line) \(.user.login)"'
 ```
 
