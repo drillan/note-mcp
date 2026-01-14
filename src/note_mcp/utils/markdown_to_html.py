@@ -16,6 +16,7 @@ from note_mcp.api.embeds import (
     NOTE_PATTERN,
     TWITTER_PATTERN,
     YOUTUBE_PATTERN,
+    ZENN_PATTERN,
     generate_embed_html,
     get_embed_service,
 )
@@ -185,7 +186,7 @@ def _restore_code_blocks(content: str, blocks: list[tuple[str, str]]) -> str:
 def has_embed_url(content: str) -> bool:
     """Check if content contains URLs that should be embedded.
 
-    Detects YouTube, Twitter/X, note.com article, GitHub Gist, and noteマネー URLs
+    Detects YouTube, Twitter/X, note.com article, GitHub Gist, noteマネー, and Zenn.dev URLs
     that appear alone on a line (indicating they should be embedded, not linked).
 
     Args:
@@ -204,6 +205,7 @@ def has_embed_url(content: str) -> bool:
             or NOTE_PATTERN.match(url)
             or GIST_PATTERN.match(url)
             or MONEY_PATTERN.match(url)
+            or ZENN_PATTERN.match(url)
         ):
             return True
     return False

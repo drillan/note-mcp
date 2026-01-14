@@ -1266,6 +1266,74 @@ class TestFetchNoteEmbedKeyArticle6Compliance:
             assert html_for_embed == "<div>embed content</div>"
 
 
+class TestZennPattern:
+    """Tests for Zenn.dev article URL pattern (Issue #222)."""
+
+    def test_zenn_article_url(self) -> None:
+        """Test Zenn.dev article URL detection."""
+        from note_mcp.api.embeds import ZENN_PATTERN
+
+        # Valid Zenn article URLs
+        assert ZENN_PATTERN.match("https://zenn.dev/zenn/articles/markdown-guide")
+        assert ZENN_PATTERN.match("https://zenn.dev/user_name/articles/abc123def")
+        assert ZENN_PATTERN.match("http://zenn.dev/user/articles/article123")
+
+    def test_zenn_pattern_rejects_invalid_urls(self) -> None:
+        """Test that invalid URLs are rejected."""
+        from note_mcp.api.embeds import ZENN_PATTERN
+
+        # Wrong domain
+        assert not ZENN_PATTERN.match("https://example.com/user/articles/abc")
+        # Wrong path structure
+        assert not ZENN_PATTERN.match("https://zenn.dev/user")
+        assert not ZENN_PATTERN.match("https://zenn.dev/user/books/abc")
+        assert not ZENN_PATTERN.match("https://zenn.dev/user/scraps/abc")
+        # Missing article id
+        assert not ZENN_PATTERN.match("https://zenn.dev/user/articles/")
+        assert not ZENN_PATTERN.match("https://zenn.dev/user/articles")
+
+
+class TestGetEmbedServiceZenn:
+    """Tests for get_embed_service function with Zenn.dev URLs (Issue #222)."""
+
+    def test_get_embed_service_returns_external_article_for_zenn(self) -> None:
+        """Test that get_embed_service returns 'external-article' for Zenn URLs."""
+        from note_mcp.api.embeds import get_embed_service
+
+        assert get_embed_service("https://zenn.dev/zenn/articles/markdown-guide") == "external-article"
+        assert get_embed_service("https://zenn.dev/user/articles/abc123") == "external-article"
+
+
+class TestGenerateEmbedHtmlZenn:
+    """Tests for generate_embed_html function with Zenn.dev URLs (Issue #222)."""
+
+    def test_zenn_embed_structure(self) -> None:
+        """Test Zenn embed HTML structure."""
+        from note_mcp.api.embeds import generate_embed_html
+
+        url = "https://zenn.dev/zenn/articles/markdown-guide"
+        html = generate_embed_html(url)
+
+        # Verify required attributes
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="external-article"' in html
+        assert 'contenteditable="false"' in html
+        assert "embedded-content-key=" in html
+        assert "</figure>" in html
+
+
+class TestIsEmbedUrlZenn:
+    """Tests for is_embed_url function with Zenn.dev URLs (Issue #222)."""
+
+    def test_zenn_urls_are_embed_urls(self) -> None:
+        """Test that Zenn URLs are recognized as embed URLs."""
+        from note_mcp.api.embeds import is_embed_url
+
+        assert is_embed_url("https://zenn.dev/zenn/articles/markdown-guide") is True
+        assert is_embed_url("https://zenn.dev/user/articles/abc123") is True
+
+
 class TestMoneyPattern:
     """Tests for noteマネー (stock chart) URL pattern."""
 

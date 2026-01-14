@@ -824,6 +824,40 @@ https://gist.github.com/defunkt/2059
         assert has_embed_url("https://money.note.com/indices/NKY") is True
         assert has_embed_url("https://money.note.com/investments/0331418A") is True
 
+    def test_zenn_url_detected(self) -> None:
+        """Zenn.devのURLが検出される (Issue #222)"""
+        assert has_embed_url("https://zenn.dev/zenn/articles/markdown-guide") is True
+        assert has_embed_url("https://zenn.dev/user/articles/abc123") is True
+
+
+class TestZennEmbedUrlConversion:
+    """Zenn.dev記事埋め込みURL変換のテスト (Issue #222)."""
+
+    def test_zenn_url_becomes_embed(self) -> None:
+        """Zenn.devの記事URLは埋め込みに変換される."""
+        markdown = "https://zenn.dev/zenn/articles/markdown-guide"
+        result = markdown_to_html(markdown)
+
+        assert "<figure" in result
+        assert 'embedded-service="external-article"' in result
+        assert 'data-src="https://zenn.dev/zenn/articles/markdown-guide"' in result
+        assert "embedded-content-key=" in result
+
+    def test_zenn_url_with_surrounding_text(self) -> None:
+        """テキストに囲まれたZenn URLも変換される."""
+        markdown = """テスト文章です。
+
+https://zenn.dev/zenn/articles/markdown-guide
+
+テスト続きです。"""
+        result = markdown_to_html(markdown)
+
+        assert "<figure" in result
+        assert 'embedded-service="external-article"' in result
+        # 前後のテキストも保持される
+        assert "テスト文章です" in result
+        assert "テスト続きです" in result
+
 
 class TestStockNotationConversion:
     """Tests for stock notation conversion (^5243, $GOOG)."""
