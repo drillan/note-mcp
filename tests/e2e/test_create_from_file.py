@@ -476,9 +476,15 @@ Body content.
             upload_images=True,
         )
 
-        # Assert
-        assert "下書きを作成しました" in result
-        assert "画像アップロード失敗" in result or "ファイルが見つかりません" in result
+        # Extract key before assertions for cleanup
+        article_key = extract_article_key(result)
+        try:
+            # Assert
+            assert "下書きを作成しました" in result
+            assert "画像アップロード失敗" in result or "ファイルが見つかりません" in result
+        finally:
+            # Issue #210: Clean up created article
+            await delete_draft_with_retry(real_session, article_key)
 
 
 class TestCreateFromFileNotAuthenticated:
