@@ -20,6 +20,7 @@ from playwright.async_api import async_playwright
 from note_mcp.api.articles import build_preview_url, get_preview_access_token
 from note_mcp.browser.config import get_headless_mode
 
+from .cleanup import delete_draft_with_retry
 from .constants import (
     DEFAULT_ELEMENT_WAIT_TIMEOUT_MS,
     DEFAULT_NAVIGATION_TIMEOUT_MS,
@@ -173,6 +174,7 @@ async def preview_page_context(
     article_key: str,
     *,
     headless: bool | None = None,
+    cleanup_article: bool = False,
 ) -> AsyncGenerator[Page]:
     """Open preview page with automatic browser lifecycle management.
 
@@ -186,6 +188,11 @@ async def preview_page_context(
         headless: Whether to run browser in headless mode.
             Default: True (from NOTE_MCP_TEST_HEADLESS env var).
             Set NOTE_MCP_TEST_HEADLESS=false to show browser window.
+        cleanup_article: Whether to delete the article after context exit.
+            Default: False. Set to True to automatically delete the article
+            when the context manager exits. This is useful for tests that
+            create articles via note_create_from_file and need cleanup.
+            Issue #200: Added to fix incomplete test cleanup.
 
     Yields:
         Playwright Page for the preview
@@ -198,6 +205,14 @@ async def preview_page_context(
         async with preview_page_context(session, article_key) as preview_page:
             validator = PreviewValidator(preview_page)
             result = await validator.validate_toc()
+
+        # With automatic article cleanup:
+        async with preview_page_context(
+            session, article_key, cleanup_article=True
+        ) as preview_page:
+            validator = PreviewValidator(preview_page)
+            result = await validator.validate_toc()
+        # Article is automatically deleted after context exit
     """
     if headless is None:
         headless = _get_headless_default()
@@ -216,3 +231,7 @@ async def preview_page_context(
         await context.close()
         await browser.close()
         await playwright.stop()
+
+        # Issue #200: Clean up article if requested
+        if cleanup_article:
+            await delete_draft_with_retry(session, article_key)

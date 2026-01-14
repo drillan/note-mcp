@@ -18,13 +18,14 @@ import pytest
 import pytest_asyncio
 from playwright.async_api import Error as PlaywrightError
 
-from note_mcp.api.articles import create_draft, delete_draft
+from note_mcp.api.articles import create_draft
 from note_mcp.api.preview import get_preview_html
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
 from note_mcp.browser.config import get_headless_mode
 from note_mcp.browser.manager import BrowserManager
 from note_mcp.models import Article, ArticleInput, LoginError, NoteAPIError, Session
+from tests.e2e.helpers.cleanup import delete_draft_with_retry
 from tests.e2e.helpers.constants import (
     DEFAULT_ELEMENT_WAIT_TIMEOUT_MS,
     DEFAULT_NAVIGATION_TIMEOUT_MS,
@@ -192,18 +193,8 @@ async def draft_article(
 
     yield article
 
-    # Cleanup: Best-effort deletion
-    try:
-        await delete_draft(real_session, article.key, confirm=True)
-        logger.debug("Deleted test article: %s", article.key)
-    except Exception as e:
-        # Don't fail the test if cleanup fails
-        logger.warning(
-            "Failed to delete test article %s: %s: %s",
-            article.key,
-            type(e).__name__,
-            e,
-        )
+    # Cleanup: Best-effort deletion with retry (Issue #200)
+    await delete_draft_with_retry(real_session, article.key)
 
 
 async def _inject_session_cookies(page: Page, session: Session) -> None:

@@ -21,6 +21,7 @@ from note_mcp.server import note_create_from_file
 from tests.e2e.helpers import (
     ImageValidator,
     PreviewValidator,
+    delete_draft_with_retry,
     extract_article_key,
     preview_page_context,
 )
@@ -235,6 +236,10 @@ class TestCreateFromFile:
         assert "記事ID:" in result
         assert "記事キー:" in result
 
+        # Cleanup (Issue #200)
+        article_key = extract_article_key(result)
+        await delete_draft_with_retry(real_session, article_key)
+
     async def test_create_from_h1_only_file(
         self,
         real_session: Session,
@@ -250,6 +255,10 @@ class TestCreateFromFile:
         assert "下書きを作成しました" in result
         assert "[E2E-TEST] H1 Title Only" in result
         assert "記事ID:" in result
+
+        # Cleanup (Issue #200)
+        article_key = extract_article_key(result)
+        await delete_draft_with_retry(real_session, article_key)
 
     async def test_create_from_toc_file(
         self,
@@ -270,10 +279,10 @@ class TestCreateFromFile:
         assert "[E2E-TEST] TOC Article" in result
         assert "記事ID:" in result
 
-        # Validate preview page
+        # Validate preview page and cleanup (Issue #200)
         article_key = extract_article_key(result)
 
-        async with preview_page_context(real_session, article_key) as preview_page:
+        async with preview_page_context(real_session, article_key, cleanup_article=True) as preview_page:
             validator = PreviewValidator(preview_page)
             toc_result = await validator.validate_toc()
             assert toc_result.success, f"TOC validation failed: {toc_result.message}"
@@ -294,10 +303,10 @@ class TestCreateFromFile:
         assert "[E2E-TEST] Article with Math" in result
         assert "記事ID:" in result
 
-        # Validate preview page
+        # Validate preview page and cleanup (Issue #200)
         article_key = extract_article_key(result)
 
-        async with preview_page_context(real_session, article_key) as preview_page:
+        async with preview_page_context(real_session, article_key, cleanup_article=True) as preview_page:
             validator = PreviewValidator(preview_page)
 
             # Verify math is rendered by KaTeX
@@ -328,10 +337,10 @@ class TestCreateFromFile:
         assert "[E2E-TEST] Article with Image" in result
         assert "アップロードした画像: 1件" in result
 
-        # Validate preview page
+        # Validate preview page and cleanup (Issue #200)
         article_key = extract_article_key(result)
 
-        async with preview_page_context(real_session, article_key) as preview_page:
+        async with preview_page_context(real_session, article_key, cleanup_article=True) as preview_page:
             image_validator = ImageValidator(preview_page)
 
             # Verify image is displayed on preview page
@@ -360,6 +369,10 @@ class TestCreateFromFile:
         # Should NOT contain image upload message
         assert "アップロードした画像" not in result
 
+        # Cleanup (Issue #200)
+        article_key = extract_article_key(result)
+        await delete_draft_with_retry(real_session, article_key)
+
     async def test_create_from_toc_and_image_file(
         self,
         real_session: Session,
@@ -381,10 +394,10 @@ class TestCreateFromFile:
         assert "[E2E-TEST] TOC with Image" in result
         assert "アップロードした画像: 1件" in result
 
-        # Validate preview page
+        # Validate preview page and cleanup (Issue #200)
         article_key = extract_article_key(result)
 
-        async with preview_page_context(real_session, article_key) as preview_page:
+        async with preview_page_context(real_session, article_key, cleanup_article=True) as preview_page:
             preview_validator = PreviewValidator(preview_page)
             image_validator = ImageValidator(preview_page)
 
