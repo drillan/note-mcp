@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Article 6**: Data Accuracy Mandate - 推測・ハードコード禁止
 - **Article 7**: DRY Principle - コード重複禁止
 - **Article 9**: Python Type Safety Mandate - 包括的な型注釈必須
-- **Article 11**: SpecKit Naming Convention - 標準化された命名規則
+- **Article 11**: Naming Convention Compliance - 命名規則への準拠（詳細: `.claude/git-conventions.md`）
 
 実装前に必ず constitution を確認してください。
 
@@ -262,21 +262,9 @@ issue対応時は以下のワークフローに従う。
 | 6 | レビューコメント対応 | `/review-pr-comments` |
 | 7 | PRマージ | GitHub上で手動マージ |
 
-**ブランチ命名規則:**
+**ブランチ・コミット・worktree命名規則:**
 
-| タイプ | プレフィックス | 例 |
-|-------|--------------|-----|
-| 機能追加 | `feat/` | `feat/123-add-user-authentication` |
-| バグ修正 | `fix/` | `fix/456-fix-login-error` |
-| リファクタリング | `refactor/` | `refactor/789-cleanup-api` |
-| ドキュメント | `docs/` | `docs/101-update-readme` |
-| テスト | `test/` | `test/111-add-e2e-tests` |
-| 雑務 | `chore/` | `chore/222-update-dependencies` |
-
-**注意:**
-- 既存のブランチがある場合はそちらを使用
-- `<説明>`は英語で、ハイフン区切りの短い説明（2-4語）
-- `/start-issue`はissueのラベルまたは内容からブランチタイプを自動判別
+@.claude/git-conventions.md
 
 **進捗記録（issue-reporter）:**
 
