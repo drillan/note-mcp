@@ -445,7 +445,7 @@ class TestGetArticleRawHtml:
 
             result = await get_article_raw_html(session, "n12345abcdef")
 
-            mock_client.get.assert_called_once_with("/v3/notes/n12345abcdef")
+            mock_client.get.assert_called_once_with("/v3/notes/n12345abcdef", params=None)
             assert result.id == "12345"
 
 
