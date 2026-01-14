@@ -202,3 +202,167 @@ class TestNoteCreateFromFile:
             # Verify the result indicates success without image info
             assert "✅" in result
             assert "アップロードした画像" not in result
+
+    @pytest.mark.asyncio
+    async def test_eyecatch_image_upload(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """eyecatch画像が指定されている場合、アップロードされる。"""
+        # Create a test markdown file with eyecatch
+        md_file = tmp_path / "test.md"
+        md_file.write_text("---\ntitle: Test\neyecatch: ./header.png\n---\n\nBody")
+
+        # Create a test eyecatch image file
+        eyecatch_image = tmp_path / "header.png"
+        eyecatch_image.write_bytes(b"fake png data")
+
+        mock_session = MagicMock()
+        mock_article = Article(
+            id="123456789",
+            key="n1234567890ab",
+            title="Test",
+            status=ArticleStatus.DRAFT,
+            body="",
+        )
+        mock_parsed = ParsedArticle(
+            title="Test",
+            body="Body",
+            tags=[],
+            local_images=[],
+            eyecatch=eyecatch_image,
+        )
+        mock_eyecatch_result = Image(
+            key="eyecatch_key",
+            url="https://assets.st-note.com/eyecatch.png",
+            original_path=str(eyecatch_image),
+            uploaded_at=1234567890,
+            image_type=ImageType.EYECATCH,
+        )
+
+        with (
+            patch("note_mcp.server._session_manager") as mock_session_manager,
+            patch("note_mcp.server.parse_markdown_file") as mock_parse,
+            patch("note_mcp.server.create_draft", new_callable=AsyncMock) as mock_create,
+            patch("note_mcp.server.upload_eyecatch_image", new_callable=AsyncMock) as mock_upload_eyecatch,
+        ):
+            mock_session_manager.load.return_value = mock_session
+            mock_parse.return_value = mock_parsed
+            mock_create.return_value = mock_article
+            mock_upload_eyecatch.return_value = mock_eyecatch_result
+
+            from note_mcp.server import note_create_from_file
+
+            fn = note_create_from_file.fn
+            result = await fn(str(md_file), upload_images=True)
+
+            # upload_eyecatch_imageが呼ばれることを確認
+            mock_upload_eyecatch.assert_called_once()
+            call_args = mock_upload_eyecatch.call_args[0]
+            assert call_args[1] == str(eyecatch_image)  # file_path
+            assert call_args[2] == "123456789"  # note_id
+
+            # 結果にアイキャッチ成功メッセージが含まれる
+            assert "✅" in result
+            assert "アイキャッチ画像: アップロード完了" in result
+
+    @pytest.mark.asyncio
+    async def test_eyecatch_not_uploaded_when_upload_images_false(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """upload_images=Falseの場合、eyecatch画像もアップロードされない。"""
+        md_file = tmp_path / "test.md"
+        md_file.write_text("---\ntitle: Test\neyecatch: ./header.png\n---\n\nBody")
+
+        eyecatch_image = tmp_path / "header.png"
+        eyecatch_image.write_bytes(b"fake png data")
+
+        mock_session = MagicMock()
+        mock_article = Article(
+            id="123456789",
+            key="n1234567890ab",
+            title="Test",
+            status=ArticleStatus.DRAFT,
+            body="",
+        )
+        mock_parsed = ParsedArticle(
+            title="Test",
+            body="Body",
+            tags=[],
+            local_images=[],
+            eyecatch=eyecatch_image,
+        )
+
+        with (
+            patch("note_mcp.server._session_manager") as mock_session_manager,
+            patch("note_mcp.server.parse_markdown_file") as mock_parse,
+            patch("note_mcp.server.create_draft", new_callable=AsyncMock) as mock_create,
+            patch("note_mcp.server.upload_eyecatch_image", new_callable=AsyncMock) as mock_upload_eyecatch,
+        ):
+            mock_session_manager.load.return_value = mock_session
+            mock_parse.return_value = mock_parsed
+            mock_create.return_value = mock_article
+
+            from note_mcp.server import note_create_from_file
+
+            fn = note_create_from_file.fn
+            result = await fn(str(md_file), upload_images=False)
+
+            # upload_eyecatch_imageが呼ばれないことを確認
+            mock_upload_eyecatch.assert_not_called()
+
+            # 結果にアイキャッチメッセージが含まれない
+            assert "✅" in result
+            assert "アイキャッチ画像" not in result
+
+    @pytest.mark.asyncio
+    async def test_eyecatch_file_not_found(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """eyecatchファイルが存在しない場合、エラーメッセージが表示される。"""
+        md_file = tmp_path / "test.md"
+        md_file.write_text("---\ntitle: Test\neyecatch: ./missing.png\n---\n\nBody")
+
+        # eyecatchファイルは作成しない（存在しない）
+        missing_eyecatch = tmp_path / "missing.png"
+
+        mock_session = MagicMock()
+        mock_article = Article(
+            id="123456789",
+            key="n1234567890ab",
+            title="Test",
+            status=ArticleStatus.DRAFT,
+            body="",
+        )
+        mock_parsed = ParsedArticle(
+            title="Test",
+            body="Body",
+            tags=[],
+            local_images=[],
+            eyecatch=missing_eyecatch,  # 存在しないファイル
+        )
+
+        with (
+            patch("note_mcp.server._session_manager") as mock_session_manager,
+            patch("note_mcp.server.parse_markdown_file") as mock_parse,
+            patch("note_mcp.server.create_draft", new_callable=AsyncMock) as mock_create,
+            patch("note_mcp.server.upload_eyecatch_image", new_callable=AsyncMock) as mock_upload_eyecatch,
+        ):
+            mock_session_manager.load.return_value = mock_session
+            mock_parse.return_value = mock_parsed
+            mock_create.return_value = mock_article
+
+            from note_mcp.server import note_create_from_file
+
+            fn = note_create_from_file.fn
+            result = await fn(str(md_file), upload_images=True)
+
+            # upload_eyecatch_imageが呼ばれないことを確認
+            mock_upload_eyecatch.assert_not_called()
+
+            # 結果にエラーメッセージが含まれる
+            assert "✅" in result  # 記事作成自体は成功
+            assert "⚠️ アイキャッチ画像アップロード失敗" in result
+            assert "ファイルが見つかりません" in result

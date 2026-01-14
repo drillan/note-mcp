@@ -456,3 +456,124 @@ Second paragraph.
         assert "Second paragraph." in result.body
         # There should be a blank line between paragraphs
         assert "First paragraph.\n\nSecond paragraph." in result.body
+
+
+class TestEyecatchParsing:
+    """Tests for eyecatch image parsing from YAML frontmatter."""
+
+    def test_parse_with_eyecatch_relative_path(self, tmp_path: Path) -> None:
+        """Should extract eyecatch path from YAML frontmatter."""
+        from note_mcp.utils.file_parser import parse_markdown_file
+
+        content = """---
+title: Test Title
+eyecatch: ./images/header.png
+---
+
+Body content.
+"""
+        md_file = tmp_path / "test.md"
+        md_file.write_text(content, encoding="utf-8")
+
+        result = parse_markdown_file(md_file)
+
+        assert result.eyecatch is not None
+        assert result.eyecatch == tmp_path / "images" / "header.png"
+
+    def test_parse_with_eyecatch_and_tags(self, tmp_path: Path) -> None:
+        """Should extract eyecatch along with title and tags."""
+        from note_mcp.utils.file_parser import parse_markdown_file
+
+        content = """---
+title: Article Title
+tags: [Python, MCP]
+eyecatch: ./images/eyecatch.jpg
+---
+
+This is the body.
+"""
+        md_file = tmp_path / "test.md"
+        md_file.write_text(content, encoding="utf-8")
+
+        result = parse_markdown_file(md_file)
+
+        assert result.title == "Article Title"
+        assert result.tags == ["Python", "MCP"]
+        assert result.eyecatch == tmp_path / "images" / "eyecatch.jpg"
+
+    def test_parse_without_eyecatch(self, tmp_path: Path) -> None:
+        """Should have None eyecatch when not specified."""
+        from note_mcp.utils.file_parser import parse_markdown_file
+
+        content = """---
+title: Test Title
+---
+
+Body content.
+"""
+        md_file = tmp_path / "test.md"
+        md_file.write_text(content, encoding="utf-8")
+
+        result = parse_markdown_file(md_file)
+
+        assert result.eyecatch is None
+
+    def test_parse_with_empty_eyecatch(self, tmp_path: Path) -> None:
+        """Should have None eyecatch when value is empty string."""
+        from note_mcp.utils.file_parser import parse_markdown_file
+
+        content = """---
+title: Test Title
+eyecatch: ""
+---
+
+Body content.
+"""
+        md_file = tmp_path / "test.md"
+        md_file.write_text(content, encoding="utf-8")
+
+        result = parse_markdown_file(md_file)
+
+        assert result.eyecatch is None
+
+    def test_parse_eyecatch_with_parent_directory(self, tmp_path: Path) -> None:
+        """Should resolve eyecatch path with parent directory reference."""
+        from note_mcp.utils.file_parser import parse_markdown_file
+
+        content = """---
+title: Test Title
+eyecatch: ../shared/header.png
+---
+
+Body content.
+"""
+        subdir = tmp_path / "articles"
+        subdir.mkdir()
+        md_file = subdir / "test.md"
+        md_file.write_text(content, encoding="utf-8")
+
+        result = parse_markdown_file(md_file)
+
+        assert result.eyecatch is not None
+        assert result.eyecatch == (subdir / ".." / "shared" / "header.png").resolve()
+
+    def test_parsed_article_eyecatch_default(self) -> None:
+        """ParsedArticle should have None eyecatch by default."""
+        from note_mcp.utils.file_parser import ParsedArticle
+
+        article = ParsedArticle(title="Title", body="Body")
+
+        assert article.eyecatch is None
+
+    def test_parsed_article_with_eyecatch(self) -> None:
+        """ParsedArticle should store eyecatch path correctly."""
+        from note_mcp.utils.file_parser import ParsedArticle
+
+        eyecatch_path = Path("/path/to/eyecatch.png")
+        article = ParsedArticle(
+            title="Title",
+            body="Body",
+            eyecatch=eyecatch_path,
+        )
+
+        assert article.eyecatch == eyecatch_path
