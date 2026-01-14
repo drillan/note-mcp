@@ -1,7 +1,7 @@
 """Embed URL detection and HTML generation for note.com.
 
 This module provides functions for detecting embed URLs (YouTube, Twitter, note.com,
-GitHub Gist) and generating the required HTML structure for note.com embeds.
+GitHub Gist, noteマネー) and generating the required HTML structure for note.com embeds.
 
 This is the single source of truth for embed URL patterns (DRY principle).
 
@@ -42,6 +42,10 @@ NOTE_PATTERN = re.compile(r"^https?://note\.com/\w+/n/\w+$")
 # GitHub Gist: gist.github.com/user/gist_id (with optional trailing slash and file fragment)
 GIST_PATTERN = re.compile(r"^https?://gist\.github\.com/[\w-]+/[\w]+/?(?:#[\w-]+)?$")
 
+# noteマネー (stock chart): money.note.com/companies|us_companies|indices|investments/xxx
+# Supports Japanese stocks, US stocks, indices, and investment trusts
+MONEY_PATTERN = re.compile(r"^https?://money\.note\.com/(companies|us_companies|indices|investments)/[\w-]+/?$")
+
 
 def get_embed_service(url: str) -> str | None:
     """Get embed service type from URL.
@@ -50,7 +54,7 @@ def get_embed_service(url: str) -> str | None:
         url: The URL to check.
 
     Returns:
-        Service type ('youtube', 'twitter', 'note', 'gist') or None if unsupported.
+        Service type ('youtube', 'twitter', 'note', 'gist', 'money') or None if unsupported.
     """
     if YOUTUBE_PATTERN.match(url):
         return "youtube"
@@ -60,6 +64,8 @@ def get_embed_service(url: str) -> str | None:
         return "note"
     if GIST_PATTERN.match(url):
         return "gist"
+    if MONEY_PATTERN.match(url):
+        return "money"
     return None
 
 
@@ -86,9 +92,9 @@ def _build_embed_figure_html(
     This is the single source of truth for embed figure HTML format (DRY).
 
     Args:
-        url: Original URL (YouTube, Twitter, note.com, GitHub Gist).
+        url: Original URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー).
         embed_key: Embed key (random for placeholder, server-registered for final).
-        service: Service type ('youtube', 'twitter', 'note', 'gist').
+        service: Service type ('youtube', 'twitter', 'note', 'gist', 'money').
 
     Returns:
         HTML figure element string.
@@ -119,8 +125,8 @@ def generate_embed_html(url: str, service: str | None = None) -> str:
     during markdown-to-html conversion (key is replaced later via API).
 
     Args:
-        url: Original URL (YouTube, Twitter, note.com, GitHub Gist).
-        service: Service type ('youtube', 'twitter', 'note', 'gist').
+        url: Original URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー).
+        service: Service type ('youtube', 'twitter', 'note', 'gist', 'money').
                  If None, auto-detected from URL.
 
     Returns:
@@ -207,11 +213,11 @@ async def fetch_embed_key(
 
     Issue #121: Different endpoints are used for different services:
     - note.com articles: POST /v1/embed
-    - YouTube/Twitter/GitHub Gist: GET /v2/embed_by_external_api
+    - YouTube/Twitter/GitHub Gist/noteマネー: GET /v2/embed_by_external_api
 
     Args:
         session: Authenticated session with valid cookies.
-        url: Embed URL (YouTube, Twitter, note.com, GitHub Gist).
+        url: Embed URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー).
         article_key: Article key where the embed will be inserted
                      (e.g., "n1234567890ab").
 
@@ -232,7 +238,7 @@ async def fetch_embed_key(
     if service == "note":
         return await _fetch_note_embed_key(session, url, article_key)
 
-    # YouTube/Twitter/Gist: use existing /v2/embed_by_external_api endpoint
+    # YouTube/Twitter/Gist/Money: use existing /v2/embed_by_external_api endpoint
     params = {
         "url": url,
         "service": service,
@@ -269,9 +275,9 @@ def generate_embed_html_with_key(
     which enables proper iframe rendering by note.com's frontend.
 
     Args:
-        url: Original URL (YouTube, Twitter, note.com, GitHub Gist).
+        url: Original URL (YouTube, Twitter, note.com, GitHub Gist, noteマネー).
         embed_key: Server-registered embed key from fetch_embed_key().
-        service: Service type ('youtube', 'twitter', 'note', 'gist').
+        service: Service type ('youtube', 'twitter', 'note', 'gist', 'money').
                  If None, auto-detected from URL.
 
     Returns:

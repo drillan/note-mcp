@@ -1264,3 +1264,156 @@ class TestFetchNoteEmbedKeyArticle6Compliance:
 
             assert embed_key == "emb123456789"
             assert html_for_embed == "<div>embed content</div>"
+
+
+class TestMoneyPattern:
+    """Tests for noteマネー (stock chart) URL pattern."""
+
+    def test_money_companies_url(self) -> None:
+        """Test Japanese stock URL detection (companies)."""
+        from note_mcp.api.embeds import MONEY_PATTERN
+
+        # Valid Japanese stock URLs
+        assert MONEY_PATTERN.match("https://money.note.com/companies/5243")
+        assert MONEY_PATTERN.match("https://money.note.com/companies/7203")
+        assert MONEY_PATTERN.match("http://money.note.com/companies/5243")
+        # With trailing slash
+        assert MONEY_PATTERN.match("https://money.note.com/companies/5243/")
+
+    def test_money_us_companies_url(self) -> None:
+        """Test US stock URL detection (us_companies)."""
+        from note_mcp.api.embeds import MONEY_PATTERN
+
+        # Valid US stock URLs
+        assert MONEY_PATTERN.match("https://money.note.com/us_companies/GOOG")
+        assert MONEY_PATTERN.match("https://money.note.com/us_companies/AAPL")
+        assert MONEY_PATTERN.match("https://money.note.com/us_companies/MSFT")
+        # With trailing slash
+        assert MONEY_PATTERN.match("https://money.note.com/us_companies/GOOG/")
+
+    def test_money_indices_url(self) -> None:
+        """Test index URL detection (indices)."""
+        from note_mcp.api.embeds import MONEY_PATTERN
+
+        # Valid index URLs
+        assert MONEY_PATTERN.match("https://money.note.com/indices/NKY")
+        assert MONEY_PATTERN.match("https://money.note.com/indices/TOPX")
+        assert MONEY_PATTERN.match("https://money.note.com/indices/SPX")
+        # With trailing slash
+        assert MONEY_PATTERN.match("https://money.note.com/indices/NKY/")
+
+    def test_money_investments_url(self) -> None:
+        """Test investment trust URL detection (investments)."""
+        from note_mcp.api.embeds import MONEY_PATTERN
+
+        # Valid investment trust URLs
+        assert MONEY_PATTERN.match("https://money.note.com/investments/0331418A")
+        assert MONEY_PATTERN.match("https://money.note.com/investments/abc123")
+        # With trailing slash
+        assert MONEY_PATTERN.match("https://money.note.com/investments/0331418A/")
+
+    def test_money_pattern_rejects_invalid_urls(self) -> None:
+        """Test that invalid URLs are rejected."""
+        from note_mcp.api.embeds import MONEY_PATTERN
+
+        # Wrong domain
+        assert not MONEY_PATTERN.match("https://note.com/companies/5243")
+        # Wrong path
+        assert not MONEY_PATTERN.match("https://money.note.com/invalid/5243")
+        # Missing code
+        assert not MONEY_PATTERN.match("https://money.note.com/companies/")
+        # Other URLs
+        assert not MONEY_PATTERN.match("https://example.com/companies/5243")
+
+
+class TestGetEmbedServiceMoney:
+    """Tests for get_embed_service function with noteマネー URLs."""
+
+    def test_get_embed_service_returns_money_for_companies(self) -> None:
+        """Test that get_embed_service returns 'money' for Japanese stock URLs."""
+        from note_mcp.api.embeds import get_embed_service
+
+        assert get_embed_service("https://money.note.com/companies/5243") == "money"
+        assert get_embed_service("https://money.note.com/companies/7203") == "money"
+
+    def test_get_embed_service_returns_money_for_us_companies(self) -> None:
+        """Test that get_embed_service returns 'money' for US stock URLs."""
+        from note_mcp.api.embeds import get_embed_service
+
+        assert get_embed_service("https://money.note.com/us_companies/GOOG") == "money"
+        assert get_embed_service("https://money.note.com/us_companies/AAPL") == "money"
+
+    def test_get_embed_service_returns_money_for_indices(self) -> None:
+        """Test that get_embed_service returns 'money' for index URLs."""
+        from note_mcp.api.embeds import get_embed_service
+
+        assert get_embed_service("https://money.note.com/indices/NKY") == "money"
+        assert get_embed_service("https://money.note.com/indices/TOPX") == "money"
+
+    def test_get_embed_service_returns_money_for_investments(self) -> None:
+        """Test that get_embed_service returns 'money' for investment trust URLs."""
+        from note_mcp.api.embeds import get_embed_service
+
+        assert get_embed_service("https://money.note.com/investments/0331418A") == "money"
+
+
+class TestGenerateEmbedHtmlMoney:
+    """Tests for generate_embed_html function with noteマネー URLs."""
+
+    def test_money_embed_structure(self) -> None:
+        """Test noteマネー embed HTML structure."""
+        from note_mcp.api.embeds import generate_embed_html
+
+        url = "https://money.note.com/companies/5243"
+        html = generate_embed_html(url)
+
+        # Verify required attributes
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="money"' in html
+        assert 'contenteditable="false"' in html
+        assert "embedded-content-key=" in html
+        assert "</figure>" in html
+
+    def test_money_us_companies_embed_structure(self) -> None:
+        """Test US stock embed HTML structure."""
+        from note_mcp.api.embeds import generate_embed_html
+
+        url = "https://money.note.com/us_companies/GOOG"
+        html = generate_embed_html(url)
+
+        assert 'embedded-service="money"' in html
+        assert f'data-src="{url}"' in html
+
+    def test_money_indices_embed_structure(self) -> None:
+        """Test index embed HTML structure."""
+        from note_mcp.api.embeds import generate_embed_html
+
+        url = "https://money.note.com/indices/NKY"
+        html = generate_embed_html(url)
+
+        assert 'embedded-service="money"' in html
+        assert f'data-src="{url}"' in html
+
+    def test_money_investments_embed_structure(self) -> None:
+        """Test investment trust embed HTML structure."""
+        from note_mcp.api.embeds import generate_embed_html
+
+        url = "https://money.note.com/investments/0331418A"
+        html = generate_embed_html(url)
+
+        assert 'embedded-service="money"' in html
+        assert f'data-src="{url}"' in html
+
+
+class TestIsEmbedUrlMoney:
+    """Tests for is_embed_url function with noteマネー URLs."""
+
+    def test_money_urls_are_embed_urls(self) -> None:
+        """Test that noteマネー URLs are recognized as embed URLs."""
+        from note_mcp.api.embeds import is_embed_url
+
+        assert is_embed_url("https://money.note.com/companies/5243") is True
+        assert is_embed_url("https://money.note.com/us_companies/GOOG") is True
+        assert is_embed_url("https://money.note.com/indices/NKY") is True
+        assert is_embed_url("https://money.note.com/investments/0331418A") is True

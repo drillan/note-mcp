@@ -108,6 +108,18 @@ https://note.com/drillan/n/n7379c02632c9
 
 https://gist.github.com/drillan/71aab0a37b413be66bedf6c011d7cd37
 
+### noteマネー（株価チャート）埋め込み
+
+URL方式でnote社の株価チャートを埋め込み：
+
+https://money.note.com/companies/5243
+
+株価記法でも埋め込めます（日本株は`^証券コード`、米国株は`$ティッカー`）：
+
+^5243
+
+$GOOG
+
 ## 水平線
 
 セクション間の区切り：
@@ -150,7 +162,8 @@ $${\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}}$$
 6. テキスト配置（中央・右・左寄せ）
 7. 数式（KaTeX）記法
 8. ルビ（ふりがな）記法
-9. 埋め込み（YouTube、Twitter/X、note.com記事、GitHub Gist）
+9. 埋め込み（YouTube、Twitter/X、note.com記事、GitHub Gist、株価チャート）
+10. 株価記法（`^証券コード`、`$ティッカー`）
 
 ---
 
