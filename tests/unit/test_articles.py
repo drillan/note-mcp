@@ -236,6 +236,57 @@ class TestGetArticleViaApiNumericIdValidation:
         assert "n1234567890ab" in exc_info.value.message
 
 
+class TestGetArticleViaApiDeletedArticle:
+    """Tests for deleted article handling in get_article_via_api().
+
+    Issue #209: note.com API returns 'deleted' status for deleted articles
+    instead of 404 error. get_article_via_api should raise NoteAPIError
+    when accessing a deleted article.
+    """
+
+    @pytest.fixture
+    def mock_session(self) -> Session:
+        """Create a mock session for testing."""
+        return Session(
+            cookies={"note_gql_auth_token": "test_token", "XSRF-TOKEN": "test_xsrf"},
+            user_id="test_user",
+            username="testuser",
+            created_at=1700000000,
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_article_via_api_raises_error_for_deleted_article(self, mock_session: Session) -> None:
+        """get_article_via_api() should raise NoteAPIError for deleted articles.
+
+        Issue #209: When API returns status='deleted', the function should
+        raise NoteAPIError with ARTICLE_NOT_FOUND code.
+        """
+        # Mock API response for a deleted article
+        mock_api_response = {
+            "data": {
+                "id": 123456,
+                "key": "n123abc",
+                "status": "deleted",
+                "name": "Deleted Article",
+                "body": "",
+            }
+        }
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.get = AsyncMock(return_value=mock_api_response)
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await get_article_via_api(mock_session, "n123abc")
+
+            assert exc_info.value.code == ErrorCode.ARTICLE_NOT_FOUND
+            assert "deleted" in exc_info.value.message.lower()
+            assert "n123abc" in str(exc_info.value.details)
+
+
 class TestExecuteGet:
     """Tests for _execute_get helper function."""
 

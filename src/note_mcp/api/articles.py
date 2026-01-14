@@ -661,6 +661,15 @@ async def get_article_via_api(
         _parse_article_response,
     )
 
+    # Issue #209: Check if article was deleted
+    # note.com API returns status='deleted' instead of 404 for deleted articles
+    if article.status == ArticleStatus.DELETED:
+        raise NoteAPIError(
+            code=ErrorCode.ARTICLE_NOT_FOUND,
+            message="Article has been deleted (status='deleted')",
+            details={"article_id": article_id},
+        )
+
     # Convert HTML body to Markdown for consistent output
     if article.body:
         article = Article(
