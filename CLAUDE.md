@@ -113,51 +113,6 @@ NOTE_MCP_TEST_HEADLESS=false uv run pytest tests/e2e/
 - 未設定 or `true`: headlessモード（デフォルト、CI/CD向け）
 - `false`: headedモード（ブラウザウィンドウ表示、デバッグ向け）
 
-### ProseMirror Markdown Trigger Pattern
-
-note.comのエディタ（ProseMirror）でMarkdownパターンをHTMLに変換するには、**パターンの後にスペースが必要**です。
-
-**サポートされるMarkdown機能（11種類）:**
-
-| # | 機能 | 入力パターン | トリガー | 出力HTML |
-|---|------|------------|---------|----------|
-| 1 | 見出しH2 | `## text` | スペース | `<h2>` |
-| 2 | 見出しH3 | `### text` | スペース | `<h3>` |
-| 3 | 打消し線 | `~~text~~` | スペース | `<s>` |
-| 4 | 太字 | `**text**` | スペース | `<strong>` |
-| 5 | コードブロック | ` ``` ` | Enter | `<pre><code>` |
-| 6 | 中央揃え | `->text<-` | - | `text-align: center` |
-| 7 | 右揃え | `->text` | - | `text-align: right` |
-| 8 | 目次 | `[TOC]` | - | 目次HTML |
-| 9 | 引用 | `> text` | - | `<blockquote>` |
-| 10 | 箇条書き | `- text` | - | `<ul><li>` |
-| 11 | 番号付き | `1. text` | - | `<ol><li>` |
-
-**サポートされない機能（プラットフォーム制限）:**
-
-| 機能 | 入力パターン | 理由 |
-|------|------------|------|
-| 斜体 | `*text*` | note.comのProseMirrorスキーマに`em`マークがない |
-| インラインコード | `` `code` `` | 同上、`code`マークがない |
-
-**検証済みの動作（2025-12-30）:**
-
-| 入力パターン | 結果 |
-|-------------|------|
-| `~~text~~ ` (スペースあり) | ✅ `<s>text</s>` に変換 |
-| `~~text~~` + Enter | ❌ 変換されない |
-| `~~text~~.` (句読点) | ❌ 変換されない |
-| `~~text~~` (トリガーなし) | ❌ 変換されない |
-
-**現在のアーキテクチャ:**
-
-note.comへのコンテンツ送信はAPI経由（`markdown_to_html.py`）で行われます。
-ブラウザ自動化によるタイピング（旧`typing_helpers.py`）は削除されました。
-
-上記のトリガーパターンは、**ブラウザエディタでの手動入力時の挙動**として
-参考情報として残しています。API経由での送信では、HTMLを直接生成するため
-これらのトリガーパターンは関係しません。
-
 ### Ruby Notation (ルビ記法)
 
 note.comはルビ（ふりがな）記法をサポートしています。
@@ -347,18 +302,9 @@ issue対応時は以下のワークフローに従う。
 - **Type Checking**: mypy >= 1.19.1
 - **Documentation**: Sphinx >= 8.2.3, MyST-Parser >= 4.0.1
 
-## Active Technologies
-- Python 3.11+ (pyproject.toml: requires-python = ">=3.11") (001-e2e-native-html-validation)
-- N/A (テストコードのみ) (001-e2e-native-html-validation)
-- keyring (OS secure storage for session cookies) (002-preview-api)
-- Python 3.11+ (pyproject.toml: requires-python = ">=3.11") + mcp>=1.9.2, pydantic>=2.0, playwright, httpx (via NoteAPIClient) (141-delete-draft)
-
-- Python 3.11+ (001-note-mcp)
-
 ## Recent Changes
 
 - 2026-01-13: Removed Playwright-based editor helpers (Issue #131), content operations now API-only
 - 2026-01-13: Added Issue Workflow section with branch naming conventions
 - 2025-12-31: Added Available Skills section with api-investigator導線
-- 001-note-mcp: Added Python 3.11+
 - 2025-12-20: Updated CLAUDE.md based on Constitution v1.0.0
