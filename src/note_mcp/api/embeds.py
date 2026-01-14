@@ -71,8 +71,8 @@ def get_embed_service(url: str) -> str | None:
         url: The URL to check.
 
     Returns:
-        Service type ('youtube', 'twitter', 'note', 'gist', 'oembed',
-        'external-article', 'githubRepository') or None if unsupported.
+        Service type ('youtube', 'twitter', 'note', 'gist', 'githubRepository',
+        'oembed', 'external-article') or None if unsupported.
     """
     if YOUTUBE_PATTERN.match(url):
         return "youtube"
@@ -80,8 +80,8 @@ def get_embed_service(url: str) -> str | None:
         return "twitter"
     if NOTE_PATTERN.match(url):
         return "note"
-    # Check GIST_PATTERN before GITHUB_REPO_PATTERN to avoid gist.github.com
-    # being matched by the more general github.com pattern
+    # GIST_PATTERN is checked before GITHUB_REPO_PATTERN for clarity,
+    # though the patterns are mutually exclusive (gist.github.com vs github.com)
     if GIST_PATTERN.match(url):
         return "gist"
     if GITHUB_REPO_PATTERN.match(url):

@@ -1715,13 +1715,22 @@ class TestGitHubRepoPattern:
         assert not GITHUB_REPO_PATTERN.match("https://github.com/user/repo/pull/123")
         assert not GITHUB_REPO_PATTERN.match("https://github.com/user/repo/blob/main/file.py")
 
-    def test_github_repo_pattern_rejects_www(self) -> None:
+    def test_github_repo_pattern_accepts_www(self) -> None:
         """Test that www.github.com is also accepted."""
         from note_mcp.api.embeds import GITHUB_REPO_PATTERN
 
         # www.github.com should be accepted
         assert GITHUB_REPO_PATTERN.match("https://www.github.com/user/repo")
         assert GITHUB_REPO_PATTERN.match("http://www.github.com/user/repo")
+
+    def test_github_repo_pattern_with_uppercase(self) -> None:
+        """Test that repository URLs with uppercase characters are accepted."""
+        from note_mcp.api.embeds import GITHUB_REPO_PATTERN
+
+        # Uppercase in owner/repo names should be accepted
+        assert GITHUB_REPO_PATTERN.match("https://github.com/Anthropic/Claude")
+        assert GITHUB_REPO_PATTERN.match("https://github.com/Microsoft/TypeScript")
+        assert GITHUB_REPO_PATTERN.match("https://github.com/OWNER/REPO")
 
 
 class TestGetEmbedServiceGitHubRepo:
