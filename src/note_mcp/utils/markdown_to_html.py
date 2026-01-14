@@ -12,6 +12,7 @@ from markdown_it import MarkdownIt
 
 from note_mcp.api.embeds import (
     GIST_PATTERN,
+    GOOGLE_SLIDES_PATTERN,
     MONEY_PATTERN,
     NOTE_PATTERN,
     TWITTER_PATTERN,
@@ -186,8 +187,9 @@ def _restore_code_blocks(content: str, blocks: list[tuple[str, str]]) -> str:
 def has_embed_url(content: str) -> bool:
     """Check if content contains URLs that should be embedded.
 
-    Detects YouTube, Twitter/X, note.com article, GitHub Gist, noteマネー, and Zenn.dev URLs
-    that appear alone on a line (indicating they should be embedded, not linked).
+    Detects YouTube, Twitter/X, note.com article, GitHub Gist, noteマネー, Zenn.dev,
+    and Google Slides URLs that appear alone on a line (indicating they should be
+    embedded, not linked).
 
     Args:
         content: Markdown content to check.
@@ -206,6 +208,7 @@ def has_embed_url(content: str) -> bool:
             or GIST_PATTERN.match(url)
             or MONEY_PATTERN.match(url)
             or ZENN_PATTERN.match(url)
+            or GOOGLE_SLIDES_PATTERN.match(url)
         ):
             return True
     return False

@@ -829,6 +829,29 @@ https://gist.github.com/defunkt/2059
         assert has_embed_url("https://zenn.dev/zenn/articles/markdown-guide") is True
         assert has_embed_url("https://zenn.dev/user/articles/abc123") is True
 
+    def test_google_slides_url_detected(self) -> None:
+        """Google SlidesのURLが検出される (Issue #224)."""
+        # /edit suffix
+        assert (
+            has_embed_url("https://docs.google.com/presentation/d/1W543BSd_0cL-Y3p7eRn-JWvr2_Dfo7wZGKJp6RbP4Qw/edit")
+            is True
+        )
+        # /pub suffix
+        assert (
+            has_embed_url("https://docs.google.com/presentation/d/1W543BSd_0cL-Y3p7eRn-JWvr2_Dfo7wZGKJp6RbP4Qw/pub")
+            is True
+        )
+        # /view suffix
+        assert (
+            has_embed_url("https://docs.google.com/presentation/d/1W543BSd_0cL-Y3p7eRn-JWvr2_Dfo7wZGKJp6RbP4Qw/view")
+            is True
+        )
+        # /embed suffix
+        assert (
+            has_embed_url("https://docs.google.com/presentation/d/1W543BSd_0cL-Y3p7eRn-JWvr2_Dfo7wZGKJp6RbP4Qw/embed")
+            is True
+        )
+
 
 class TestZennEmbedUrlConversion:
     """Zenn.dev記事埋め込みURL変換のテスト (Issue #222)."""
@@ -962,3 +985,43 @@ $GOOG
         result = markdown_to_html("$goog")
         # Lowercase - should not match (uppercase required)
         assert 'embedded-service="oembed"' not in result
+
+
+class TestGoogleSlidesEmbedUrlConversion:
+    """Google Slidesプレゼンテーション埋め込みURL変換のテスト (Issue #224)."""
+
+    def test_google_slides_url_becomes_embed(self) -> None:
+        """Google SlidesのURLは埋め込みに変換される."""
+        markdown = "https://docs.google.com/presentation/d/1W543BSd_0cL-Y3p7eRn-JWvr2_Dfo7wZGKJp6RbP4Qw/edit"
+        result = markdown_to_html(markdown)
+
+        assert "<figure" in result
+        assert 'embedded-service="googlepresentation"' in result
+        assert (
+            'data-src="https://docs.google.com/presentation/d/1W543BSd_0cL-Y3p7eRn-JWvr2_Dfo7wZGKJp6RbP4Qw/edit"'
+            in result
+        )
+        assert "embedded-content-key=" in result
+
+    def test_google_slides_pub_url_becomes_embed(self) -> None:
+        """Google Slidesの/pub URLも埋め込みに変換される."""
+        markdown = "https://docs.google.com/presentation/d/1W543BSd_0cL-Y3p7eRn-JWvr2_Dfo7wZGKJp6RbP4Qw/pub"
+        result = markdown_to_html(markdown)
+
+        assert "<figure" in result
+        assert 'embedded-service="googlepresentation"' in result
+
+    def test_google_slides_url_with_surrounding_text(self) -> None:
+        """テキストに囲まれたGoogle Slides URLも変換される."""
+        markdown = """テスト文章です。
+
+https://docs.google.com/presentation/d/1W543BSd_0cL-Y3p7eRn-JWvr2_Dfo7wZGKJp6RbP4Qw/edit
+
+テスト続きです。"""
+        result = markdown_to_html(markdown)
+
+        assert "<figure" in result
+        assert 'embedded-service="googlepresentation"' in result
+        # 前後のテキストも保持される
+        assert "テスト文章です" in result
+        assert "テスト続きです" in result
