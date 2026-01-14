@@ -6,9 +6,11 @@
 
 set -euo pipefail
 
+# 共通ライブラリを読み込む
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PROJECT_NAME="note-mcp"
+PROJECT_ROOT=$(lib_get_project_root)
 
 # 引数チェック
 ISSUE_NUM="${1:-}"
@@ -28,10 +30,9 @@ if ! [[ "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
 fi
 
 # Step 1: 既存のworktreeを確認
-EXISTING_DIR=$(ls "$(dirname "$PROJECT_ROOT")" 2>/dev/null | grep -E "^${PROJECT_NAME}-.*${ISSUE_NUM}.*" | head -1 || true)
+WORKTREE_PATH=$(lib_get_worktree_path "$ISSUE_NUM")
 
-if [[ -n "$EXISTING_DIR" ]]; then
-    WORKTREE_PATH="$(dirname "$PROJECT_ROOT")/$EXISTING_DIR"
+if [[ -n "$WORKTREE_PATH" ]]; then
     echo "📁 既存のワークツリーを検出: $WORKTREE_PATH"
 else
     # Step 2: add-worktree.sh を実行
@@ -39,14 +40,13 @@ else
     "$SCRIPT_DIR/add-worktree.sh" "$ISSUE_NUM"
 
     # Step 3: 作成されたディレクトリを検出
-    EXISTING_DIR=$(ls "$(dirname "$PROJECT_ROOT")" 2>/dev/null | grep -E "^${PROJECT_NAME}-.*${ISSUE_NUM}.*" | head -1 || true)
+    WORKTREE_PATH=$(lib_get_worktree_path "$ISSUE_NUM")
 
-    if [[ -z "$EXISTING_DIR" ]]; then
+    if [[ -z "$WORKTREE_PATH" ]]; then
         echo "⚠️ ワークツリーディレクトリが見つかりません"
         exit 1
     fi
 
-    WORKTREE_PATH="$(dirname "$PROJECT_ROOT")/$EXISTING_DIR"
     echo "✅ ワークツリー作成完了: $WORKTREE_PATH"
 fi
 

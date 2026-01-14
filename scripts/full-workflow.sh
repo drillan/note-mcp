@@ -16,31 +16,17 @@
 
 set -euo pipefail
 
+# 共通ライブラリを読み込む
+source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PROJECT_NAME="note-mcp"
+PROJECT_ROOT=$(lib_get_project_root)
 
 # オプション解析
-VERBOSE=false
-ISSUE_NUM=""
+REMAINING_ARGS=$(lib_parse_verbose_option "$@")
+eval set -- $REMAINING_ARGS
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -v|--verbose)
-            VERBOSE=true
-            shift
-            ;;
-        *)
-            if [[ -z "$ISSUE_NUM" ]]; then
-                ISSUE_NUM="$1"
-            else
-                echo "⚠️ 不明なオプション: $1"
-                exit 1
-            fi
-            shift
-            ;;
-    esac
-done
+ISSUE_NUM="${1:-}"
 
 if [[ -z "$ISSUE_NUM" ]]; then
     echo "⚠️ issue番号が必要です"
@@ -57,61 +43,33 @@ if ! [[ "$ISSUE_NUM" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 
-# claude実行関数（verboseモード対応）
-run_claude() {
-    local prompt="$1"
-    if [[ "$VERBOSE" == "true" ]]; then
-        claude -p "$prompt" --dangerously-skip-permissions --output-format stream-json --verbose 2>&1 | \
-            jq -r --unbuffered '
-                if .type == "assistant" and .message.content then
-                    .message.content[] |
-                    if .type == "tool_use" then
-                        "● \(.name)(\(.input | tostring | .[0:60])...)"
-                    elif .type == "text" then
-                        empty
-                    else
-                        empty
-                    end
-                elif .type == "result" then
-                    "\n" + .result
-                else
-                    empty
-                end
-            ' 2>/dev/null
-    else
-        claude -p "$prompt" --dangerously-skip-permissions
-    fi
-}
-
 echo "═══════════════════════════════════════════════════════════════"
 echo "🚀 Full Workflow: issue #${ISSUE_NUM}"
-if [[ "$VERBOSE" == "true" ]]; then
+if lib_is_verbose; then
     echo "   (verbose mode)"
 fi
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 
 # Step 1: worktree作成または検出
-echo "📦 Step 1/4: worktree準備"
+echo "📦 Step 1/5: worktree準備"
 echo "───────────────────────────────────────────────────────────────"
 
-EXISTING_DIR=$(ls "$(dirname "$PROJECT_ROOT")" 2>/dev/null | grep -E "^${PROJECT_NAME}-.*${ISSUE_NUM}.*" | head -1 || true)
+WORKTREE_PATH=$(lib_get_worktree_path "$ISSUE_NUM")
 
-if [[ -n "$EXISTING_DIR" ]]; then
-    WORKTREE_PATH="$(dirname "$PROJECT_ROOT")/$EXISTING_DIR"
+if [[ -n "$WORKTREE_PATH" ]]; then
     echo "📁 既存のワークツリーを検出: $WORKTREE_PATH"
 else
     echo "🔧 ワークツリーを作成中..."
     "$SCRIPT_DIR/add-worktree.sh" "$ISSUE_NUM"
 
-    EXISTING_DIR=$(ls "$(dirname "$PROJECT_ROOT")" 2>/dev/null | grep -E "^${PROJECT_NAME}-.*${ISSUE_NUM}.*" | head -1 || true)
+    WORKTREE_PATH=$(lib_get_worktree_path "$ISSUE_NUM")
 
-    if [[ -z "$EXISTING_DIR" ]]; then
+    if [[ -z "$WORKTREE_PATH" ]]; then
         echo "⚠️ ワークツリーディレクトリが見つかりません"
         exit 1
     fi
 
-    WORKTREE_PATH="$(dirname "$PROJECT_ROOT")/$EXISTING_DIR"
     echo "✅ ワークツリー作成完了: $WORKTREE_PATH"
 fi
 
@@ -119,7 +77,7 @@ cd "$WORKTREE_PATH"
 echo ""
 
 # Step 2: start-issue（計画立案・実装）
-echo "📝 Step 2/4: start-issue（計画立案・実装）"
+echo "📝 Step 2/5: start-issue（計画立案・実装）"
 echo "───────────────────────────────────────────────────────────────"
 
 START_ISSUE_FILE="$WORKTREE_PATH/.claude/commands/start-issue.md"
@@ -136,14 +94,14 @@ PROMPT_START="以下の指示に従って、issue #${ISSUE_NUM} の作業を開�
 
 ${CONTENT_REPLACED}"
 
-run_claude "$PROMPT_START"
+lib_run_claude "$PROMPT_START" "no_exec"
 
 echo ""
 echo "✅ start-issue 完了"
 echo ""
 
 # Step 3: complete-issue（commit + push + PR作成）
-echo "📤 Step 3/4: complete-issue（commit + push + PR作成）"
+echo "📤 Step 3/5: complete-issue（commit + push + PR作成）"
 echo "───────────────────────────────────────────────────────────────"
 
 PROMPT_COMPLETE="以下のスキルを実行してください:
@@ -152,14 +110,14 @@ PROMPT_COMPLETE="以下のスキルを実行してください:
 
 実装された変更をコミットし、リモートにプッシュして、プルリクエストを作成してください。"
 
-run_claude "$PROMPT_COMPLETE"
+lib_run_claude "$PROMPT_COMPLETE" "no_exec"
 
 echo ""
 echo "✅ complete-issue 完了"
 echo ""
 
 # Step 4: review-pr（PRレビュー + コメント投稿）
-echo "🔍 Step 4/4: review-pr（PRレビュー + コメント投稿）"
+echo "🔍 Step 4/5: review-pr（PRレビュー + コメント投稿）"
 echo "───────────────────────────────────────────────────────────────"
 
 PR_NUM=$(gh pr view --json number --jq '.number' 2>/dev/null || true)
@@ -170,18 +128,18 @@ else
     echo "📍 PRを検出: #$PR_NUM"
 
     PROMPT_REVIEW="/pr-review-toolkit:review-pr $PR_NUM PRにコメントしてください"
-    run_claude "$PROMPT_REVIEW"
+    lib_run_claude "$PROMPT_REVIEW" "no_exec"
 
     echo ""
     echo "✅ review-pr 完了"
     echo ""
 
     # Step 5: respond-comments（レビューコメントに対応）
-    echo "💬 Step 5/4: respond-comments（レビューコメントに対応）"
+    echo "💬 Step 5/5: respond-comments（レビューコメントに対応）"
     echo "───────────────────────────────────────────────────────────────"
 
     PROMPT_RESPOND="/review-pr-comments $PR_NUM"
-    run_claude "$PROMPT_RESPOND"
+    lib_run_claude "$PROMPT_RESPOND" "no_exec"
 
     echo ""
     echo "✅ respond-comments 完了"
