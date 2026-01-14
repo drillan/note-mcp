@@ -104,13 +104,19 @@ WORKDIR /app
 # https://docs.astral.sh/uv/
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# Set UV Python install directory to a shared location accessible by all users
+# This prevents permission issues when running as non-root user
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
+
 # Copy dependency files first (for better layer caching)
 # README.md is needed by hatchling build backend
 COPY pyproject.toml README.md ./
 
 # Install dependencies using uv
 # --no-cache: Don't cache packages to reduce image size
-RUN uv sync --no-cache --no-dev
+# chmod a+rwX: allow all users to read, write, and execute
+RUN uv sync --no-cache --no-dev && \
+    chmod -R a+rwX /opt/uv/python
 
 # Copy source code
 COPY src/ ./src/
@@ -134,7 +140,8 @@ ARG UID=1000
 ARG GID=1000
 
 # Install dev dependencies
-RUN uv sync --no-cache --group dev
+RUN uv sync --no-cache --group dev && \
+    chmod -R a+rwX /opt/uv/python
 
 # Set ownership of /app to specified user (including .venv created by uv sync)
 RUN chown -R ${UID}:${GID} /app
