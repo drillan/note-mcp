@@ -18,7 +18,7 @@ import pytest
 import pytest_asyncio
 from playwright.async_api import Error as PlaywrightError
 
-from note_mcp.api.articles import create_draft
+from note_mcp.api.articles import create_draft, delete_draft
 from note_mcp.api.preview import get_preview_html
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
@@ -193,8 +193,17 @@ async def draft_article(
     yield article
 
     # Cleanup: Best-effort deletion
-    # Note: Delete API may not exist - articles with [E2E-TEST-] prefix can be manually cleaned
-    # TODO: Implement deletion if API exists (after mitmproxy investigation)
+    try:
+        await delete_draft(real_session, article.key, confirm=True)
+        logger.debug("Deleted test article: %s", article.key)
+    except Exception as e:
+        # Don't fail the test if cleanup fails
+        logger.warning(
+            "Failed to delete test article %s: %s: %s",
+            article.key,
+            type(e).__name__,
+            e,
+        )
 
 
 async def _inject_session_cookies(page: Page, session: Session) -> None:
