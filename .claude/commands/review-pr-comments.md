@@ -32,6 +32,7 @@ gh repo view --json owner,name --jq '"\(.owner.login)/\(.name)"'
 ```
 
 Use the output (e.g., `drillan/note-mcp`) for `{owner}` and `{repo}` in subsequent commands.
+Replace placeholders: `{owner}` → `drillan`, `{repo}` → `note-mcp`.
 
 ```bash
 # Step 1b: Get thread IDs (for resolving) via GraphQL
