@@ -86,6 +86,26 @@ print(f"タグ: {article.tags}")
 - [note.com公式サイト](https://note.com)
 - [GitHub - note-mcp](https://github.com/example/note-mcp)
 
+## 埋め込み
+
+対応サービスのURLを単独の行に記述すると、埋め込みウィジェットに変換されます。
+
+### YouTube埋め込み
+
+https://www.youtube.com/watch?v=NMHcEDcympM
+
+### Twitter/X埋め込み
+
+https://x.com/patraqushe/status/1326880858007990275
+
+### note.com記事埋め込み
+
+https://note.com/drillan/n/n7379c02632c9
+
+### GitHub Gist埋め込み
+
+https://gist.github.com/drillan/e4b0adf4e7fe28a0cceb2f98dc0161d1
+
 ## 水平線
 
 セクション間の区切り：
@@ -127,6 +147,7 @@ $${\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}}$$
 5. テキスト配置（中央・右・左寄せ）
 6. 数式（KaTeX）記法
 7. ルビ（ふりがな）記法
+8. 埋め込み（YouTube、Twitter/X、note.com記事、GitHub Gist）
 
 ---
 
