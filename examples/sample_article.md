@@ -90,35 +90,7 @@ print(f"タグ: {article.tags}")
 
 ## 埋め込み
 
-対応サービスのURLを単独の行に記述すると、埋め込みウィジェットに変換されます。
-
-### YouTube埋め込み
-
-https://www.youtube.com/watch?v=NMHcEDcympM
-
-### Twitter/X埋め込み
-
-https://x.com/patraqushe/status/1326880858007990275
-
-### note.com記事埋め込み
-
-https://note.com/drillan/n/n7379c02632c9
-
-### GitHub Gist埋め込み
-
-https://gist.github.com/drillan/71aab0a37b413be66bedf6c011d7cd37
-
-### noteマネー（株価チャート）埋め込み
-
-URL方式でnote社の株価チャートを埋め込み：
-
-https://money.note.com/companies/5243
-
-株価記法でも埋め込めます（日本株は`^証券コード`、米国株は`$ティッカー`）：
-
-^5243
-
-$GOOG
+埋め込み機能の詳細なサンプルは [sample_embeds.md](./sample_embeds.md) を参照してください。
 
 ## 水平線
 
@@ -162,8 +134,7 @@ $${\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}}$$
 6. テキスト配置（中央・右・左寄せ）
 7. 数式（KaTeX）記法
 8. ルビ（ふりがな）記法
-9. 埋め込み（YouTube、Twitter/X、note.com記事、GitHub Gist、株価チャート）
-10. 株価記法（`^証券コード`、`$ティッカー`）
+9. 埋め込み機能（詳細は [sample_embeds.md](./sample_embeds.md) を参照）
 
 ---
 
