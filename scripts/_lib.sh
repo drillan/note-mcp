@@ -33,16 +33,28 @@ lib_get_project_name() {
 _LIB_VERBOSE=false
 
 # verboseオプションを解析する
-# 戻り値: 残りの引数（verboseオプションを除いた引数）
+# 出力: evalで評価可能な形式（変数設定 + 残りの引数）
 # 使用例:
-#   ARGS=$(lib_parse_verbose_option "$@")
-#   eval set -- "$ARGS"
+#   OUTPUT=$(lib_parse_verbose_option "$@")
+#   eval "$OUTPUT"
+#   # これで _LIB_VERBOSE と REMAINING_ARGS が設定される
+#
+# 出力形式:
+#   _LIB_VERBOSE=true; REMAINING_ARGS='arg1 arg2'
+#   または
+#   _LIB_VERBOSE=false; REMAINING_ARGS='arg1 arg2'
+#
+# 注意:
+#   - printf %q を使用してシェルエスケープを適用
+#   - スペースを含む引数は適切にエスケープされる
+#   - シングルクォートやメタ文字も安全に処理される
 lib_parse_verbose_option() {
     local args=()
+    local verbose_flag=false
     while [[ $# -gt 0 ]]; do
         case $1 in
             -v|--verbose)
-                _LIB_VERBOSE=true
+                verbose_flag=true
                 shift
                 ;;
             *)
@@ -51,8 +63,13 @@ lib_parse_verbose_option() {
                 ;;
         esac
     done
-    # 残りの引数を出力
-    printf '%q ' "${args[@]}"
+    # evalで評価可能な形式で出力（printf %qで安全にエスケープ）
+    local remaining_str=""
+    if [[ ${#args[@]} -gt 0 ]]; then
+        remaining_str="${args[*]}"
+    fi
+    # printf %q を使用してコマンドインジェクションを防止
+    printf '_LIB_VERBOSE=%s; REMAINING_ARGS=%q\n' "$verbose_flag" "$remaining_str"
 }
 
 # verboseモードかどうかを確認

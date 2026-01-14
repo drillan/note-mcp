@@ -22,9 +22,15 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT=$(lib_get_project_root)
 
-# オプション解析
-REMAINING_ARGS=$(lib_parse_verbose_option "$@")
-eval set -- $REMAINING_ARGS
+# オプション解析（evalで _LIB_VERBOSE と REMAINING_ARGS を設定）
+OUTPUT=$(lib_parse_verbose_option "$@")
+# 出力形式を検証してからeval
+if [[ ! "$OUTPUT" =~ ^_LIB_VERBOSE=(true|false)\;\ REMAINING_ARGS= ]]; then
+    echo "ERROR: Option parsing failed" >&2
+    exit 1
+fi
+eval "$OUTPUT"
+eval set -- "$REMAINING_ARGS"
 
 ISSUE_NUM="${1:-}"
 
