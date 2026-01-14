@@ -208,6 +208,7 @@ note.comはルビ（ふりがな）記法をサポートしています。
 | YouTube | https://www.youtube.com/watch?v=NMHcEDcympM |
 | X (Twitter) | https://x.com/patraqushe/status/1326880858007990275 |
 | note.com | https://note.com/drillan/n/n7379c02632c9 |
+| GitHub Gist | https://gist.github.com/drillan/71aab0a37b413be66bedf6c011d7cd37 |
 
 ## Available Skills
 
