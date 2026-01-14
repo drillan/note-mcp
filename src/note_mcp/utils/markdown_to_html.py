@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from markdown_it import MarkdownIt
 
 from note_mcp.api.embeds import (
+    GIST_PATTERN,
     NOTE_PATTERN,
     TWITTER_PATTERN,
     YOUTUBE_PATTERN,
@@ -177,7 +178,7 @@ def _restore_code_blocks(content: str, blocks: list[tuple[str, str]]) -> str:
 def has_embed_url(content: str) -> bool:
     """Check if content contains URLs that should be embedded.
 
-    Detects YouTube, Twitter/X, and note.com article URLs that appear
+    Detects YouTube, Twitter/X, note.com article, and GitHub Gist URLs that appear
     alone on a line (indicating they should be embedded, not linked).
 
     Args:
@@ -190,7 +191,12 @@ def has_embed_url(content: str) -> bool:
     for match in _STANDALONE_URL_PATTERN.finditer(content):
         url = match.group(1)
         # Check if this URL matches any embed pattern (using api.embeds patterns)
-        if YOUTUBE_PATTERN.match(url) or TWITTER_PATTERN.match(url) or NOTE_PATTERN.match(url):
+        if (
+            YOUTUBE_PATTERN.match(url)
+            or TWITTER_PATTERN.match(url)
+            or NOTE_PATTERN.match(url)
+            or GIST_PATTERN.match(url)
+        ):
             return True
     return False
 
@@ -208,7 +214,7 @@ def _convert_standalone_embed_urls(html: str) -> str:
     """Convert standalone embed URLs to figure elements.
 
     Detects standalone URLs (URLs that are alone in a paragraph) and converts
-    supported embed URLs (YouTube, Twitter, note.com) to figure elements.
+    supported embed URLs (YouTube, Twitter, note.com, GitHub Gist) to figure elements.
 
     This function should be called after markdown conversion and UUID addition,
     but before code block processing.

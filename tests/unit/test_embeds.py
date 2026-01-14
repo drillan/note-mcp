@@ -51,6 +51,14 @@ class TestGetEmbedService:
         assert get_embed_service("https://note.com/username/n/n1234567890ab") == "note"
         assert get_embed_service("http://note.com/username/n/n1234567890ab") == "note"
 
+    def test_gist_url(self) -> None:
+        """Test GitHub Gist URL detection."""
+        from note_mcp.api.embeds import get_embed_service
+
+        assert get_embed_service("https://gist.github.com/defunkt/2059") == "gist"
+        assert get_embed_service("https://gist.github.com/user-name/abc123def") == "gist"
+        assert get_embed_service("http://gist.github.com/user/gist123") == "gist"
+
     def test_unsupported_url_returns_none(self) -> None:
         """Test that unsupported URLs return None."""
         from note_mcp.api.embeds import get_embed_service
@@ -83,6 +91,13 @@ class TestIsEmbedUrl:
         from note_mcp.api.embeds import is_embed_url
 
         assert is_embed_url("https://note.com/username/n/n1234567890ab") is True
+
+    def test_gist_urls_are_embed_urls(self) -> None:
+        """Test that GitHub Gist URLs are recognized as embed URLs."""
+        from note_mcp.api.embeds import is_embed_url
+
+        assert is_embed_url("https://gist.github.com/defunkt/2059") is True
+        assert is_embed_url("https://gist.github.com/user-name/abc123") is True
 
     def test_unsupported_urls_are_not_embed_urls(self) -> None:
         """Test that unsupported URLs are not recognized as embed URLs."""
@@ -130,6 +145,20 @@ class TestGenerateEmbedHtml:
 
         assert 'embedded-service="note"' in html
         assert f'data-src="{url}"' in html
+
+    def test_gist_embed_structure(self) -> None:
+        """Test GitHub Gist embed HTML structure."""
+        from note_mcp.api.embeds import generate_embed_html
+
+        url = "https://gist.github.com/defunkt/2059"
+        html = generate_embed_html(url)
+
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="gist"' in html
+        assert 'contenteditable="false"' in html
+        assert "embedded-content-key=" in html
+        assert "</figure>" in html
 
     def test_embed_key_format(self) -> None:
         """Test that embed content key has correct format (emb + 13 hex chars)."""
@@ -179,6 +208,10 @@ class TestGenerateEmbedHtml:
         html = generate_embed_html("https://note.com/user/n/n123")
         assert 'embedded-service="note"' in html
 
+        # GitHub Gist
+        html = generate_embed_html("https://gist.github.com/defunkt/2059")
+        assert 'embedded-service="gist"' in html
+
     def test_url_escaping(self) -> None:
         """Test that special characters in URL are properly escaped."""
         from note_mcp.api.embeds import generate_embed_html
@@ -223,6 +256,38 @@ class TestEmbedPatterns:
 
         assert NOTE_PATTERN.match("https://note.com/user/n/nabc123")
         assert not NOTE_PATTERN.match("https://note.com/user")
+
+    def test_gist_pattern_exports(self) -> None:
+        """Test that GIST_PATTERN is exported."""
+        from note_mcp.api.embeds import GIST_PATTERN
+
+        assert GIST_PATTERN.match("https://gist.github.com/defunkt/2059")
+        assert GIST_PATTERN.match("https://gist.github.com/user-name/abc123def")
+        assert not GIST_PATTERN.match("https://github.com/user/repo")
+        assert not GIST_PATTERN.match("https://gist.github.com/")
+
+    def test_gist_pattern_trailing_slash(self) -> None:
+        """Test that GIST_PATTERN accepts trailing slash (UX improvement).
+
+        When users copy Gist URLs from the browser, they may include a trailing slash.
+        """
+        from note_mcp.api.embeds import GIST_PATTERN
+
+        assert GIST_PATTERN.match("https://gist.github.com/defunkt/2059/")
+        assert GIST_PATTERN.match("https://gist.github.com/user-name/abc123def/")
+
+    def test_gist_pattern_file_fragment(self) -> None:
+        """Test that GIST_PATTERN accepts file fragment (UX improvement).
+
+        When users copy Gist URLs with a specific file selected, the URL includes
+        a fragment like #file-example-py. These should be accepted.
+        """
+        from note_mcp.api.embeds import GIST_PATTERN
+
+        assert GIST_PATTERN.match("https://gist.github.com/defunkt/2059#file-example-py")
+        assert GIST_PATTERN.match("https://gist.github.com/user/abc123#file-test-js")
+        # Edge case: trailing slash + fragment (unlikely but valid URL structure)
+        assert GIST_PATTERN.match("https://gist.github.com/user/abc123/#file-test-js")
 
 
 class TestFetchNoteEmbedKey:
@@ -537,6 +602,52 @@ class TestFetchEmbedKey:
                     "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
                     "n1234567890ab",
                 )
+
+    @pytest.mark.asyncio
+    async def test_fetch_gist_embed_key_uses_v2_endpoint(self) -> None:
+        """Test that GitHub Gist URL uses GET /v2/embed_by_external_api endpoint."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        mock_response = {
+            "data": {
+                "key": "embgist1234567890",
+                "html_for_embed": '<script src="https://gist.github.com/defunkt/2059.js"></script>',
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            embed_key, html_for_embed = await fetch_embed_key(
+                session,
+                "https://gist.github.com/defunkt/2059",
+                "n1234567890ab",
+            )
+
+            # Should use GET /v2/embed_by_external_api (same as YouTube/Twitter)
+            mock_client.get.assert_called_once()
+            call_args = mock_client.get.call_args
+            assert "/v2/embed_by_external_api" in call_args[0][0]
+            # Verify POST was NOT called
+            mock_client.post.assert_not_called()
+            # Verify returned values
+            assert embed_key == "embgist1234567890"
+            assert "gist.github.com" in html_for_embed
 
 
 class TestResolveEmbedKeys:

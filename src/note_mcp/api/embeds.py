@@ -1,13 +1,16 @@
 """Embed URL detection and HTML generation for note.com.
 
-This module provides functions for detecting embed URLs (YouTube, Twitter, note.com)
-and generating the required HTML structure for note.com embeds.
+This module provides functions for detecting embed URLs (YouTube, Twitter, note.com,
+GitHub Gist) and generating the required HTML structure for note.com embeds.
 
 This is the single source of truth for embed URL patterns (DRY principle).
 
 Issue #116: Server-registered embed keys are required for proper iframe rendering.
 Random keys generated locally will not work - note.com frontend only renders embeds
 with keys registered via the embed_by_external_api endpoint.
+
+Issue #195: GitHub Gist embed support added. Gist URLs use the same
+/v2/embed_by_external_api endpoint as YouTube and Twitter.
 """
 
 from __future__ import annotations
@@ -36,6 +39,9 @@ TWITTER_PATTERN = re.compile(r"^https?://(?:www\.)?(?:twitter\.com|x\.com)/\w+/s
 # note.com: note.com/user/n/xxx
 NOTE_PATTERN = re.compile(r"^https?://note\.com/\w+/n/\w+$")
 
+# GitHub Gist: gist.github.com/user/gist_id (with optional trailing slash and file fragment)
+GIST_PATTERN = re.compile(r"^https?://gist\.github\.com/[\w-]+/[\w]+/?(?:#[\w-]+)?$")
+
 
 def get_embed_service(url: str) -> str | None:
     """Get embed service type from URL.
@@ -44,7 +50,7 @@ def get_embed_service(url: str) -> str | None:
         url: The URL to check.
 
     Returns:
-        Service type ('youtube', 'twitter', 'note') or None if unsupported.
+        Service type ('youtube', 'twitter', 'note', 'gist') or None if unsupported.
     """
     if YOUTUBE_PATTERN.match(url):
         return "youtube"
@@ -52,6 +58,8 @@ def get_embed_service(url: str) -> str | None:
         return "twitter"
     if NOTE_PATTERN.match(url):
         return "note"
+    if GIST_PATTERN.match(url):
+        return "gist"
     return None
 
 
@@ -78,9 +86,9 @@ def _build_embed_figure_html(
     This is the single source of truth for embed figure HTML format (DRY).
 
     Args:
-        url: Original URL (YouTube, Twitter, note.com).
+        url: Original URL (YouTube, Twitter, note.com, GitHub Gist).
         embed_key: Embed key (random for placeholder, server-registered for final).
-        service: Service type ('youtube', 'twitter', 'note').
+        service: Service type ('youtube', 'twitter', 'note', 'gist').
 
     Returns:
         HTML figure element string.
@@ -111,8 +119,8 @@ def generate_embed_html(url: str, service: str | None = None) -> str:
     during markdown-to-html conversion (key is replaced later via API).
 
     Args:
-        url: Original URL (YouTube, Twitter, note.com).
-        service: Service type ('youtube', 'twitter', 'note').
+        url: Original URL (YouTube, Twitter, note.com, GitHub Gist).
+        service: Service type ('youtube', 'twitter', 'note', 'gist').
                  If None, auto-detected from URL.
 
     Returns:
@@ -199,11 +207,11 @@ async def fetch_embed_key(
 
     Issue #121: Different endpoints are used for different services:
     - note.com articles: POST /v1/embed
-    - YouTube/Twitter: GET /v2/embed_by_external_api
+    - YouTube/Twitter/GitHub Gist: GET /v2/embed_by_external_api
 
     Args:
         session: Authenticated session with valid cookies.
-        url: Embed URL (YouTube, Twitter, note.com).
+        url: Embed URL (YouTube, Twitter, note.com, GitHub Gist).
         article_key: Article key where the embed will be inserted
                      (e.g., "n1234567890ab").
 
@@ -224,7 +232,7 @@ async def fetch_embed_key(
     if service == "note":
         return await _fetch_note_embed_key(session, url, article_key)
 
-    # YouTube/Twitter: use existing /v2/embed_by_external_api endpoint
+    # YouTube/Twitter/Gist: use existing /v2/embed_by_external_api endpoint
     params = {
         "url": url,
         "service": service,
@@ -243,7 +251,7 @@ async def fetch_embed_key(
     if not embed_key or not html_for_embed:
         raise NoteAPIError(
             code=ErrorCode.API_ERROR,
-            message="Failed to fetch embed key: API returned empty response",
+            message=f"Failed to fetch {service} embed key: API returned empty response",
             details={"url": url, "article_key": article_key, "response": response},
         )
 
@@ -261,9 +269,9 @@ def generate_embed_html_with_key(
     which enables proper iframe rendering by note.com's frontend.
 
     Args:
-        url: Original URL (YouTube, Twitter, note.com).
+        url: Original URL (YouTube, Twitter, note.com, GitHub Gist).
         embed_key: Server-registered embed key from fetch_embed_key().
-        service: Service type ('youtube', 'twitter', 'note').
+        service: Service type ('youtube', 'twitter', 'note', 'gist').
                  If None, auto-detected from URL.
 
     Returns:
