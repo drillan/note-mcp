@@ -104,7 +104,7 @@ https://note.com/drillan/n/n7379c02632c9
 
 ### GitHub Gist埋め込み
 
-https://gist.github.com/drillan/e4b0adf4e7fe28a0cceb2f98dc0161d1
+https://gist.github.com/drillan/71aab0a37b413be66bedf6c011d7cd37
 
 ## 水平線
 
