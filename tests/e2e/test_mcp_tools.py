@@ -22,6 +22,7 @@ from note_mcp.auth.session import SessionManager
 from note_mcp.server import (
     note_check_auth,
     note_create_draft,
+    note_delete_draft,
     note_get_article,
     note_insert_body_image,
     note_list_articles,
@@ -32,6 +33,7 @@ from note_mcp.server import (
     note_upload_body_image,
     note_upload_eyecatch,
 )
+from tests.e2e.helpers import extract_article_key
 
 if TYPE_CHECKING:
     from note_mcp.models import Article, Session
@@ -204,7 +206,7 @@ class TestArticleCRUD:
         self,
         real_session: Session,
     ) -> None:
-        """記事のライフサイクル: 作成→取得→更新."""
+        """記事のライフサイクル: 作成→取得→更新→削除."""
         import time
 
         # Step 1: Create
@@ -218,13 +220,17 @@ class TestArticleCRUD:
         )
         assert "作成" in create_result or "ID" in create_result
 
-        # Extract article ID from result (format varies)
-        # The result should contain the article ID
+        # Extract article key from result for cleanup
+        article_key = extract_article_key(create_result)
         assert isinstance(create_result, str)
 
         # Step 2: List to find our article
         list_result = await note_list_articles.fn(status="draft")
         assert test_title in list_result or "E2E-TEST" in list_result
+
+        # Step 3: Cleanup (Issue #200)
+        delete_result = await note_delete_draft.fn(article_key=article_key, confirm=True)
+        assert "削除" in delete_result
 
 
 class TestImageAndPreview:

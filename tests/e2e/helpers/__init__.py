@@ -11,6 +11,7 @@ Modules:
 """
 
 from .article_helpers import extract_article_id, extract_article_key, get_article_html
+from .cleanup import delete_draft_with_retry
 from .constants import (
     DEFAULT_ELEMENT_WAIT_TIMEOUT_MS,
     DEFAULT_NAVIGATION_TIMEOUT_MS,
@@ -27,6 +28,7 @@ __all__ = [
     "create_test_png",
     "DEFAULT_ELEMENT_WAIT_TIMEOUT_MS",
     "DEFAULT_NAVIGATION_TIMEOUT_MS",
+    "delete_draft_with_retry",
     "extract_article_id",
     "extract_article_key",
     "get_article_html",
