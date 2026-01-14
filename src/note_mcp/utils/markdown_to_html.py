@@ -12,6 +12,7 @@ from markdown_it import MarkdownIt
 
 from note_mcp.api.embeds import (
     GIST_PATTERN,
+    MONEY_PATTERN,
     NOTE_PATTERN,
     TWITTER_PATTERN,
     YOUTUBE_PATTERN,
@@ -73,6 +74,12 @@ _TEXT_ALIGN_LEFT_PATTERN = re.compile(r"^<-(.+)$", re.MULTILINE)
 
 # Pattern to find URLs that are alone on a line (potential embed URLs)
 _STANDALONE_URL_PATTERN = re.compile(r"^(https?://\S+)$", re.MULTILINE)
+
+# Stock notation patterns (Issue #216)
+# Japanese stocks: ^5243 (4-5 digit security code) - must be alone on a line
+_STOCK_JP_PATTERN = re.compile(r"^\^(\d{4,5})$", re.MULTILINE)
+# US stocks: $GOOG (uppercase ticker) - must be alone on a line
+_STOCK_US_PATTERN = re.compile(r"^\$([A-Z]+)$", re.MULTILINE)
 
 # Pattern to match paragraphs containing alignment placeholders (for html_transformer)
 _ALIGN_P_PATTERN = re.compile(
@@ -178,8 +185,8 @@ def _restore_code_blocks(content: str, blocks: list[tuple[str, str]]) -> str:
 def has_embed_url(content: str) -> bool:
     """Check if content contains URLs that should be embedded.
 
-    Detects YouTube, Twitter/X, note.com article, and GitHub Gist URLs that appear
-    alone on a line (indicating they should be embedded, not linked).
+    Detects YouTube, Twitter/X, note.com article, GitHub Gist, and noteマネー URLs
+    that appear alone on a line (indicating they should be embedded, not linked).
 
     Args:
         content: Markdown content to check.
@@ -196,6 +203,7 @@ def has_embed_url(content: str) -> bool:
             or TWITTER_PATTERN.match(url)
             or NOTE_PATTERN.match(url)
             or GIST_PATTERN.match(url)
+            or MONEY_PATTERN.match(url)
         ):
             return True
     return False
@@ -294,6 +302,33 @@ def _extract_citation(blockquote_content: str) -> tuple[str, str]:
         figcaption_html = citation_text
 
     return modified_content, figcaption_html
+
+
+def _convert_stock_notation(content: str) -> str:
+    """Convert stock notation to noteマネー URLs.
+
+    Converts stock notation markers BEFORE markdown conversion:
+    - ^5243 (Japanese stock) → https://money.note.com/companies/5243
+    - $GOOG (US stock) → https://money.note.com/us_companies/GOOG
+
+    Only converts notations that are alone on a line.
+    Code blocks are protected from conversion.
+
+    Issue #216: Support stock chart embedding via notation.
+
+    Args:
+        content: Markdown content with stock notations
+
+    Returns:
+        Content with stock notations converted to URLs
+    """
+    with _protect_code_blocks(content, "STOCK") as (protected, blocks):
+        # Japanese stocks: ^5243 → https://money.note.com/companies/5243
+        protected = _STOCK_JP_PATTERN.sub(r"https://money.note.com/companies/\1", protected)
+        # US stocks: $GOOG → https://money.note.com/us_companies/GOOG
+        protected = _STOCK_US_PATTERN.sub(r"https://money.note.com/us_companies/\1", protected)
+
+    return _restore_code_blocks(protected, blocks)
 
 
 def _convert_text_alignment(content: str) -> str:
@@ -702,10 +737,14 @@ def markdown_to_html(content: str) -> str:
     # 1. Convert [TOC] to placeholder FIRST (before any processing)
     content = _convert_toc_to_placeholder(content)
 
-    # 2. Convert text alignment markers to placeholders BEFORE markdown conversion
+    # 2. Convert stock notation to URLs (Issue #216)
+    # Must be before markdown conversion so URLs can be processed as embeds
+    content = _convert_stock_notation(content)
+
+    # 3. Convert text alignment markers to placeholders BEFORE markdown conversion
     content = _convert_text_alignment(content)
 
-    # 3. Markdown conversion
+    # 4. Markdown conversion
     md = MarkdownIt().enable("strikethrough")
     result: str = md.render(content)
 

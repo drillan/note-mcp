@@ -42,6 +42,10 @@ NOTE_PATTERN = re.compile(r"^https?://note\.com/\w+/n/\w+$")
 # GitHub Gist: gist.github.com/user/gist_id (with optional trailing slash and file fragment)
 GIST_PATTERN = re.compile(r"^https?://gist\.github\.com/[\w-]+/[\w]+/?(?:#[\w-]+)?$")
 
+# noteマネー (stock chart): money.note.com/companies|us_companies|indices|investments/xxx
+# Supports Japanese stocks, US stocks, indices, and investment trusts
+MONEY_PATTERN = re.compile(r"^https?://money\.note\.com/(companies|us_companies|indices|investments)/[\w-]+/?$")
+
 
 def get_embed_service(url: str) -> str | None:
     """Get embed service type from URL.
@@ -50,7 +54,7 @@ def get_embed_service(url: str) -> str | None:
         url: The URL to check.
 
     Returns:
-        Service type ('youtube', 'twitter', 'note', 'gist') or None if unsupported.
+        Service type ('youtube', 'twitter', 'note', 'gist', 'money') or None if unsupported.
     """
     if YOUTUBE_PATTERN.match(url):
         return "youtube"
@@ -60,6 +64,8 @@ def get_embed_service(url: str) -> str | None:
         return "note"
     if GIST_PATTERN.match(url):
         return "gist"
+    if MONEY_PATTERN.match(url):
+        return "money"
     return None
 
 

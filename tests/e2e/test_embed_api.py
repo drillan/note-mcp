@@ -358,3 +358,299 @@ class TestEmbedPreviewRendering:
 
             # Note: iframe may or may not be present depending on client-side JS
             # The figure element presence is sufficient to verify API conversion worked
+
+
+class TestMoneyEmbedApiConversion:
+    """Test noteマネー (stock chart) embed conversion via API."""
+
+    async def test_money_companies_embed_via_api(
+        self,
+        real_session: Session,
+    ) -> None:
+        """noteマネー日本株URLがAPIでfigure要素に変換される.
+
+        - ブラウザを起動せずにAPIのみで下書き作成
+        - noteマネーURLがfigure要素に変換される
+        - embedded-service="money"属性が設定される
+        """
+        # Arrange - Use note社 (証券コード: 5243) as test URL
+        money_url = "https://money.note.com/companies/5243"
+        body = f"""株価チャート埋め込みテスト
+
+{money_url}
+
+上記にnote社の株価チャートが表示されます。"""
+
+        # Act
+        result = await note_create_draft.fn(
+            title="[E2E-TEST] noteマネー Embed via API",
+            body=body,
+            tags=["e2e-test", "embed-api"],
+        )
+
+        # Assert - API response
+        assert "下書きを作成しました" in result
+        assert "ID:" in result
+
+        # Verify embed figure is present in raw HTML
+        article_key = extract_article_key(result)
+        try:
+            article_html = await get_article_html(article_key)
+
+            # Verify embed figure is present (in raw HTML)
+            assert 'embedded-service="money"' in article_html
+            assert f'data-src="{money_url}"' in article_html
+            assert "embedded-content-key=" in article_html
+        finally:
+            # Clean up created article
+            await delete_draft_with_retry(real_session, article_key)
+
+    async def test_money_indices_embed_via_api(
+        self,
+        real_session: Session,
+    ) -> None:
+        """noteマネー指数URLがAPIでfigure要素に変換される.
+
+        - 指数（日経平均: NKY）のURLがfigure要素に変換される
+        - embedded-service="money"属性が設定される
+        """
+        # Arrange - Use 日経平均 (NKY) as test URL
+        money_url = "https://money.note.com/indices/NKY"
+        body = f"""指数チャート埋め込みテスト
+
+{money_url}
+
+上記に日経平均の株価チャートが表示されます。"""
+
+        # Act
+        result = await note_create_draft.fn(
+            title="[E2E-TEST] noteマネー Index Embed via API",
+            body=body,
+            tags=["e2e-test", "embed-api"],
+        )
+
+        # Assert - API response
+        assert "下書きを作成しました" in result
+
+        # Verify embed figure is present in raw HTML
+        article_key = extract_article_key(result)
+        try:
+            article_html = await get_article_html(article_key)
+
+            # Verify embed figure is present
+            assert 'embedded-service="money"' in article_html
+            assert f'data-src="{money_url}"' in article_html
+        finally:
+            # Clean up created article
+            await delete_draft_with_retry(real_session, article_key)
+
+    async def test_money_investments_embed_via_api(
+        self,
+        real_session: Session,
+    ) -> None:
+        """noteマネー投資信託URLがAPIでfigure要素に変換される.
+
+        - 投資信託（eMAXIS Slim: 0331418A）のURLがfigure要素に変換される
+        - embedded-service="money"属性が設定される
+        """
+        # Arrange - Use eMAXIS Slim as test URL
+        money_url = "https://money.note.com/investments/0331418A"
+        body = f"""投資信託チャート埋め込みテスト
+
+{money_url}
+
+上記に投資信託のチャートが表示されます。"""
+
+        # Act
+        result = await note_create_draft.fn(
+            title="[E2E-TEST] noteマネー Investment Embed via API",
+            body=body,
+            tags=["e2e-test", "embed-api"],
+        )
+
+        # Assert - API response
+        assert "下書きを作成しました" in result
+
+        # Verify embed figure is present in raw HTML
+        article_key = extract_article_key(result)
+        try:
+            article_html = await get_article_html(article_key)
+
+            # Verify embed figure is present
+            assert 'embedded-service="money"' in article_html
+            assert f'data-src="{money_url}"' in article_html
+        finally:
+            # Clean up created article
+            await delete_draft_with_retry(real_session, article_key)
+
+
+class TestStockNotationEmbedApiConversion:
+    """Test stock notation (^5243, $GOOG) embed conversion via API."""
+
+    async def test_jp_stock_notation_embed_via_api(
+        self,
+        real_session: Session,
+    ) -> None:
+        """日本株記法 (^5243) がAPIでfigure要素に変換される.
+
+        - 株価記法 ^5243 がURLに変換される
+        - noteマネーURLがfigure要素に変換される
+        - embedded-service="money"属性が設定される
+        """
+        # Arrange - Use Japanese stock notation for note社 (証券コード: 5243)
+        body = """株価記法埋め込みテスト
+
+^5243
+
+上記にnote社の株価チャートが表示されます。"""
+
+        # Act
+        result = await note_create_draft.fn(
+            title="[E2E-TEST] 日本株記法 Embed via API",
+            body=body,
+            tags=["e2e-test", "embed-api"],
+        )
+
+        # Assert - API response
+        assert "下書きを作成しました" in result
+        assert "ID:" in result
+
+        # Verify embed figure is present in raw HTML
+        article_key = extract_article_key(result)
+        try:
+            article_html = await get_article_html(article_key)
+
+            # Verify embed figure is present (notation converted to URL then embedded)
+            assert 'embedded-service="money"' in article_html
+            assert 'data-src="https://money.note.com/companies/5243"' in article_html
+            assert "embedded-content-key=" in article_html
+        finally:
+            # Clean up created article
+            await delete_draft_with_retry(real_session, article_key)
+
+    async def test_us_stock_notation_embed_via_api(
+        self,
+        real_session: Session,
+    ) -> None:
+        """米国株記法 ($GOOG) がAPIでfigure要素に変換される.
+
+        - 株価記法 $GOOG がURLに変換される
+        - noteマネーURLがfigure要素に変換される
+        - embedded-service="money"属性が設定される
+        """
+        # Arrange - Use US stock notation for Google
+        body = """米国株記法埋め込みテスト
+
+$GOOG
+
+上記にGoogleの株価チャートが表示されます。"""
+
+        # Act
+        result = await note_create_draft.fn(
+            title="[E2E-TEST] 米国株記法 Embed via API",
+            body=body,
+            tags=["e2e-test", "embed-api"],
+        )
+
+        # Assert - API response
+        assert "下書きを作成しました" in result
+
+        # Verify embed figure is present in raw HTML
+        article_key = extract_article_key(result)
+        try:
+            article_html = await get_article_html(article_key)
+
+            # Verify embed figure is present
+            assert 'embedded-service="money"' in article_html
+            assert 'data-src="https://money.note.com/us_companies/GOOG"' in article_html
+        finally:
+            # Clean up created article
+            await delete_draft_with_retry(real_session, article_key)
+
+    async def test_mixed_stock_notations_embed_via_api(
+        self,
+        real_session: Session,
+    ) -> None:
+        """日本株と米国株の記法が混在しても変換される.
+
+        - 複数の株価記法がそれぞれURLに変換される
+        - 各URLがfigure要素に変換される
+        """
+        # Arrange - Mix Japanese and US stock notations
+        body = """# 注目銘柄
+
+## note社 (日本株)
+
+^5243
+
+## Google (米国株)
+
+$GOOG
+
+どちらも株価チャートとして表示されます。"""
+
+        # Act
+        result = await note_create_draft.fn(
+            title="[E2E-TEST] 複合株価記法 Embed via API",
+            body=body,
+            tags=["e2e-test", "embed-api"],
+        )
+
+        # Assert - API response
+        assert "下書きを作成しました" in result
+
+        # Verify both embed figures are present
+        article_key = extract_article_key(result)
+        try:
+            article_html = await get_article_html(article_key)
+
+            # Both should be converted
+            assert article_html.count('embedded-service="money"') >= 2
+            assert 'data-src="https://money.note.com/companies/5243"' in article_html
+            assert 'data-src="https://money.note.com/us_companies/GOOG"' in article_html
+        finally:
+            # Clean up created article
+            await delete_draft_with_retry(real_session, article_key)
+
+    async def test_stock_notation_in_code_block_not_converted(
+        self,
+        real_session: Session,
+    ) -> None:
+        """コードブロック内の株価記法は変換されない.
+
+        - コードブロック内の記法はそのまま保持される
+        - figure要素には変換されない
+        """
+        # Arrange - Stock notation inside code block
+        body = """株価記法の使い方
+
+```
+日本株: ^5243
+米国株: $GOOG
+```
+
+上記はコードブロック内なので変換されません。"""
+
+        # Act
+        result = await note_create_draft.fn(
+            title="[E2E-TEST] コードブロック内株価記法",
+            body=body,
+            tags=["e2e-test", "embed-api"],
+        )
+
+        # Assert - API response
+        assert "下書きを作成しました" in result
+
+        # Verify no embed figures are present
+        article_key = extract_article_key(result)
+        try:
+            article_html = await get_article_html(article_key)
+
+            # Code block content should NOT be converted to embeds
+            assert 'embedded-service="money"' not in article_html
+            # Original notation should be preserved in code block
+            assert "^5243" in article_html
+            assert "$GOOG" in article_html
+        finally:
+            # Clean up created article
+            await delete_draft_with_retry(real_session, article_key)

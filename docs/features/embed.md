@@ -12,6 +12,7 @@ note.comは以下のサービスの埋め込みに対応しています:
 | Twitter/X | ✅ | ツイートカードとして埋め込み |
 | note.com記事 | ✅ | 記事カードとして埋め込み |
 | GitHub Gist | ✅ | コードスニペットとして埋め込み |
+| noteマネー（株価チャート） | ✅ | 株価チャートとして埋め込み |
 | その他の外部URL | ❌ | 通常のリンクとして表示 |
 
 > **重要**: 一般的な外部URL（例: zenn.dev、qiita.com、example.com等）は埋め込みカードに変換されません。通常のリンクとして表示されます。
@@ -114,6 +115,52 @@ URL: https://twitter.com/example/status/deleted_tweet
 ```
 
 > **補足**: リンクとして挿入された場合でも、記事の作成・更新は正常に完了します。リンクをクリックすれば元のURLにアクセスできます。
+
+## 株価チャート埋め込み
+
+noteマネー（money.note.com）の株価チャートを埋め込むことができます。
+
+### URL方式
+
+対応URLを単独の行に記述すると、株価チャートとして埋め込まれます。
+
+| 種類 | URLパターン | 例 |
+|------|------------|-----|
+| 日本株 | `https://money.note.com/companies/{証券コード}` | https://money.note.com/companies/5243 |
+| 米国株 | `https://money.note.com/us_companies/{ティッカー}` | https://money.note.com/us_companies/GOOG |
+| 指数 | `https://money.note.com/indices/{指数コード}` | https://money.note.com/indices/NKY |
+| 投資信託 | `https://money.note.com/investments/{ファンドコード}` | https://money.note.com/investments/0331418A |
+
+```markdown
+# 注目銘柄
+
+note社の株価チャート:
+
+https://money.note.com/companies/5243
+```
+
+### 株価記法
+
+note.comエディタと同様の記法も使用できます。記法は単独の行に記述する必要があります。
+
+| 記法 | 説明 | 変換先URL |
+|------|------|-----------|
+| `^{証券コード}` | 日本株（4-5桁） | `https://money.note.com/companies/{証券コード}` |
+| `${ティッカー}` | 米国株（大文字） | `https://money.note.com/us_companies/{ティッカー}` |
+
+```markdown
+# 注目銘柄
+
+## note社の株価
+
+^5243
+
+## Googleの株価
+
+$GOOG
+```
+
+> **注意**: 株価記法は単独の行に記述する必要があります。文中に記述した場合は変換されません。コードブロック内の記法も変換されません。
 
 ## 制限事項
 
