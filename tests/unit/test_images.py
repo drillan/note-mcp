@@ -418,13 +418,17 @@ class TestImageUploadArticle6Compliance:
     """
 
     @pytest.mark.asyncio
-    async def test_upload_image_raises_on_missing_key(self, tmp_path: Path) -> None:
-        """Eyecatch upload should raise error when API response is missing 'key'."""
+    async def test_upload_image_succeeds_without_key(self, tmp_path: Path) -> None:
+        """Eyecatch upload should succeed when API response is missing 'key'.
+
+        Note: note.com eyecatch API doesn't return 'key' field, only 'url'.
+        This is documented API behavior, not a missing field error.
+        """
         session = create_mock_session()
         file_path = tmp_path / "test.jpg"
         file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
 
-        # Response missing 'key' field
+        # Response without 'key' field (actual eyecatch API behavior)
         mock_response = {
             "data": {
                 "url": "https://assets.note.com/images/img_123456.jpg",
@@ -438,11 +442,10 @@ class TestImageUploadArticle6Compliance:
             mock_client.__aexit__ = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
 
-            with pytest.raises(NoteAPIError) as exc_info:
-                await upload_eyecatch_image(session, str(file_path), note_id="12345")
+            result = await upload_eyecatch_image(session, str(file_path), note_id="12345")
 
-            assert exc_info.value.code == ErrorCode.API_ERROR
-            assert "key" in exc_info.value.message.lower()
+            assert result.url == "https://assets.note.com/images/img_123456.jpg"
+            assert result.key is None  # eyecatch API doesn't return key
 
     @pytest.mark.asyncio
     async def test_upload_image_raises_on_missing_url(self, tmp_path: Path) -> None:

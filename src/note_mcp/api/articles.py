@@ -526,6 +526,11 @@ async def create_draft(
         )
 
     # Parse response
+    # Note: API returns empty status for newly created articles
+    # Since create_draft always creates drafts, set status explicitly
+    if not article_data.get("status"):
+        article_data["status"] = ArticleStatus.DRAFT.value
+
     return from_api_response(article_data)
 
 
