@@ -604,7 +604,7 @@ async def note_create_from_file(
                     )
                     eyecatch_uploaded = True
                 except NoteAPIError as e:
-                    eyecatch_error = str(e)
+                    eyecatch_error = f"{parsed.eyecatch.name}: {e}"
             else:
                 eyecatch_error = f"ファイルが見つかりません: {parsed.eyecatch}"
 

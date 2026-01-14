@@ -5,7 +5,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from note_mcp.models import Article, ArticleListResult, ArticleStatus, Image, ImageType
+from note_mcp.models import (
+    Article,
+    ArticleListResult,
+    ArticleStatus,
+    ErrorCode,
+    Image,
+    ImageType,
+    NoteAPIError,
+)
 from note_mcp.utils.file_parser import LocalImage, ParsedArticle
 
 
@@ -366,3 +374,55 @@ class TestNoteCreateFromFile:
             assert "✅" in result  # 記事作成自体は成功
             assert "⚠️ アイキャッチ画像アップロード失敗" in result
             assert "ファイルが見つかりません" in result
+
+    @pytest.mark.asyncio
+    async def test_eyecatch_api_error_shows_filename(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """eyecatchアップロードでAPIエラーが発生した場合、ファイル名付きエラーが表示される。"""
+        md_file = tmp_path / "test.md"
+        md_file.write_text("---\ntitle: Test\neyecatch: ./header.png\n---\n\nBody")
+
+        eyecatch_image = tmp_path / "header.png"
+        eyecatch_image.write_bytes(b"fake png data")
+
+        mock_session = MagicMock()
+        mock_article = Article(
+            id="123456789",
+            key="n1234567890ab",
+            title="Test",
+            status=ArticleStatus.DRAFT,
+            body="",
+        )
+        mock_parsed = ParsedArticle(
+            title="Test",
+            body="Body",
+            tags=[],
+            local_images=[],
+            eyecatch=eyecatch_image,
+        )
+
+        with (
+            patch("note_mcp.server._session_manager") as mock_session_manager,
+            patch("note_mcp.server.parse_markdown_file") as mock_parse,
+            patch("note_mcp.server.create_draft", new_callable=AsyncMock) as mock_create,
+            patch("note_mcp.server.upload_eyecatch_image", new_callable=AsyncMock) as mock_upload_eyecatch,
+        ):
+            mock_session_manager.load.return_value = mock_session
+            mock_parse.return_value = mock_parsed
+            mock_create.return_value = mock_article
+            # APIエラーをシミュレート
+            mock_upload_eyecatch.side_effect = NoteAPIError(ErrorCode.API_ERROR, "Server error")
+
+            from note_mcp.server import note_create_from_file
+
+            fn = note_create_from_file.fn
+            result = await fn(str(md_file), upload_images=True)
+
+            # 記事作成自体は成功
+            assert "✅" in result
+            # エラーメッセージにファイル名が含まれる
+            assert "⚠️ アイキャッチ画像アップロード失敗" in result
+            assert "header.png" in result
+            assert "Server error" in result

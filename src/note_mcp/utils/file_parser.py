@@ -72,6 +72,7 @@ def parse_markdown_file(file_path: Path | str) -> ParsedArticle:
     - Tags: From YAML frontmatter (optional)
     - Body: The Markdown content (frontmatter stripped, title heading removed)
     - Local images: Paths to local image files (not URLs)
+    - Eyecatch: Path to eyecatch image from YAML frontmatter (optional)
 
     Args:
         file_path: Path to the Markdown file (str or Path)
