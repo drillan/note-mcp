@@ -526,9 +526,15 @@ async def create_draft(
         )
 
     # Parse response
-    # Note: API returns empty status for newly created articles
-    # Since create_draft always creates drafts, set status explicitly
-    if not article_data.get("status"):
+    # Note: POST /v1/text_notes returns empty 'status' field for newly created articles.
+    # Since this function specifically creates drafts, we set status to 'draft' explicitly.
+    # This is Article 6 compliant: we know the expected state from the function's semantics.
+    status_str = article_data.get("status")
+    if not status_str:
+        logger.warning(
+            "create_draft API returned empty status, setting to 'draft'. Response: %s",
+            article_data,
+        )
         article_data["status"] = ArticleStatus.DRAFT.value
 
     return from_api_response(article_data)

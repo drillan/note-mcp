@@ -186,6 +186,21 @@ class TestImage:
         )
         assert image.size_bytes == 1024
 
+    def test_image_creation_without_key(self) -> None:
+        """Test creating an image without key (eyecatch API behavior).
+
+        The eyecatch upload API (/v1/image_upload/note_eyecatch) only returns
+        'url' in the response, not 'key'. This test verifies that Image model
+        accepts key=None for this API behavior.
+        """
+        image = Image(
+            url="https://note.com/images/img123.png",
+            original_path="/local/path/image.png",
+            uploaded_at=int(time.time()),
+        )
+        assert image.key is None
+        assert image.url == "https://note.com/images/img123.png"
+
 
 class TestTag:
     """Tests for Tag model."""

@@ -414,7 +414,8 @@ class TestImageUploadArticle6Compliance:
 
     Article 6 requires:
     - No implicit fallback to default values for required fields
-    - Missing key/url should raise NoteAPIError, not use empty string
+    - Missing 'url' should raise NoteAPIError (required field)
+    - Missing 'key' is acceptable for eyecatch API (optional field)
     """
 
     @pytest.mark.asyncio
