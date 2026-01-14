@@ -76,12 +76,12 @@ https://www.youtube.com/watch?v=example
 
 ## 参考記事（リンクのみ）
 
-https://zenn.dev/example/articles/example
+https://qiita.com/example/items/example
 ```
 
 上記の例では:
 - YouTubeリンク → 埋め込みプレーヤーとして表示
-- Zennリンク → 通常のリンクテキストとして表示
+- Qiitaリンク → 通常のリンクテキストとして表示（非対応サービス）
 
 ### リンクテキストの指定
 
