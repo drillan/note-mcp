@@ -1036,12 +1036,29 @@ async def delete_all_drafts(
                 break
 
             # Build article summaries for this page
+            # Article 6: Required fields (id, key) must be present, skip invalid notes
             for note in notes:
+                note_id = note.get("id")
+                note_key = note.get("key")
+
+                # Skip notes with missing required fields (Article 6 compliance)
+                if not note_id or not note_key:
+                    logger.warning(
+                        "Skipping note with missing required field(s)",
+                        extra={
+                            "note_id": note_id,
+                            "note_key": note_key,
+                            "note_name": note.get("name"),
+                        },
+                    )
+                    continue
+
                 article_summaries.append(
                     ArticleSummary(
-                        article_id=str(note.get("id", "")),
-                        article_key=str(note.get("key", "")),
-                        title=str(note.get("name", "") or ""),
+                        article_id=str(note_id),
+                        article_key=str(note_key),
+                        # title is display-only, empty string is valid
+                        title=str(note.get("name") or ""),
                     )
                 )
 

@@ -407,3 +407,88 @@ class TestUploadBodyImage:
                 await upload_body_image(session, str(file_path), note_id="12345")
 
             assert exc_info.value.code == ErrorCode.API_ERROR
+
+
+class TestImageUploadArticle6Compliance:
+    """Tests for Article 6 (Data Accuracy Mandate) compliance in image upload.
+
+    Article 6 requires:
+    - No implicit fallback to default values for required fields
+    - Missing key/url should raise NoteAPIError, not use empty string
+    """
+
+    @pytest.mark.asyncio
+    async def test_upload_image_raises_on_missing_key(self, tmp_path: Path) -> None:
+        """Eyecatch upload should raise error when API response is missing 'key'."""
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        # Response missing 'key' field
+        mock_response = {
+            "data": {
+                "url": "https://assets.note.com/images/img_123456.jpg",
+            }
+        }
+
+        with patch("note_mcp.api.images.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await upload_eyecatch_image(session, str(file_path), note_id="12345")
+
+            assert exc_info.value.code == ErrorCode.API_ERROR
+            assert "key" in exc_info.value.message.lower()
+
+    @pytest.mark.asyncio
+    async def test_upload_image_raises_on_missing_url(self, tmp_path: Path) -> None:
+        """Eyecatch upload should raise error when API response is missing 'url'."""
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        # Response missing 'url' field
+        mock_response = {
+            "data": {
+                "key": "img_123456",
+            }
+        }
+
+        with patch("note_mcp.api.images.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await upload_eyecatch_image(session, str(file_path), note_id="12345")
+
+            assert exc_info.value.code == ErrorCode.API_ERROR
+            assert "url" in exc_info.value.message.lower()
+
+    @pytest.mark.asyncio
+    async def test_upload_image_raises_on_empty_data(self, tmp_path: Path) -> None:
+        """Eyecatch upload should raise error when API response data is empty."""
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        # Response with empty data
+        mock_response: dict[str, dict[str, str]] = {"data": {}}
+
+        with patch("note_mcp.api.images.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+            mock_client.post = AsyncMock(return_value=mock_response)
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await upload_eyecatch_image(session, str(file_path), note_id="12345")
+
+            assert exc_info.value.code == ErrorCode.API_ERROR

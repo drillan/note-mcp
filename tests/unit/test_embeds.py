@@ -1020,3 +1020,136 @@ class TestResolveEmbedKeysWithEscapedUrl:
             call_args = mock_fetch.call_args[0]
             # URL should be passed to fetch_embed_key (after html.unescape)
             assert call_args[1] == "https://twitter.com/user/status/1234567890"
+
+
+class TestFetchNoteEmbedKeyArticle6Compliance:
+    """Tests for Article 6 compliance in _fetch_note_embed_key function.
+
+    Article 6 (Data Accuracy Mandate) requires:
+    - No implicit fallbacks for required fields
+    - Missing required fields must raise NoteAPIError
+    """
+
+    @pytest.mark.asyncio
+    async def test_raises_on_missing_html_for_embed(self) -> None:
+        """Test that missing html_for_embed raises NoteAPIError.
+
+        Article 6: html_for_embed is required for rendering embeds.
+        Missing value should raise error, not fall back to empty string.
+        """
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import _fetch_note_embed_key
+        from note_mcp.models import ErrorCode, NoteAPIError, Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        # Response with key but missing html_for_embed
+        mock_response = {
+            "data": {
+                "embedded_content": {
+                    "key": "emb123456789",
+                    # html_for_embed is missing
+                }
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await _fetch_note_embed_key(session, "https://note.com/user/n/n123456", "narticlekey")
+
+            assert exc_info.value.code == ErrorCode.API_ERROR
+            assert "html_for_embed" in exc_info.value.message
+
+    @pytest.mark.asyncio
+    async def test_raises_on_missing_key(self) -> None:
+        """Test that missing key raises NoteAPIError.
+
+        This verifies existing behavior for key validation.
+        """
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import _fetch_note_embed_key
+        from note_mcp.models import ErrorCode, NoteAPIError, Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        # Response with html_for_embed but missing key
+        mock_response = {
+            "data": {
+                "embedded_content": {
+                    "html_for_embed": "<div>embed content</div>",
+                    # key is missing
+                }
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await _fetch_note_embed_key(session, "https://note.com/user/n/n123456", "narticlekey")
+
+            assert exc_info.value.code == ErrorCode.API_ERROR
+
+    @pytest.mark.asyncio
+    async def test_valid_response_succeeds(self) -> None:
+        """Test that valid response with both key and html_for_embed succeeds."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import _fetch_note_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        # Valid response with both required fields
+        mock_response = {
+            "data": {
+                "embedded_content": {
+                    "key": "emb123456789",
+                    "html_for_embed": "<div>embed content</div>",
+                }
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.post.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            embed_key, html_for_embed = await _fetch_note_embed_key(
+                session, "https://note.com/user/n/n123456", "narticlekey"
+            )
+
+            assert embed_key == "emb123456789"
+            assert html_for_embed == "<div>embed content</div>"

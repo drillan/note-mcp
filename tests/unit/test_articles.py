@@ -13,10 +13,19 @@ from note_mcp.api.articles import (
     _execute_post,
     _parse_article_response,
     _parse_create_response,
+    delete_all_drafts,
     get_article_raw_html,
     get_article_via_api,
 )
-from note_mcp.models import Article, ArticleInput, ArticleStatus, ErrorCode, NoteAPIError, Session
+from note_mcp.models import (
+    Article,
+    ArticleInput,
+    ArticleStatus,
+    BulkDeletePreview,
+    ErrorCode,
+    NoteAPIError,
+    Session,
+)
 
 
 class TestParseArticleResponse:
@@ -43,16 +52,15 @@ class TestParseArticleResponse:
         assert article.body == "<p>Test body</p>"
         assert article.status == ArticleStatus.DRAFT
 
-    def test_handles_empty_data(self) -> None:
-        """_parse_article_response should handle empty data gracefully."""
+    def test_raises_error_on_empty_data(self) -> None:
+        """_parse_article_response should raise error on empty data (Article 6 compliance)."""
         response: dict[str, dict[str, str]] = {"data": {}}
 
-        article = _parse_article_response(response)
+        with pytest.raises(NoteAPIError) as exc_info:
+            _parse_article_response(response)
 
-        assert isinstance(article, Article)
-        assert article.id == ""
-        assert article.key == ""
-        assert article.title == ""
+        assert exc_info.value.code == ErrorCode.API_ERROR
+        assert "id" in exc_info.value.message.lower()
 
     def test_raises_error_when_data_key_missing(self) -> None:
         """_parse_article_response should raise error when 'data' key is missing."""
@@ -542,3 +550,113 @@ class TestParseCreateResponse:
             _parse_create_response(response)
 
         assert exc_info.value.code == ErrorCode.API_ERROR
+
+
+class TestDeleteAllDraftsArticle6Compliance:
+    """Tests for delete_all_drafts Article 6 (Data Accuracy Mandate) compliance.
+
+    Article 6 requires:
+    - No implicit fallback to default values for required fields
+    - Missing id/key should skip the note with warning, not use empty string
+    """
+
+    @pytest.fixture
+    def mock_session(self) -> Session:
+        """Create a mock session for testing."""
+        return Session(
+            cookies={"note_gql_auth_token": "test_token", "XSRF-TOKEN": "test_xsrf"},
+            user_id="test_user",
+            username="testuser",
+            created_at=1700000000,
+        )
+
+    @pytest.mark.asyncio
+    async def test_skips_notes_with_missing_id(self, mock_session: Session) -> None:
+        """Notes with missing 'id' field should be skipped, not use empty string."""
+        # First page response with a note missing 'id'
+        page1_response = {
+            "data": {
+                "notes": [
+                    {"id": "123", "key": "n123abc", "name": "Valid Note"},
+                    {"key": "nnoID", "name": "Note Without ID"},  # Missing id
+                ]
+            }
+        }
+        # Empty second page to stop pagination
+        page2_response: dict[str, Any] = {"data": {"notes": []}}
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.get = AsyncMock(side_effect=[page1_response, page2_response])
+
+            # Preview mode (confirm=False)
+            result = await delete_all_drafts(mock_session, confirm=False)
+
+            # Only the valid note should be included
+            assert result.total_count == 1
+            assert isinstance(result, BulkDeletePreview)
+            assert len(result.articles) == 1
+            assert result.articles[0].article_id == "123"
+
+    @pytest.mark.asyncio
+    async def test_skips_notes_with_missing_key(self, mock_session: Session) -> None:
+        """Notes with missing 'key' field should be skipped, not use empty string."""
+        # First page response with a note missing 'key'
+        page1_response = {
+            "data": {
+                "notes": [
+                    {"id": "456", "key": "n456def", "name": "Valid Note"},
+                    {"id": "789", "name": "Note Without Key"},  # Missing key
+                ]
+            }
+        }
+        # Empty second page to stop pagination
+        page2_response: dict[str, Any] = {"data": {"notes": []}}
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.get = AsyncMock(side_effect=[page1_response, page2_response])
+
+            # Preview mode (confirm=False)
+            result = await delete_all_drafts(mock_session, confirm=False)
+
+            # Only the valid note should be included
+            assert result.total_count == 1
+            assert isinstance(result, BulkDeletePreview)
+            assert len(result.articles) == 1
+            assert result.articles[0].article_id == "456"
+
+    @pytest.mark.asyncio
+    async def test_accepts_notes_with_missing_title(self, mock_session: Session) -> None:
+        """Notes with missing 'name' (title) should be accepted with empty title."""
+        # Title is optional for display purposes
+        page1_response = {
+            "data": {
+                "notes": [
+                    {"id": "111", "key": "n111aaa", "name": "Has Title"},
+                    {"id": "222", "key": "n222bbb"},  # Missing name - OK, it's display-only
+                ]
+            }
+        }
+        page2_response: dict[str, Any] = {"data": {"notes": []}}
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.get = AsyncMock(side_effect=[page1_response, page2_response])
+
+            result = await delete_all_drafts(mock_session, confirm=False)
+
+            # Both notes should be included (title is optional)
+            assert result.total_count == 2
+            assert isinstance(result, BulkDeletePreview)
+            assert result.articles[0].title == "Has Title"
+            assert result.articles[1].title == ""

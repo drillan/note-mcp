@@ -550,10 +550,13 @@ async def login_with_browser(
             username = user_info["urlname"]
             logger.info(f"User info from API: {username} (ID: {user_id})")
         except ValueError as e:
-            logger.warning(f"Could not retrieve user info (login still successful): {e}")
-            # Use placeholder values - session is still valid
-            user_id = "unknown"
-            username = "unknown"
+            # Article 6: No placeholder values allowed
+            # All three methods failed to retrieve user info
+            raise ValueError(
+                "Failed to retrieve user information after successful login. "
+                "All methods (noteInitData, profile URL, API) failed. "
+                f"Last error: {e}"
+            ) from e
 
     # Create session
     session = Session(

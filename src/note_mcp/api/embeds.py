@@ -171,12 +171,13 @@ async def _fetch_note_embed_key(
     data = response.get("data", {})
     embedded_content = data.get("embedded_content", {})
     embed_key = embedded_content.get("key")
-    html_for_embed = embedded_content.get("html_for_embed", "")
+    html_for_embed = embedded_content.get("html_for_embed")
 
-    if not embed_key:
+    # Article 6: Validate required fields - no implicit fallbacks
+    if not embed_key or not html_for_embed:
         raise NoteAPIError(
             code=ErrorCode.API_ERROR,
-            message="Failed to fetch note embed key: API returned empty response",
+            message="Failed to fetch note embed key: API response missing required field(s) 'key' or 'html_for_embed'",
             details={"url": url, "article_key": article_key, "response": response},
         )
 

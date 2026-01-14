@@ -426,13 +426,48 @@ class DeleteAllDraftsInput(BaseModel):
 def from_api_response(data: dict[str, object]) -> Article:
     """Create an Article from note.com API response.
 
+    Article 6 (Data Accuracy Mandate) compliant:
+    - Required fields (id, key, status) must be present, no implicit fallbacks
+    - Missing required fields raise NoteAPIError
+
     Args:
         data: Raw API response dictionary
 
     Returns:
         Article instance
+
+    Raises:
+        NoteAPIError: If required fields (id, key, status) are missing or invalid
     """
+    # Article 6: Validate required field 'id' - no fallback
+    article_id = data.get("id")
+    if not article_id:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="API response missing required field: id",
+            details={"response": data},
+        )
+
+    # Article 6: Validate required field 'key' - no fallback
+    article_key = data.get("key")
+    if not article_key:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="API response missing required field: key",
+            details={"response": data},
+        )
+
+    # Article 6: Validate required field 'status' - no fallback or guessing
+    status_str = data.get("status")
+    if not isinstance(status_str, str) or not status_str:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="API response missing or invalid required field: status",
+            details={"response": data, "status_value": status_str},
+        )
+
     # Extract hashtag names from the hashtags array
+    # Empty hashtags list is valid - this is not a fallback
     hashtags = data.get("hashtags", [])
     tags: list[str] = []
     if isinstance(hashtags, list):
@@ -440,14 +475,10 @@ def from_api_response(data: dict[str, object]) -> Article:
             if isinstance(ht, dict):
                 hashtag_obj = ht.get("hashtag", {})
                 if isinstance(hashtag_obj, dict):
-                    name = hashtag_obj.get("name", "")
+                    # Skip hashtags without name - no fallback to empty string
+                    name = hashtag_obj.get("name")
                     if name:
                         tags.append(str(name))
-
-    # Map API field names to our model
-    status_str = data.get("status", "draft")
-    if not isinstance(status_str, str) or not status_str:
-        status_str = "draft"
 
     # Extract title: use "name" field, fallback to "noteDraft.name" for drafts
     title = data.get("name")
@@ -457,11 +488,15 @@ def from_api_response(data: dict[str, object]) -> Article:
             title = note_draft.get("name")
     title_str = str(title) if title else ""
 
+    # body can be empty string - this is a valid value, not a missing field
+    body = data.get("body")
+    body_str = str(body) if body is not None else ""
+
     return Article(
-        id=str(data.get("id", "")),
-        key=str(data.get("key", "")),
+        id=str(article_id),
+        key=str(article_key),
         title=title_str,
-        body=str(data.get("body", "")),
+        body=body_str,
         status=ArticleStatus(status_str),
         tags=tags,
         eyecatch_image_key=str(data.get("eyecatch_image_key")) if data.get("eyecatch_image_key") else None,
