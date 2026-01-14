@@ -492,3 +492,99 @@ class TestImageUploadArticle6Compliance:
                 await upload_eyecatch_image(session, str(file_path), note_id="12345")
 
             assert exc_info.value.code == ErrorCode.API_ERROR
+
+
+class TestUploadBodyImageArticle6Compliance:
+    """Tests for Article 6 compliance in upload_body_image S3 presigned POST.
+
+    Article 6 requires:
+    - No implicit fallback to default values for required S3 fields
+    - Missing required S3 fields should raise NoteAPIError
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "missing_field",
+        [
+            "key",
+            "policy",
+            "x-amz-credential",
+            "x-amz-algorithm",
+            "x-amz-date",
+            "x-amz-signature",
+        ],
+    )
+    async def test_upload_body_image_raises_on_missing_s3_field(self, tmp_path: Path, missing_field: str) -> None:
+        """Upload should raise error when required S3 field is missing."""
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        # Complete post fields minus the missing field
+        complete_post_fields = {
+            "key": "img_789012",
+            "acl": "public-read",
+            "Expires": "2024-12-31T23:59:59Z",
+            "policy": "base64policy",
+            "x-amz-credential": "AKIAIOSFODNN7EXAMPLE",
+            "x-amz-algorithm": "AWS4-HMAC-SHA256",
+            "x-amz-date": "20241220T000000Z",
+            "x-amz-signature": "signature123",
+        }
+        # Remove the field being tested
+        del complete_post_fields[missing_field]
+
+        presigned_response = {
+            "data": {
+                "action": "https://s3.amazonaws.com/note-images",
+                "url": "https://assets.note.com/images/img_789012.png",
+                "post": complete_post_fields,
+            }
+        }
+
+        with patch("note_mcp.api.images.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+            mock_client.post = AsyncMock(return_value=presigned_response)
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await upload_body_image(session, str(file_path), note_id="12345")
+
+            assert exc_info.value.code == ErrorCode.API_ERROR
+            assert missing_field in exc_info.value.message
+            assert "S3 field" in exc_info.value.message
+
+    @pytest.mark.asyncio
+    async def test_upload_body_image_raises_on_empty_post_fields(self, tmp_path: Path) -> None:
+        """Upload should raise error when post fields dict is empty.
+
+        Note: Empty dict is falsy in Python, so it's caught by the earlier
+        validation check (not post_fields) before reaching S3 field validation.
+        """
+        session = create_mock_session()
+        file_path = tmp_path / "test.jpg"
+        file_path.write_bytes(b"\xff\xd8\xff" + b"x" * 100)
+
+        presigned_response = {
+            "data": {
+                "action": "https://s3.amazonaws.com/note-images",
+                "url": "https://assets.note.com/images/img_789012.png",
+                "post": {},
+            }
+        }
+
+        with patch("note_mcp.api.images.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock()
+            mock_client.post = AsyncMock(return_value=presigned_response)
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await upload_body_image(session, str(file_path), note_id="12345")
+
+            assert exc_info.value.code == ErrorCode.API_ERROR
+            # Empty post dict is caught early by "if not post_fields" check
+            assert "presigned URL" in exc_info.value.message
