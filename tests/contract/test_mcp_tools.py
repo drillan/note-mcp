@@ -13,7 +13,7 @@ from note_mcp.server import mcp
 
 def get_tools() -> dict[str, Any]:
     """Get all registered tools synchronously."""
-    return asyncio.get_event_loop().run_until_complete(mcp._tool_manager.get_tools())
+    return asyncio.run(mcp._tool_manager.get_tools())
 
 
 class TestMCPServerConfiguration:
