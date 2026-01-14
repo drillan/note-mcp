@@ -225,11 +225,23 @@ async def get_article_raw_html(
             details={"article_id": article_id},
         )
 
-    return await _execute_get(
+    article = await _execute_get(
         session,
         f"/v3/notes/{article_id}",
         _parse_article_response,
     )
+
+    # Issue #209: Check if article was deleted
+    # note.com API returns status='deleted' instead of 404 for deleted articles.
+    # We treat this as ARTICLE_NOT_FOUND because the content is no longer accessible.
+    if article.status == ArticleStatus.DELETED:
+        raise NoteAPIError(
+            code=ErrorCode.ARTICLE_NOT_FOUND,
+            message="Article has been deleted (status='deleted')",
+            details={"article_id": article_id},
+        )
+
+    return article
 
 
 async def update_article_raw_html(
@@ -661,6 +673,16 @@ async def get_article_via_api(
         _parse_article_response,
     )
 
+    # Issue #209: Check if article was deleted
+    # note.com API returns status='deleted' instead of 404 for deleted articles.
+    # We treat this as ARTICLE_NOT_FOUND because the content is no longer accessible.
+    if article.status == ArticleStatus.DELETED:
+        raise NoteAPIError(
+            code=ErrorCode.ARTICLE_NOT_FOUND,
+            message="Article has been deleted (status='deleted')",
+            details={"article_id": article_id},
+        )
+
     # Convert HTML body to Markdown for consistent output
     if article.body:
         article = Article(
@@ -964,6 +986,17 @@ async def delete_draft(
             code=ErrorCode.API_ERROR,
             message=DELETE_ERROR_PUBLISHED_ARTICLE,
             details={"article_key": article_key, "status": article.status.value},
+        )
+
+    # Issue #209: Check if article was already deleted
+    # note.com API returns status='deleted' instead of 404 for deleted articles.
+    # We treat this as ARTICLE_NOT_FOUND because attempting to delete an
+    # already deleted article is nonsensical.
+    if article.status == ArticleStatus.DELETED:
+        raise NoteAPIError(
+            code=ErrorCode.ARTICLE_NOT_FOUND,
+            message="Article has been deleted (status='deleted')",
+            details={"article_key": article_key},
         )
 
     # If confirm=False, return preview without deleting

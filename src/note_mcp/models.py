@@ -50,6 +50,7 @@ class ArticleStatus(str, Enum):
     DRAFT = "draft"
     PUBLISHED = "published"
     PRIVATE = "private"
+    DELETED = "deleted"
 
 
 class ImageType(str, Enum):

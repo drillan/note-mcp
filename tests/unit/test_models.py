@@ -82,6 +82,14 @@ class TestArticleStatus:
         """Test PRIVATE status value."""
         assert ArticleStatus.PRIVATE.value == "private"
 
+    def test_deleted_status(self) -> None:
+        """Test DELETED status value.
+
+        Issue #209: note.com API returns 'deleted' status for deleted articles
+        instead of 404 error.
+        """
+        assert ArticleStatus.DELETED.value == "deleted"
+
 
 class TestArticle:
     """Tests for Article model."""
@@ -392,3 +400,19 @@ class TestFromApiResponse:
         }
         article = from_api_response(data)
         assert article.title == "Draft Title"
+
+    def test_from_api_response_deleted_status_succeeds(self) -> None:
+        """Test that deleted status can be parsed from API response.
+
+        Issue #209: note.com API returns 'deleted' status for deleted articles.
+        from_api_response should be able to parse this status.
+        """
+        data: dict[str, object] = {
+            "id": "123",
+            "key": "test-article",
+            "status": "deleted",
+            "name": "Deleted Article",
+            "body": "",
+        }
+        article = from_api_response(data)
+        assert article.status == ArticleStatus.DELETED
