@@ -34,8 +34,8 @@ async def delete_draft_with_retry(
     """Delete a draft article with retry logic.
 
     Attempts to delete the article with exponential backoff on transient errors.
-    Silently ignores errors if the article does not exist or deletion fails
-    after all retries.
+    Logs errors but does not raise if the article does not exist or deletion
+    fails after all retries.
 
     This is designed for cleanup operations where we don't want to fail the
     test if cleanup fails, but we do want to make a best effort.
@@ -45,6 +45,9 @@ async def delete_draft_with_retry(
         article_key: Key of the article to delete (e.g., "n1234567890ab")
         max_attempts: Maximum number of deletion attempts (default: 3)
         backoff_base: Base delay in seconds for exponential backoff (default: 1.0)
+
+    Returns:
+        None. Cleanup errors are logged but suppressed.
     """
     try:
         await with_retry(

@@ -186,8 +186,8 @@ async def preview_page_context(
         session: Authenticated Session object with cookies
         article_key: Article key (e.g., "n1234567890ab")
         headless: Whether to run browser in headless mode.
-            Default: True (from NOTE_MCP_TEST_HEADLESS env var).
-            Set NOTE_MCP_TEST_HEADLESS=false to show browser window.
+            Default: Determined by NOTE_MCP_TEST_HEADLESS env var
+            (True if unset or "true"). Set to False to show browser window.
         cleanup_article: Whether to delete the article after context exit.
             Default: False. Set to True to automatically delete the article
             when the context manager exits. This is useful for tests that
@@ -228,10 +228,28 @@ async def preview_page_context(
         preview_page = await open_preview_via_api(page, session, article_key)
         yield preview_page
     finally:
-        await context.close()
-        await browser.close()
-        await playwright.stop()
+        # Issue #200: Clean up browser resources individually to ensure
+        # article cleanup runs even if browser cleanup fails
+        cleanup_errors: list[str] = []
 
-        # Issue #200: Clean up article if requested
+        try:
+            await context.close()
+        except Exception as e:
+            cleanup_errors.append(f"context.close: {e}")
+
+        try:
+            await browser.close()
+        except Exception as e:
+            cleanup_errors.append(f"browser.close: {e}")
+
+        try:
+            await playwright.stop()
+        except Exception as e:
+            cleanup_errors.append(f"playwright.stop: {e}")
+
+        # Issue #200: Clean up article if requested (runs regardless of browser cleanup)
         if cleanup_article:
             await delete_draft_with_retry(session, article_key)
+
+        if cleanup_errors:
+            logger.warning("Browser cleanup errors: %s", "; ".join(cleanup_errors))
