@@ -216,7 +216,7 @@ issue対応時は以下のワークフローに従う。
 | 4 | PR作成 | `/commit-commands:commit-push-pr` |
 | 5 | PRレビュー | `/pr-review-toolkit:review-pr` |
 | 6 | レビューコメント対応 | `/review-pr-comments` |
-| 7 | PRマージ | GitHub上で手動マージ |
+| 7 | PRマージ | `/merge-pr <PR番号>` |
 
 **ブランチ・コミット・worktree命名規則:**
 

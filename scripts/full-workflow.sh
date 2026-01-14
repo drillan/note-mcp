@@ -13,6 +13,7 @@
 # 2. complete-issue（commit + push + PR作成）
 # 3. review-pr（PRレビュー + コメント投稿）
 # 4. respond-comments（レビューコメントに対応）
+# 5. merge-pr（CI待機 → マージ → 後処理）
 
 set -euo pipefail
 
@@ -58,7 +59,7 @@ echo "════════════════════════�
 echo ""
 
 # Step 1: worktree作成または検出
-echo "📦 Step 1/5: worktree準備"
+echo "📦 Step 1/6: worktree準備"
 echo "───────────────────────────────────────────────────────────────"
 
 WORKTREE_PATH=$(lib_get_worktree_path "$ISSUE_NUM")
@@ -83,7 +84,7 @@ cd "$WORKTREE_PATH"
 echo ""
 
 # Step 2: start-issue（計画立案・実装）
-echo "📝 Step 2/5: start-issue（計画立案・実装）"
+echo "📝 Step 2/6: start-issue（計画立案・実装）"
 echo "───────────────────────────────────────────────────────────────"
 
 START_ISSUE_FILE="$WORKTREE_PATH/.claude/commands/start-issue.md"
@@ -107,7 +108,7 @@ echo "✅ start-issue 完了"
 echo ""
 
 # Step 3: complete-issue（commit + push + PR作成）
-echo "📤 Step 3/5: complete-issue（commit + push + PR作成）"
+echo "📤 Step 3/6: complete-issue（commit + push + PR作成）"
 echo "───────────────────────────────────────────────────────────────"
 
 PROMPT_COMPLETE="以下のスキルを実行してください:
@@ -123,7 +124,7 @@ echo "✅ complete-issue 完了"
 echo ""
 
 # Step 4: review-pr（PRレビュー + コメント投稿）
-echo "🔍 Step 4/5: review-pr（PRレビュー + コメント投稿）"
+echo "🔍 Step 4/6: review-pr（PRレビュー + コメント投稿）"
 echo "───────────────────────────────────────────────────────────────"
 
 PR_NUM=$(gh pr view --json number --jq '.number' 2>/dev/null || true)
@@ -141,7 +142,7 @@ else
     echo ""
 
     # Step 5: respond-comments（レビューコメントに対応）
-    echo "💬 Step 5/5: respond-comments（レビューコメントに対応）"
+    echo "💬 Step 5/6: respond-comments（レビューコメントに対応）"
     echo "───────────────────────────────────────────────────────────────"
 
     PROMPT_RESPOND="/review-pr-comments $PR_NUM"
@@ -149,6 +150,18 @@ else
 
     echo ""
     echo "✅ respond-comments 完了"
+    echo ""
+
+    # Step 6: merge-pr（CI待機 → マージ → 後処理）
+    echo "🔀 Step 6/6: merge-pr（CI待機 → マージ → 後処理）"
+    echo "───────────────────────────────────────────────────────────────"
+    echo "   (CIチェック完了まで待機します)"
+
+    PROMPT_MERGE="/merge-pr $PR_NUM"
+    lib_run_claude "$PROMPT_MERGE" "no_exec"
+
+    echo ""
+    echo "✅ merge-pr 完了"
 fi
 
 echo ""

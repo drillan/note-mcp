@@ -23,7 +23,9 @@ issue対応ワークフローを自動化するスクリプト集です。
          ↓
     [レビューコメントに対応]
          ↓
-    [PRマージ]
+./scripts/merge-pr.sh            # worktreeで実行
+         ↓
+    [CI待機 → マージ → 後処理]
 ```
 
 ## スクリプト一覧
@@ -95,6 +97,26 @@ PRのレビューコメントに対応します。
 2. `/review-pr-comments` コマンドを実行
 3. レビューコメントへの対応
 
+### merge-pr.sh
+
+PRをマージします（CI完了待機付き）。
+
+```bash
+# worktreeディレクトリで実行
+./scripts/merge-pr.sh
+
+# 途中経過を表示
+./scripts/merge-pr.sh -v
+```
+
+**実行内容:**
+1. `gh pr view` でPR番号を自動検出
+2. `/merge-pr` コマンドを実行
+3. CIチェック完了まで待機
+4. squash mergeを実行
+5. リモートブランチ削除
+6. ローカルブランチ・worktree削除
+
 ### full-workflow.sh
 
 上記すべてのステップを一括で実行します。
@@ -115,6 +137,7 @@ PRのレビューコメントに対応します。
 2. complete-issue（commit + push + PR作成）
 3. review-pr（PRレビュー + コメント投稿）
 4. respond-comments（レビューコメントに対応）
+5. merge-pr（CI待機 → マージ → 後処理）
 
 ### add-worktree.sh
 
@@ -151,6 +174,7 @@ issueに対応するworktreeを作成します（setup-issue.sh から呼び出�
 | `complete-issue.sh` | worktree |
 | `review-pr.sh` | worktree |
 | `respond-comments.sh` | worktree |
+| `merge-pr.sh` | worktree |
 
 ## 前提条件
 
