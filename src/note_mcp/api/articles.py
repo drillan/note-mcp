@@ -8,6 +8,7 @@ from __future__ import annotations
 import html
 import logging
 import uuid
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from note_mcp.api.client import NoteAPIClient
@@ -33,6 +34,84 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# Issue #174: Generic API Execution Helper Functions
+# =============================================================================
+
+
+async def _execute_get[T](
+    session: Session,
+    endpoint: str,
+    response_parser: Callable[[dict[str, Any]], T],
+    *,
+    params: dict[str, Any] | None = None,
+) -> T:
+    """Execute GET request and parse response.
+
+    Common pattern for API operations that:
+    1. Open NoteAPIClient context
+    2. Execute GET request
+    3. Parse response with provided parser
+
+    Args:
+        session: Authenticated session
+        endpoint: API endpoint path
+        response_parser: Function to parse response dict into result type
+        params: Optional query parameters
+
+    Returns:
+        Parsed result of type T
+    """
+    async with NoteAPIClient(session) as client:
+        response = await client.get(endpoint, params=params)
+    return response_parser(response)
+
+
+async def _execute_post[T](
+    session: Session,
+    endpoint: str,
+    response_parser: Callable[[dict[str, Any]], T],
+    *,
+    payload: dict[str, Any] | None = None,
+) -> T:
+    """Execute POST request and parse response.
+
+    Common pattern for API operations that:
+    1. Open NoteAPIClient context
+    2. Execute POST request with payload
+    3. Parse response with provided parser
+
+    Args:
+        session: Authenticated session
+        endpoint: API endpoint path
+        response_parser: Function to parse response dict into result type
+        payload: JSON payload for request
+
+    Returns:
+        Parsed result of type T
+    """
+    async with NoteAPIClient(session) as client:
+        response = await client.post(endpoint, json=payload)
+    return response_parser(response)
+
+
+async def _execute_delete(
+    session: Session,
+    endpoint: str,
+) -> None:
+    """Execute DELETE request.
+
+    Common pattern for API delete operations that:
+    1. Open NoteAPIClient context
+    2. Execute DELETE request
+
+    Args:
+        session: Authenticated session
+        endpoint: API endpoint path
+    """
+    async with NoteAPIClient(session) as client:
+        await client.delete(endpoint)
 
 
 # =============================================================================
@@ -137,10 +216,11 @@ async def get_article_raw_html(
             details={"article_id": article_id},
         )
 
-    async with NoteAPIClient(session) as client:
-        response = await client.get(f"/v3/notes/{article_id}")
-
-    return _parse_article_response(response)
+    return await _execute_get(
+        session,
+        f"/v3/notes/{article_id}",
+        _parse_article_response,
+    )
 
 
 async def update_article_raw_html(
@@ -186,22 +266,11 @@ async def update_article_raw_html(
     if hashtags:
         payload["hashtags"] = hashtags
 
-    async with NoteAPIClient(session) as client:
-        response = await client.post(
-            f"/v1/text_notes/draft_save?id={numeric_id}&is_temp_saved=true",
-            json=payload,
-        )
-
-    # Validate response (Issue #155: draft_save returns {result, ...}, not article data)
-    _validate_draft_save_response(response, article_id)
-
-    # Construct Article from input since draft_save doesn't return full article data
-    return Article(
-        id=numeric_id,
-        key=article_id if _is_article_key_format(article_id) else "",
-        title=title,
-        body=html_body,
-        status=ArticleStatus.DRAFT,
+    return await _execute_post(
+        session,
+        f"/v1/text_notes/draft_save?id={numeric_id}&is_temp_saved=true",
+        _create_draft_save_parser(article_id, numeric_id, title, html_body),
+        payload=payload,
     )
 
 
@@ -319,6 +388,77 @@ def _validate_draft_save_response(
         )
 
 
+def _create_draft_save_parser(
+    article_id: str,
+    numeric_id: str,
+    title: str,
+    html_body: str,
+    article_key: str = "",
+) -> Callable[[dict[str, Any]], Article]:
+    """Create a parser for draft_save response.
+
+    Issue #174: Factory function to create response parser with context.
+    draft_save returns minimal response, so we construct Article from inputs.
+
+    Args:
+        article_id: Original article ID (for error context)
+        numeric_id: Resolved numeric ID
+        title: Article title
+        html_body: HTML body content
+        article_key: Article key (optional, derived from article_id if not provided)
+
+    Returns:
+        Parser function that validates response and returns Article
+    """
+
+    def parser(response: dict[str, Any]) -> Article:
+        _validate_draft_save_response(response, article_id)
+        key = article_key if article_key else (article_id if _is_article_key_format(article_id) else "")
+        return Article(
+            id=numeric_id,
+            key=key,
+            title=title,
+            body=html_body,
+            status=ArticleStatus.DRAFT,
+        )
+
+    return parser
+
+
+def _parse_create_response(response: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
+    """Parse response from article creation endpoint.
+
+    Issue #174: Extract article_id and article_key from create response.
+
+    Args:
+        response: Raw API response from /v1/text_notes
+
+    Returns:
+        Tuple of (article_id, article_key, article_data)
+
+    Raises:
+        NoteAPIError: If required fields are missing
+    """
+    article_data = response.get("data", {})
+    article_id = article_data.get("id")
+    article_key = article_data.get("key")
+
+    if not article_id:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Article creation failed: API returned no article ID",
+            details={"response": response},
+        )
+    if not article_key:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Article creation failed: API returned no article key",
+            details={"article_id": article_id, "response": response},
+        )
+
+    return str(article_id), str(article_key), article_data
+
+
 async def create_draft(
     session: Session,
     article_input: ArticleInput,
@@ -353,38 +493,24 @@ async def create_draft(
     # Step 1 payload: without body to avoid sanitization
     create_payload = _build_article_payload(article_input, include_body=False)
 
+    # Step 1: Create the article entry (without body)
+    # The body is saved separately via draft_save to preserve <br> tags
+    article_id, article_key, article_data = await _execute_post(
+        session,
+        "/v1/text_notes",
+        _parse_create_response,
+        payload=create_payload,
+    )
+
+    # Step 2: Resolve embed keys via API
+    # Replace random keys with server-registered keys for iframe rendering
+    resolved_html = await resolve_embed_keys(session, html_body, article_key)
+
+    # Step 3: Save the body content with draft_save
+    # Use resolved HTML with server-registered embed keys
+    save_payload = _build_article_payload(article_input, resolved_html)
+
     async with NoteAPIClient(session) as client:
-        # Step 1: Create the article entry (without body)
-        # The body is saved separately via draft_save to preserve <br> tags
-        response = await client.post("/v1/text_notes", json=create_payload)
-
-        # Get the article ID and key from response
-        article_data = response.get("data", {})
-        article_id = article_data.get("id")
-        article_key = article_data.get("key")
-
-        # Validate that required fields are present
-        if not article_id:
-            raise NoteAPIError(
-                code=ErrorCode.API_ERROR,
-                message="Article creation failed: API returned no article ID",
-                details={"response": response},
-            )
-        if not article_key:
-            raise NoteAPIError(
-                code=ErrorCode.API_ERROR,
-                message="Article creation failed: API returned no article key",
-                details={"article_id": article_id, "response": response},
-            )
-
-        # Step 2: Resolve embed keys via API
-        # Replace random keys with server-registered keys for iframe rendering
-        resolved_html = await resolve_embed_keys(session, html_body, str(article_key))
-
-        # Step 3: Save the body content with draft_save
-        # Use resolved HTML with server-registered embed keys
-        save_payload = _build_article_payload(article_input, resolved_html)
-
         await client.post(
             f"/v1/text_notes/draft_save?id={article_id}&is_temp_saved=true",
             json=save_payload,
@@ -460,22 +586,17 @@ async def update_article(
     # Build payload and save via draft_save endpoint
     payload = _build_article_payload(article_input, final_html)
 
-    async with NoteAPIClient(session) as client:
-        response = await client.post(
-            f"/v1/text_notes/draft_save?id={numeric_id}&is_temp_saved=true",
-            json=payload,
-        )
-
-    # Validate response (Issue #155: draft_save returns {result, ...}, not article data)
-    _validate_draft_save_response(response, article_id)
-
-    # Construct Article from input since draft_save doesn't return full article data
-    return Article(
-        id=numeric_id,
-        key=article_key_for_result,
-        title=article_input.title,
-        body=final_html,
-        status=ArticleStatus.DRAFT,
+    return await _execute_post(
+        session,
+        f"/v1/text_notes/draft_save?id={numeric_id}&is_temp_saved=true",
+        _create_draft_save_parser(
+            article_id,
+            numeric_id,
+            article_input.title,
+            final_html,
+            article_key_for_result,
+        ),
+        payload=payload,
     )
 
 
@@ -514,11 +635,11 @@ async def get_article_via_api(
 
     from note_mcp.utils.html_to_markdown import html_to_markdown
 
-    async with NoteAPIClient(session) as client:
-        response = await client.get(f"/v3/notes/{article_id}")
-
-    # Parse response
-    article = _parse_article_response(response)
+    article = await _execute_get(
+        session,
+        f"/v3/notes/{article_id}",
+        _parse_article_response,
+    )
 
     # Convert HTML body to Markdown for consistent output
     if article.body:
@@ -658,31 +779,37 @@ async def publish_article(
     if article_id is not None and article_input is not None:
         raise ValueError("Cannot provide both article_id and article_input")
 
-    async with NoteAPIClient(session) as client:
-        if article_id is not None:
-            # Publish existing draft
-            payload: dict[str, Any] = {"status": "published"}
-            response = await client.post(f"/v3/notes/{article_id}/publish", json=payload)
-        else:
-            # Create and publish new article
-            assert article_input is not None  # Type narrowing
-            html_body = markdown_to_html(article_input.body)
+    if article_id is not None:
+        # Publish existing draft
+        payload: dict[str, Any] = {"status": "published"}
+        return await _execute_post(
+            session,
+            f"/v3/notes/{article_id}/publish",
+            _parse_article_response,
+            payload=payload,
+        )
 
-            payload = {
-                "name": article_input.title,
-                "body": html_body,
-                "status": "published",
-            }
+    # Create and publish new article
+    assert article_input is not None  # Type narrowing
+    html_body = markdown_to_html(article_input.body)
 
-            # Add tags if present
-            hashtags = _normalize_tags(article_input.tags)
-            if hashtags:
-                payload["hashtags"] = hashtags
+    payload = {
+        "name": article_input.title,
+        "body": html_body,
+        "status": "published",
+    }
 
-            response = await client.post("/v3/notes", json=payload)
+    # Add tags if present
+    hashtags = _normalize_tags(article_input.tags)
+    if hashtags:
+        payload["hashtags"] = hashtags
 
-    # Parse response
-    return _parse_article_response(response)
+    return await _execute_post(
+        session,
+        "/v3/notes",
+        _parse_article_response,
+        payload=payload,
+    )
 
 
 # =============================================================================
@@ -805,39 +932,41 @@ async def delete_draft(
     )
 
     # Step 1: Fetch article info to validate and get details
-    async with NoteAPIClient(session) as client:
-        response = await client.get(f"/v3/notes/{article_key}")
-        article = _parse_article_response(response)
+    article = await _execute_get(
+        session,
+        f"/v3/notes/{article_key}",
+        _parse_article_response,
+    )
 
-        # Check if article is published (cannot delete published articles)
-        if article.status == ArticleStatus.PUBLISHED:
-            raise NoteAPIError(
-                code=ErrorCode.API_ERROR,
-                message=DELETE_ERROR_PUBLISHED_ARTICLE,
-                details={"article_key": article_key, "status": article.status.value},
-            )
+    # Check if article is published (cannot delete published articles)
+    if article.status == ArticleStatus.PUBLISHED:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message=DELETE_ERROR_PUBLISHED_ARTICLE,
+            details={"article_key": article_key, "status": article.status.value},
+        )
 
-        # If confirm=False, return preview without deleting
-        if not confirm:
-            return DeletePreview(
-                article_id=article.id,
-                article_key=article.key,
-                article_title=article.title,
-                status=article.status,
-                message=f"下書き記事「{article.title}」を削除しますか？confirm=True を指定して再度呼び出してください。",
-            )
-
-        # Step 2: Execute deletion (confirm=True)
-        # Note: The delete endpoint requires /n/ prefix before the article key
-        await client.delete(f"/v1/notes/n/{article_key}")
-
-        return DeleteResult(
-            success=True,
+    # If confirm=False, return preview without deleting
+    if not confirm:
+        return DeletePreview(
             article_id=article.id,
             article_key=article.key,
             article_title=article.title,
-            message=f"下書き記事「{article.title}」({article.key})を削除しました。",
+            status=article.status,
+            message=f"下書き記事「{article.title}」を削除しますか？confirm=True を指定して再度呼び出してください。",
         )
+
+    # Step 2: Execute deletion (confirm=True)
+    # Note: The delete endpoint requires /n/ prefix before the article key
+    await _execute_delete(session, f"/v1/notes/n/{article_key}")
+
+    return DeleteResult(
+        success=True,
+        article_id=article.id,
+        article_key=article.key,
+        article_title=article.title,
+        message=f"下書き記事「{article.title}」({article.key})を削除しました。",
+    )
 
 
 async def delete_all_drafts(

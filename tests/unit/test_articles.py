@@ -1,9 +1,14 @@
 """Unit tests for article operations."""
 
+from typing import Any
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from note_mcp.api.articles import (
     _build_article_payload,
+    _execute_get,
+    _execute_post,
     _parse_article_response,
     get_article_raw_html,
     get_article_via_api,
@@ -218,3 +223,133 @@ class TestGetArticleViaApiNumericIdValidation:
         assert "Numeric article ID" in exc_info.value.message
         assert "987654321" in exc_info.value.message
         assert "n1234567890ab" in exc_info.value.message
+
+
+class TestExecuteGet:
+    """Tests for _execute_get helper function."""
+
+    @pytest.fixture
+    def mock_session(self) -> Session:
+        """Create a mock session for testing."""
+        return Session(
+            cookies={"note_gql_auth_token": "test_token", "XSRF-TOKEN": "test_xsrf"},
+            user_id="test_user",
+            username="testuser",
+            created_at=1700000000,
+        )
+
+    @pytest.mark.asyncio
+    async def test_execute_get_calls_client_and_parses_response(self, mock_session: Session) -> None:
+        """_execute_get should call client.get and apply parser to response."""
+        mock_response = {"data": {"id": 123, "key": "n123abc"}}
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.get = AsyncMock(return_value=mock_response)
+
+            def parser(resp: dict[str, Any]) -> str:
+                return str(resp["data"]["key"])
+
+            result = await _execute_get(
+                mock_session,
+                "/v3/notes/n123abc",
+                parser,
+            )
+
+            assert result == "n123abc"
+            mock_client.get.assert_called_once_with("/v3/notes/n123abc", params=None)
+
+    @pytest.mark.asyncio
+    async def test_execute_get_passes_params(self, mock_session: Session) -> None:
+        """_execute_get should pass query params to client.get."""
+        mock_response: dict[str, Any] = {"data": {"notes": []}}
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.get = AsyncMock(return_value=mock_response)
+
+            def parser(resp: dict[str, Any]) -> dict[str, Any]:
+                data: dict[str, Any] = resp["data"]
+                return data
+
+            result = await _execute_get(
+                mock_session,
+                "/v2/note_list/contents",
+                parser,
+                params={"page": 1, "status": "draft"},
+            )
+
+            assert result == {"notes": []}
+            mock_client.get.assert_called_once_with("/v2/note_list/contents", params={"page": 1, "status": "draft"})
+
+
+class TestExecutePost:
+    """Tests for _execute_post helper function."""
+
+    @pytest.fixture
+    def mock_session(self) -> Session:
+        """Create a mock session for testing."""
+        return Session(
+            cookies={"note_gql_auth_token": "test_token", "XSRF-TOKEN": "test_xsrf"},
+            user_id="test_user",
+            username="testuser",
+            created_at=1700000000,
+        )
+
+    @pytest.mark.asyncio
+    async def test_execute_post_calls_client_and_parses_response(self, mock_session: Session) -> None:
+        """_execute_post should call client.post and apply parser to response."""
+        mock_response = {"data": {"result": True, "note_days_count": 1}}
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.post = AsyncMock(return_value=mock_response)
+
+            def parser(resp: dict[str, Any]) -> bool:
+                return bool(resp["data"]["result"])
+
+            result = await _execute_post(
+                mock_session,
+                "/v1/text_notes/draft_save?id=123",
+                parser,
+                payload={"name": "Test", "body": "<p>Content</p>"},
+            )
+
+            assert result is True
+            mock_client.post.assert_called_once_with(
+                "/v1/text_notes/draft_save?id=123",
+                json={"name": "Test", "body": "<p>Content</p>"},
+            )
+
+    @pytest.mark.asyncio
+    async def test_execute_post_without_payload(self, mock_session: Session) -> None:
+        """_execute_post should work without payload."""
+        mock_response = {"data": {"status": "published"}}
+
+        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.post = AsyncMock(return_value=mock_response)
+
+            def parser(resp: dict[str, Any]) -> str:
+                return str(resp["data"]["status"])
+
+            result = await _execute_post(
+                mock_session,
+                "/v3/notes/n123abc/publish",
+                parser,
+            )
+
+            assert result == "published"
+            mock_client.post.assert_called_once_with("/v3/notes/n123abc/publish", json=None)
