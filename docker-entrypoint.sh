@@ -146,6 +146,14 @@ start_vnc() {
     setsid websockify --web=/usr/share/novnc/ ${novnc_port} localhost:${rfb_port} \
         </dev/null >/dev/null 2>&1 &
 
+    # Start window manager (required for browser windows to display properly)
+    if command -v openbox >/dev/null 2>&1; then
+        setsid openbox </dev/null >/dev/null 2>&1 &
+        log_info "Window manager (openbox) started"
+    else
+        log_warn "Window manager (openbox) not found - browser windows may not display correctly"
+    fi
+
     log_info "Connect with: vncviewer localhost:$port"
     log_info "Or use noVNC: http://localhost:${novnc_port}/vnc.html"
 }

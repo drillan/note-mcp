@@ -160,6 +160,7 @@ services:
       - NOVNC_PORT=6080
       # Playwrightをheadedモードで起動
       - HEADED=1
+      - NOTE_MCP_TEST_HEADLESS=false
       # mitmproxyポート
       - MITMPROXY_PORT=8080
       # Docker内ではファイルベースセッション管理を使用
