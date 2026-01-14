@@ -159,6 +159,8 @@ services:
       - VNC_PORT=5900
       - NOVNC_PORT=6080
       # Playwrightをheadedモードで起動
+      # NOTE: HEADED=1 is for legacy compatibility with some Playwright setups
+      # NOTE_MCP_TEST_HEADLESS=false is the actual config used by note-mcp (src/note_mcp/browser/config.py)
       - HEADED=1
       - NOTE_MCP_TEST_HEADLESS=false
       # mitmproxyポート
