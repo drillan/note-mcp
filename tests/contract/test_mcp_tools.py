@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+import pytest
+
 from note_mcp.server import mcp
 
 
@@ -138,7 +140,7 @@ class TestToolSchemas:
         assert "note_upload_eyecatch" in tools
 
     def test_note_upload_eyecatch_schema(self) -> None:
-        """Test note_upload_eyecatch tool has correct schema."""
+        """Test note_upload_eyecatch tool schema matches exactly."""
         tools = get_tools()
         upload_tool = tools["note_upload_eyecatch"]
 
@@ -146,14 +148,23 @@ class TestToolSchemas:
         schema = upload_tool.parameters
         assert "properties" in schema
 
-        # Required parameters
-        assert "file_path" in schema["properties"]
-        assert "note_id" in schema["properties"]
+        # Exact properties match (session must NOT be here)
+        expected_properties = {"file_path", "note_id"}
+        actual_properties = set(schema.get("properties", {}).keys())
+        assert actual_properties == expected_properties, (
+            f"Schema mismatch: "
+            f"extra={actual_properties - expected_properties}, "
+            f"missing={expected_properties - actual_properties}"
+        )
 
-        # Check required fields
-        required = schema.get("required", [])
-        assert "file_path" in required
-        assert "note_id" in required
+        # Exact required match
+        expected_required = {"file_path", "note_id"}
+        actual_required = set(schema.get("required", []))
+        assert actual_required == expected_required, (
+            f"Required mismatch: "
+            f"extra={actual_required - expected_required}, "
+            f"missing={expected_required - actual_required}"
+        )
 
     def test_note_upload_body_image_tool_exists(self) -> None:
         """Test that note_upload_body_image tool is registered."""
@@ -161,7 +172,7 @@ class TestToolSchemas:
         assert "note_upload_body_image" in tools
 
     def test_note_upload_body_image_schema(self) -> None:
-        """Test note_upload_body_image tool has correct schema."""
+        """Test note_upload_body_image tool schema matches exactly."""
         tools = get_tools()
         upload_tool = tools["note_upload_body_image"]
 
@@ -169,14 +180,23 @@ class TestToolSchemas:
         schema = upload_tool.parameters
         assert "properties" in schema
 
-        # Required parameters
-        assert "file_path" in schema["properties"]
-        assert "note_id" in schema["properties"]
+        # Exact properties match (session must NOT be here)
+        expected_properties = {"file_path", "note_id"}
+        actual_properties = set(schema.get("properties", {}).keys())
+        assert actual_properties == expected_properties, (
+            f"Schema mismatch: "
+            f"extra={actual_properties - expected_properties}, "
+            f"missing={expected_properties - actual_properties}"
+        )
 
-        # Check required fields
-        required = schema.get("required", [])
-        assert "file_path" in required
-        assert "note_id" in required
+        # Exact required match
+        expected_required = {"file_path", "note_id"}
+        actual_required = set(schema.get("required", []))
+        assert actual_required == expected_required, (
+            f"Required mismatch: "
+            f"extra={actual_required - expected_required}, "
+            f"missing={expected_required - actual_required}"
+        )
 
     def test_note_show_preview_tool_exists(self) -> None:
         """Test that note_show_preview tool is registered."""
@@ -184,7 +204,7 @@ class TestToolSchemas:
         assert "note_show_preview" in tools
 
     def test_note_show_preview_schema(self) -> None:
-        """Test note_show_preview tool has correct schema."""
+        """Test note_show_preview tool schema matches exactly."""
         tools = get_tools()
         preview_tool = tools["note_show_preview"]
 
@@ -192,12 +212,23 @@ class TestToolSchemas:
         schema = preview_tool.parameters
         assert "properties" in schema
 
-        # Required parameters
-        assert "article_key" in schema["properties"]
+        # Exact properties match (session must NOT be here)
+        expected_properties = {"article_key"}
+        actual_properties = set(schema.get("properties", {}).keys())
+        assert actual_properties == expected_properties, (
+            f"Schema mismatch: "
+            f"extra={actual_properties - expected_properties}, "
+            f"missing={expected_properties - actual_properties}"
+        )
 
-        # Check required fields
-        required = schema.get("required", [])
-        assert "article_key" in required
+        # Exact required match
+        expected_required = {"article_key"}
+        actual_required = set(schema.get("required", []))
+        assert actual_required == expected_required, (
+            f"Required mismatch: "
+            f"extra={actual_required - expected_required}, "
+            f"missing={expected_required - actual_required}"
+        )
 
     def test_note_get_preview_html_tool_exists(self) -> None:
         """Test that note_get_preview_html tool is registered."""
@@ -205,7 +236,7 @@ class TestToolSchemas:
         assert "note_get_preview_html" in tools
 
     def test_note_get_preview_html_schema(self) -> None:
-        """Test note_get_preview_html tool has correct schema."""
+        """Test note_get_preview_html tool schema matches exactly."""
         tools = get_tools()
         preview_html_tool = tools["note_get_preview_html"]
 
@@ -213,12 +244,23 @@ class TestToolSchemas:
         schema = preview_html_tool.parameters
         assert "properties" in schema
 
-        # Required parameters
-        assert "article_key" in schema["properties"]
+        # Exact properties match (session must NOT be here)
+        expected_properties = {"article_key"}
+        actual_properties = set(schema.get("properties", {}).keys())
+        assert actual_properties == expected_properties, (
+            f"Schema mismatch: "
+            f"extra={actual_properties - expected_properties}, "
+            f"missing={expected_properties - actual_properties}"
+        )
 
-        # Check required fields
-        required = schema.get("required", [])
-        assert "article_key" in required
+        # Exact required match
+        expected_required = {"article_key"}
+        actual_required = set(schema.get("required", []))
+        assert actual_required == expected_required, (
+            f"Required mismatch: "
+            f"extra={actual_required - expected_required}, "
+            f"missing={expected_required - actual_required}"
+        )
 
     def test_note_publish_article_tool_exists(self) -> None:
         """Test that note_publish_article tool is registered."""
@@ -290,3 +332,61 @@ class TestToolDescriptions:
                 for char in description
             )
             assert has_japanese, f"Tool {name} description should be in Japanese"
+
+
+class TestNoInternalParamsExposed:
+    """内部パラメータがMCPスキーマに漏れていないことを検証。
+
+    Issue #238で発覚した問題の再発を防ぐためのテスト。
+    セッション管理やコンテキストなど、MCP外部に公開すべきでない
+    内部パラメータがスキーマに含まれていないことを全ツールで確認する。
+    """
+
+    INTERNAL_PARAMS = {"session", "ctx", "_session_manager", "self"}
+
+    def test_all_tools_hide_internal_params(self) -> None:
+        """全ツールで内部パラメータがスキーマに含まれていないことを確認。"""
+        tools = get_tools()
+        violations: list[str] = []
+
+        for name, tool in tools.items():
+            schema = tool.parameters or {}
+            properties = set(schema.get("properties", {}).keys())
+            required = set(schema.get("required", []))
+
+            # properties と required の両方をチェック
+            exposed = (properties | required) & self.INTERNAL_PARAMS
+            if exposed:
+                violations.append(f"{name}: {exposed}")
+
+        assert not violations, f"Internal params exposed in tools: {violations}"
+
+
+class TestRequireSessionTools:
+    """@require_session を使用するツールのスキーマ検証。
+
+    これらのツールは session パラメータを内部で使用するが、
+    MCPスキーマには公開すべきでない。デコレータによって
+    session パラメータがスキーマから除外されていることを検証する。
+    """
+
+    REQUIRE_SESSION_TOOLS = [
+        "note_upload_eyecatch",
+        "note_upload_body_image",
+        "note_show_preview",
+        "note_get_preview_html",
+    ]
+
+    @pytest.mark.parametrize("tool_name", REQUIRE_SESSION_TOOLS)
+    def test_session_not_in_schema(self, tool_name: str) -> None:
+        """session パラメータがスキーマに含まれていない。"""
+        tools = get_tools()
+
+        assert tool_name in tools, f"Tool {tool_name} not found"
+
+        schema = tools[tool_name].parameters or {}
+        properties = schema.get("properties", {})
+        required = schema.get("required", [])
+
+        assert "session" not in properties, f"{tool_name}: 'session' found in properties"
+        assert "session" not in required, f"{tool_name}: 'session' found in required"
