@@ -116,7 +116,7 @@ class Image(BaseModel):
     """An uploaded image.
 
     Attributes:
-        key: note.com image key
+        key: note.com image key (None for eyecatch images as API doesn't return it)
         url: Image URL on note.com
         original_path: Original local file path
         size_bytes: File size in bytes (optional)
@@ -124,7 +124,7 @@ class Image(BaseModel):
         image_type: Type of image (eyecatch or body)
     """
 
-    key: str
+    key: str | None = None
     url: str
     original_path: str
     size_bytes: int | None = None

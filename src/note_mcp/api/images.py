@@ -182,13 +182,10 @@ async def _upload_image_internal(
     # Parse response - Article 6: validate required fields, no fallback
     image_data = response.get("data", {})
 
+    # Note: The eyecatch upload endpoint (/v1/image_upload/note_eyecatch) returns
+    # only 'url' in the response, not 'key'. This is expected behavior based on
+    # API testing - body images (via presigned_post) return 'key', eyecatch does not.
     image_key = image_data.get("key")
-    if not image_key:
-        raise NoteAPIError(
-            code=ErrorCode.API_ERROR,
-            message="Image upload failed: API response missing required field 'key'",
-            details={"response": response},
-        )
 
     image_url = image_data.get("url")
     if not image_url:
@@ -199,7 +196,7 @@ async def _upload_image_internal(
         )
 
     return Image(
-        key=str(image_key),
+        key=str(image_key) if image_key else None,
         url=str(image_url),
         original_path=file_path,
         size_bytes=file_size,
