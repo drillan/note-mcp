@@ -1,8 +1,8 @@
 """Embed URL detection and HTML generation for note.com.
 
 This module provides functions for detecting embed URLs (YouTube, Twitter, note.com,
-GitHub Gist, GitHub Repository, noteマネー, Zenn.dev, Google Slides, SpeakerDeck) and generating
-the required HTML structure for note.com embeds.
+GitHub Gist, GitHub Repository, noteマネー, Zenn.dev, Google Slides, SpeakerDeck, Qiita)
+and generating the required HTML structure for note.com embeds.
 
 This is the single source of truth for embed URL patterns (DRY principle).
 
@@ -21,6 +21,9 @@ Issue #226: GitHub Repository embed support added. Repository URLs use
 
 Issue #223: SpeakerDeck presentation embed support added. SpeakerDeck URLs use
 'speakerdeck' service type via the same /v2/embed_by_external_api endpoint.
+
+Issue #244: Qiita article embed support added. Qiita URLs use 'external-article'
+service type (same as Zenn.dev) via the same /v2/embed_by_external_api endpoint.
 """
 
 from __future__ import annotations
@@ -60,6 +63,10 @@ MONEY_PATTERN = re.compile(r"^https?://money\.note\.com/(companies|us-companies|
 # Example: https://zenn.dev/zenn/articles/markdown-guide (Issue #222)
 ZENN_PATTERN = re.compile(r"^https?://zenn\.dev/[\w-]+/articles/[\w-]+$")
 
+# Qiita: qiita.com/username/items/item_id
+# Example: https://qiita.com/driller/items/31c1ff4d0bf5813f624f (Issue #244)
+QIITA_PATTERN = re.compile(r"^https?://qiita\.com/[\w-]+/items/[\w]+$")
+
 # GitHub Repository: github.com/owner/repo (with optional trailing slash)
 # Example: https://github.com/anthropics/claude-code (Issue #226)
 # Note: This pattern must NOT match gist.github.com (handled by GIST_PATTERN)
@@ -91,6 +98,7 @@ EMBED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (SPEAKERDECK_PATTERN, "speakerdeck"),
     (MONEY_PATTERN, "oembed"),
     (ZENN_PATTERN, "external-article"),
+    (QIITA_PATTERN, "external-article"),  # Qiita also uses external-article (Issue #244)
 ]
 
 

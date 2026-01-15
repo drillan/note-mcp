@@ -2553,3 +2553,269 @@ class TestResolveEmbedKeysSpeakerDeck:
                 "https://speakerdeck.com/tomohisa/introducing-decider-pattern-with-event-sourcing",
                 "n1234567890ab",
             )
+
+
+class TestQiitaPattern:
+    """Tests for Qiita article URL pattern (Issue #244)."""
+
+    def test_qiita_article_url(self) -> None:
+        """Test Qiita article URL detection."""
+        from note_mcp.api.embeds import QIITA_PATTERN
+
+        # Valid Qiita article URLs
+        assert QIITA_PATTERN.match("https://qiita.com/driller/items/31c1ff4d0bf5813f624f")
+        assert QIITA_PATTERN.match("https://qiita.com/user_name/items/abc123def456")
+        assert QIITA_PATTERN.match("http://qiita.com/user/items/item123")
+
+    def test_qiita_pattern_rejects_invalid_urls(self) -> None:
+        """Test that invalid URLs are rejected."""
+        from note_mcp.api.embeds import QIITA_PATTERN
+
+        # Wrong domain
+        assert not QIITA_PATTERN.match("https://example.com/user/items/abc")
+        # www subdomain is not supported (intentional - Qiita canonical URLs don't use www)
+        assert not QIITA_PATTERN.match("https://www.qiita.com/user/items/abc123")
+        # Wrong path structure
+        assert not QIITA_PATTERN.match("https://qiita.com/user")
+        assert not QIITA_PATTERN.match("https://qiita.com/user/articles/abc")
+        assert not QIITA_PATTERN.match("https://qiita.com/user/posts/abc")
+        # Missing item id
+        assert not QIITA_PATTERN.match("https://qiita.com/user/items/")
+        assert not QIITA_PATTERN.match("https://qiita.com/user/items")
+
+
+class TestQiitaPatternEdgeCases:
+    """Tests for Qiita URL pattern edge cases (Issue #244)."""
+
+    def test_qiita_pattern_rejects_trailing_slash(self) -> None:
+        """Test that Qiita URLs with trailing slashes are rejected.
+
+        Unlike Gist URLs, Qiita article URLs should not have trailing slashes.
+        """
+        from note_mcp.api.embeds import QIITA_PATTERN
+
+        # Trailing slash should be rejected
+        assert not QIITA_PATTERN.match("https://qiita.com/user/items/abc123/")
+        assert not QIITA_PATTERN.match("https://qiita.com/driller/items/31c1ff4d0bf5813f624f/")
+
+    def test_qiita_pattern_rejects_query_parameters(self) -> None:
+        """Test that Qiita URLs with query parameters are rejected.
+
+        Query parameters are not part of valid Qiita article URLs.
+        """
+        from note_mcp.api.embeds import QIITA_PATTERN
+
+        # Query parameters should be rejected
+        assert not QIITA_PATTERN.match("https://qiita.com/user/items/abc123?ref=twitter")
+        assert not QIITA_PATTERN.match("https://qiita.com/driller/items/31c1ff4d0bf5813f624f?utm_source=share")
+
+
+class TestGetEmbedServiceQiita:
+    """Tests for get_embed_service function with Qiita URLs (Issue #244)."""
+
+    def test_get_embed_service_returns_external_article_for_qiita(self) -> None:
+        """Test that get_embed_service returns 'external-article' for Qiita URLs."""
+        from note_mcp.api.embeds import get_embed_service
+
+        assert get_embed_service("https://qiita.com/driller/items/31c1ff4d0bf5813f624f") == "external-article"
+        assert get_embed_service("https://qiita.com/user/items/abc123") == "external-article"
+
+
+class TestGenerateEmbedHtmlQiita:
+    """Tests for generate_embed_html function with Qiita URLs (Issue #244)."""
+
+    def test_qiita_embed_structure(self) -> None:
+        """Test Qiita embed HTML structure."""
+        from note_mcp.api.embeds import generate_embed_html
+
+        url = "https://qiita.com/driller/items/31c1ff4d0bf5813f624f"
+        html = generate_embed_html(url)
+
+        # Verify required attributes
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="external-article"' in html
+        assert 'contenteditable="false"' in html
+        assert "embedded-content-key=" in html
+        assert "</figure>" in html
+
+
+class TestIsEmbedUrlQiita:
+    """Tests for is_embed_url function with Qiita URLs (Issue #244)."""
+
+    def test_qiita_urls_are_embed_urls(self) -> None:
+        """Test that Qiita URLs are recognized as embed URLs."""
+        from note_mcp.api.embeds import is_embed_url
+
+        assert is_embed_url("https://qiita.com/driller/items/31c1ff4d0bf5813f624f") is True
+        assert is_embed_url("https://qiita.com/user/items/abc123") is True
+
+
+class TestFetchEmbedKeyQiita:
+    """Tests for fetch_embed_key function with Qiita URLs (Issue #244)."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_qiita_embed_key_uses_v2_endpoint(self) -> None:
+        """Test that Qiita URL uses GET /v2/embed_by_external_api endpoint."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        mock_response = {
+            "data": {
+                "key": "embqiita1234567890",
+                "html_for_embed": '<div class="external-article-widget"><a href="...">Qiita article</a></div>',
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            embed_key, html_for_embed = await fetch_embed_key(
+                session,
+                "https://qiita.com/driller/items/31c1ff4d0bf5813f624f",
+                "n1234567890ab",
+            )
+
+            # Verify the API was called with correct params (consistent with SpeakerDeck tests)
+            mock_client.get.assert_called_once_with(
+                "/v2/embed_by_external_api",
+                params={
+                    "url": "https://qiita.com/driller/items/31c1ff4d0bf5813f624f",
+                    "service": "external-article",
+                    "embeddable_key": "n1234567890ab",
+                    "embeddable_type": "Note",
+                },
+            )
+            # Verify POST was NOT called
+            mock_client.post.assert_not_called()
+            # Verify returned values
+            assert embed_key == "embqiita1234567890"
+            assert "external-article-widget" in html_for_embed
+
+    @pytest.mark.asyncio
+    async def test_fetch_qiita_embed_key_sends_correct_service(self) -> None:
+        """Test that Qiita embed sends 'external-article' as service type."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        mock_response = {
+            "data": {
+                "key": "embqiita123",
+                "html_for_embed": "<div>Qiita preview</div>",
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            await fetch_embed_key(
+                session,
+                "https://qiita.com/user/items/article123",
+                "narticlekey",
+            )
+
+            # Verify the params include service="external-article"
+            call_kwargs = mock_client.get.call_args[1]
+            params = call_kwargs.get("params", {})
+            assert params.get("service") == "external-article"
+
+
+class TestGenerateEmbedHtmlWithKeyQiita:
+    """Tests for generate_embed_html_with_key function with Qiita URLs (Issue #244)."""
+
+    def test_qiita_embed_with_server_key(self) -> None:
+        """Test generating Qiita embed HTML with server-registered key."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://qiita.com/driller/items/31c1ff4d0bf5813f624f"
+        embed_key = "embqiita1234567890"
+        html = generate_embed_html_with_key(url, embed_key)
+
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="external-article"' in html
+        assert f'embedded-content-key="{embed_key}"' in html
+        assert 'contenteditable="false"' in html
+        assert "</figure>" in html
+
+    def test_qiita_embed_auto_detect_service(self) -> None:
+        """Test that service is auto-detected as 'external-article' for Qiita URLs."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://qiita.com/user/items/abc123"
+        html = generate_embed_html_with_key(url, "embtest123")
+
+        assert 'embedded-service="external-article"' in html
+
+
+class TestResolveEmbedKeysQiita:
+    """Tests for resolve_embed_keys function with Qiita URLs (Issue #244)."""
+
+    @pytest.mark.asyncio
+    async def test_resolve_qiita_embed(self) -> None:
+        """Test resolving a Qiita embed key."""
+        import time
+        from unittest.mock import patch
+
+        from note_mcp.api.embeds import resolve_embed_keys
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        # HTML with random embed key for Qiita
+        html_body = (
+            '<p name="p1" id="p1">Check out this article:</p>'
+            '<figure name="fig1" id="fig1" '
+            'data-src="https://qiita.com/driller/items/31c1ff4d0bf5813f624f" '
+            'embedded-service="external-article" '
+            'embedded-content-key="embrandomqiita" '
+            'contenteditable="false"></figure>'
+        )
+
+        # Mock fetch_embed_key to return a server key
+        with patch("note_mcp.api.embeds.fetch_embed_key") as mock_fetch:
+            mock_fetch.return_value = ("embqiitaserver123", "<div>Qiita preview</div>")
+
+            result = await resolve_embed_keys(session, html_body, "n1234567890ab")
+
+            # Verify the key was replaced
+            assert 'embedded-content-key="embqiitaserver123"' in result
+            assert 'embedded-content-key="embrandomqiita"' not in result
+            mock_fetch.assert_called_once_with(
+                session,
+                "https://qiita.com/driller/items/31c1ff4d0bf5813f624f",
+                "n1234567890ab",
+            )
