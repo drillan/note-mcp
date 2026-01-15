@@ -203,16 +203,15 @@ def protected_content_transformer(
         ...     return pattern.sub(replacement, content)
         >>> convert_stock("text with `^5243` in code")  # code block preserved
     """
+    import functools
 
     def decorator(transform: Callable[[str], str]) -> Callable[[str], str]:
+        @functools.wraps(transform)
         def wrapper(content: str) -> str:
             with _protect_code_blocks(content, prefix) as (protected, blocks):
                 result = transform(protected)
             return _restore_code_blocks(result, blocks)
 
-        # Preserve function metadata
-        wrapper.__name__ = transform.__name__
-        wrapper.__doc__ = transform.__doc__
         return wrapper
 
     return decorator

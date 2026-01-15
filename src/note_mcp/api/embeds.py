@@ -375,7 +375,7 @@ def generate_embed_html_with_key(
     import warnings
 
     warnings.warn(
-        "generate_embed_html_with_key is deprecated. Use generate_embed_html(url, service, embed_key) instead.",
+        "generate_embed_html_with_key is deprecated. Use generate_embed_html(url, service=..., embed_key=...) instead.",
         DeprecationWarning,
         stacklevel=2,
     )

@@ -230,6 +230,31 @@ class TestGenerateEmbedHtml:
         with pytest.raises(ValueError, match="Unsupported embed URL"):
             generate_embed_html("https://example.com")
 
+    def test_embed_key_parameter(self) -> None:
+        """Test that embed_key parameter is used when provided."""
+        from note_mcp.api.embeds import generate_embed_html
+
+        url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        server_key = "emb0076d44f4f7f"
+
+        # With embed_key parameter
+        html = generate_embed_html(url, embed_key=server_key)
+
+        assert f'embedded-content-key="{server_key}"' in html
+        assert 'embedded-service="youtube"' in html
+
+    def test_embed_key_with_service_parameter(self) -> None:
+        """Test that both service and embed_key parameters work together."""
+        from note_mcp.api.embeds import generate_embed_html
+
+        url = "https://twitter.com/user/status/1234567890"
+        server_key = "emb1234567890abc"
+
+        html = generate_embed_html(url, service="twitter", embed_key=server_key)
+
+        assert f'embedded-content-key="{server_key}"' in html
+        assert 'embedded-service="twitter"' in html
+
 
 class TestEmbedPatterns:
     """Tests for embed URL pattern constants."""
@@ -992,6 +1017,24 @@ class TestGenerateEmbedHtmlWithKey:
         # HTML special characters should be escaped
         assert "&amp;" in html or "feature=share" in html
         assert '"<script>' not in html  # Should be escaped
+
+    def test_deprecation_warning_issued(self) -> None:
+        """Test that DeprecationWarning is issued when calling deprecated function."""
+        import warnings
+
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        embed_key = "emb0076d44f4f7f"
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            generate_embed_html_with_key(url, embed_key)
+
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "generate_embed_html_with_key is deprecated" in str(w[0].message)
+            assert "generate_embed_html(url, service=..., embed_key=...)" in str(w[0].message)
 
 
 class TestEmbedFigurePattern:
