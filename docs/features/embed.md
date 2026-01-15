@@ -15,11 +15,12 @@ note.comは以下のサービスの埋め込みに対応しています:
 | GitHub Repository | ✅ | リポジトリカードとして埋め込み |
 | noteマネー（株価チャート） | ✅ | 株価チャートとして埋め込み |
 | Zenn.dev | ✅ | 記事カードとして埋め込み |
+| Qiita | ✅ | 記事カードとして埋め込み |
 | Google Slides | ✅ | プレゼンテーションとして埋め込み |
 | SpeakerDeck | ✅ | プレゼンテーションとして埋め込み |
 | その他の外部URL | ❌ | 通常のリンクとして表示 |
 
-> **重要**: 一般的な外部URL（例: qiita.com、example.com等）は埋め込みカードに変換されません。通常のリンクとして表示されます。
+> **重要**: 一般的な外部URL（例: example.com等）は埋め込みカードに変換されません。通常のリンクとして表示されます。
 
 ## 基本的な使い方
 
@@ -74,14 +75,19 @@ note-mcpでは、Markdownから記事を作成する際、URLは以下のよう�
 
 https://www.youtube.com/watch?v=example
 
-## 参考記事（リンクのみ）
+## 参考記事（埋め込み）
 
 https://qiita.com/example/items/example
+
+## 外部リンク（リンクのみ）
+
+https://example.com/article
 ```
 
 上記の例では:
 - YouTubeリンク → 埋め込みプレーヤーとして表示
-- Qiitaリンク → 通常のリンクテキストとして表示（非対応サービス）
+- Qiitaリンク → 記事カードとして埋め込み表示
+- example.comリンク → 通常のリンクテキストとして表示（非対応サービス）
 
 ### リンクテキストの指定
 
