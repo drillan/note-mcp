@@ -596,7 +596,7 @@ class TestFetchEmbedKey:
             mock_client.__aexit__.return_value = None
             mock_client_class.return_value = mock_client
 
-            with pytest.raises(NoteAPIError, match="empty response"):
+            with pytest.raises(NoteAPIError, match="missing required field"):
                 await fetch_embed_key(
                     session,
                     "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
