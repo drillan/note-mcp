@@ -48,9 +48,9 @@ uv run playwright install chromium
 
 ## Configuration
 
-### Claude Desktop
+MCPクライアントの設定ファイルに以下を追加します。詳細は[クイックスタートガイド](docs/quickstart.md#設定)を参照してください。
 
-`~/.config/claude-desktop/config.json`（macOS/Linux）または `%APPDATA%\claude-desktop\config.json`（Windows）に以下を追加:
+### 基本設定
 
 ```json
 {
@@ -63,6 +63,10 @@ uv run playwright install chromium
   }
 }
 ```
+
+> **Note**: `cwd` はインストール方法によって異なります。パッケージインストールの場合はプロジェクトディレクトリ、開発用インストールの場合はクローンしたリポジトリを指定します。詳細は[インストール方法別の設定](docs/quickstart.md#インストール方法別の設定)を参照してください。
+
+各MCPクライアント（Claude Code, Claude Desktop, VS Code, Cursor, Windsurf）の設定ファイルの場所と詳細は[MCPクライアント別の設定](docs/quickstart.md#mcpクライアント別の設定ファイル)を参照してください。
 
 ## Usage
 
