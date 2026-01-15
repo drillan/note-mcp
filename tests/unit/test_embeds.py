@@ -2573,6 +2573,8 @@ class TestQiitaPattern:
 
         # Wrong domain
         assert not QIITA_PATTERN.match("https://example.com/user/items/abc")
+        # www subdomain is not supported (intentional - Qiita canonical URLs don't use www)
+        assert not QIITA_PATTERN.match("https://www.qiita.com/user/items/abc123")
         # Wrong path structure
         assert not QIITA_PATTERN.match("https://qiita.com/user")
         assert not QIITA_PATTERN.match("https://qiita.com/user/articles/abc")
@@ -2688,10 +2690,16 @@ class TestFetchEmbedKeyQiita:
                 "n1234567890ab",
             )
 
-            # Should use GET /v2/embed_by_external_api
-            mock_client.get.assert_called_once()
-            call_args = mock_client.get.call_args
-            assert "/v2/embed_by_external_api" in call_args[0][0]
+            # Verify the API was called with correct params (consistent with SpeakerDeck tests)
+            mock_client.get.assert_called_once_with(
+                "/v2/embed_by_external_api",
+                params={
+                    "url": "https://qiita.com/driller/items/31c1ff4d0bf5813f624f",
+                    "service": "external-article",
+                    "embeddable_key": "n1234567890ab",
+                    "embeddable_type": "Note",
+                },
+            )
             # Verify POST was NOT called
             mock_client.post.assert_not_called()
             # Verify returned values
