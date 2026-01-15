@@ -48,29 +48,9 @@ uv run playwright install chromium
 
 ## Configuration
 
-MCPクライアントの設定ファイルに以下を追加します。`cwd` はインストール方法によって異なります。
+MCPクライアントの設定ファイルに以下を追加します。詳細は[クイックスタートガイド](docs/quickstart.md#設定)を参照してください。
 
-### インストール方法別の設定
-
-#### パッケージインストールの場合
-
-`uv pip install git+...` でインストールした場合、`cwd` は **note-mcpを使用するプロジェクトのディレクトリ** を指定します：
-
-```json
-{
-  "mcpServers": {
-    "note-mcp": {
-      "command": "uv",
-      "args": ["run", "python", "-m", "note_mcp"],
-      "cwd": "/path/to/your-project"
-    }
-  }
-}
-```
-
-#### 開発用インストールの場合
-
-`git clone` + `uv sync` でインストールした場合、`cwd` は **クローンしたリポジトリのディレクトリ** を指定します：
+### 基本設定
 
 ```json
 {
@@ -84,96 +64,9 @@ MCPクライアントの設定ファイルに以下を追加します。`cwd` �
 }
 ```
 
-### MCPクライアント別の設定ファイル
+> **Note**: `cwd` はインストール方法によって異なります。パッケージインストールの場合はプロジェクトディレクトリ、開発用インストールの場合はクローンしたリポジトリを指定します。詳細は[インストール方法別の設定](docs/quickstart.md#インストール方法別の設定)を参照してください。
 
-| クライアント | 設定ファイル |
-|-------------|-------------|
-| Claude Code | `~/.claude.json` または `.mcp.json` |
-| Claude Desktop | `~/.config/claude-desktop/config.json` (macOS/Linux) |
-| | `%APPDATA%\claude-desktop\config.json` (Windows) |
-| VS Code (Copilot Chat, Cline, Continue等) | `.vscode/mcp.json` |
-| Cursor | `.cursor/mcp.json` |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
-
-### Claude Code
-
-グローバル設定（`~/.claude.json`）またはプロジェクト設定（`.mcp.json`）に追加：
-
-```json
-{
-  "mcpServers": {
-    "note-mcp": {
-      "command": "uv",
-      "args": ["run", "python", "-m", "note_mcp"],
-      "cwd": "/path/to/note-mcp"
-    }
-  }
-}
-```
-
-### Claude Desktop
-
-`~/.config/claude-desktop/config.json`（macOS/Linux）または `%APPDATA%\claude-desktop\config.json`（Windows）に追加：
-
-```json
-{
-  "mcpServers": {
-    "note-mcp": {
-      "command": "uv",
-      "args": ["run", "python", "-m", "note_mcp"],
-      "cwd": "/path/to/note-mcp"
-    }
-  }
-}
-```
-
-### VS Code拡張 (Copilot Chat, Cline, Continue等)
-
-`.vscode/mcp.json` に追加：
-
-```json
-{
-  "servers": {
-    "note-mcp": {
-      "command": "uv",
-      "args": ["run", "python", "-m", "note_mcp"],
-      "cwd": "/path/to/note-mcp"
-    }
-  }
-}
-```
-
-### Cursor
-
-`.cursor/mcp.json` に追加：
-
-```json
-{
-  "mcpServers": {
-    "note-mcp": {
-      "command": "uv",
-      "args": ["run", "python", "-m", "note_mcp"],
-      "cwd": "/path/to/note-mcp"
-    }
-  }
-}
-```
-
-### Windsurf
-
-`~/.codeium/windsurf/mcp_config.json` に追加：
-
-```json
-{
-  "mcpServers": {
-    "note-mcp": {
-      "command": "uv",
-      "args": ["run", "python", "-m", "note_mcp"],
-      "cwd": "/path/to/note-mcp"
-    }
-  }
-}
-```
+各MCPクライアント（Claude Code, Claude Desktop, VS Code, Cursor, Windsurf）の設定ファイルの場所と詳細は[MCPクライアント別の設定](docs/quickstart.md#mcpクライアント別の設定ファイル)を参照してください。
 
 ## Usage
 
