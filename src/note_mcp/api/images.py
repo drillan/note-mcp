@@ -73,6 +73,15 @@ ALLOWED_EXTENSIONS: set[str] = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 # Maximum file size in bytes (10MB)
 MAX_FILE_SIZE: int = 10 * 1024 * 1024
 
+# Content-type mapping for image files (single source of truth - DRY)
+CONTENT_TYPE_MAP: dict[str, str] = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
 # API endpoints for different image types
 # Note: Body images use the same endpoint as eyecatch images.
 # The returned URL can be embedded in article body using Markdown syntax.
@@ -156,14 +165,7 @@ async def _upload_image_internal(
         file_content = f.read()
 
     # Determine content type based on extension
-    content_types = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".gif": "image/gif",
-        ".webp": "image/webp",
-    }
-    content_type = content_types.get(path.suffix.lower(), "application/octet-stream")
+    content_type = CONTENT_TYPE_MAP.get(path.suffix.lower(), "application/octet-stream")
 
     # Prepare files for multipart request
     files = {
@@ -314,14 +316,7 @@ async def upload_body_image(
     }
 
     # Determine content type
-    content_types = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".gif": "image/gif",
-        ".webp": "image/webp",
-    }
-    content_type = content_types.get(path.suffix.lower(), "application/octet-stream")
+    content_type = CONTENT_TYPE_MAP.get(path.suffix.lower(), "application/octet-stream")
 
     # Add file last (S3 requirement)
     files_data["file"] = (path.name, file_content, content_type)

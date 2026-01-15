@@ -29,7 +29,7 @@ import html
 import logging
 import re
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from note_mcp.api.client import NoteAPIClient
 from note_mcp.models import ErrorCode, NoteAPIError
@@ -156,24 +156,24 @@ def _build_embed_figure_html(
     )
 
 
-def generate_embed_html(url: str, service: str | None = None) -> str:
-    """Generate embed HTML for note.com with a random key.
+def generate_embed_html(
+    url: str,
+    service: str | None = None,
+    embed_key: str | None = None,
+) -> str:
+    """Generate embed HTML for note.com.
 
     Creates a figure element with the required attributes for note.com
     to render the embed (iframe is rendered client-side by note.com frontend).
-
-    NOTE: This generates a random embed key which will NOT work for rendering.
-    Use fetch_embed_key() to get a server-registered key, then use
-    generate_embed_html_with_key() for proper rendering.
-
-    This function is kept for backward compatibility and as a placeholder
-    during markdown-to-html conversion (key is replaced later via API).
 
     Args:
         url: Original URL (YouTube, Twitter, note.com, GitHub Gist, GitHub Repository,
              noteマネー, Zenn.dev, Google Slides, SpeakerDeck).
         service: Service type ('youtube', 'twitter', 'note', 'gist', 'githubRepository',
-                 'googlepresentation', 'speakerdeck', 'oembed', 'external-article'). If None, auto-detected from URL.
+                 'googlepresentation', 'speakerdeck', 'oembed', 'external-article').
+                 If None, auto-detected from URL.
+        embed_key: Server-registered embed key. If None, generates a random
+                   placeholder key (for markdown-to-html conversion, replaced later via API).
 
     Returns:
         HTML figure element string.
@@ -187,8 +187,57 @@ def generate_embed_html(url: str, service: str | None = None) -> str:
     if service is None:
         raise ValueError(f"Unsupported embed URL: {url}")
 
-    embed_key = f"emb{uuid.uuid4().hex[:13]}"
+    if embed_key is None:
+        embed_key = f"emb{uuid.uuid4().hex[:13]}"
+
     return _build_embed_figure_html(url, embed_key, service)
+
+
+def _extract_and_validate_embed_response(
+    response: dict[str, Any],
+    path: list[str],
+    url: str,
+    article_key: str,
+    service: str,
+) -> tuple[str, str]:
+    """Extract and validate embed key and HTML from API response.
+
+    Internal helper to avoid duplicated response validation logic (DRY principle).
+
+    Args:
+        response: API response dictionary.
+        path: List of keys to navigate to the embed data
+              (e.g., ["data", "embedded_content"] for note.com,
+               ["data"] for external services).
+        url: Original embed URL (for error context).
+        article_key: Article key (for error context).
+        service: Service name for error message (e.g., "note", "youtube").
+
+    Returns:
+        Tuple of (embed_key, html_for_embed).
+
+    Raises:
+        NoteAPIError: If required fields are missing from response.
+    """
+    # Navigate to the embed data following the path
+    data: dict[str, Any] = response
+    for key in path:
+        data = data.get(key, {})
+
+    embed_key = data.get("key")
+    html_for_embed = data.get("html_for_embed")
+
+    # Article 6: Validate required fields - no implicit fallbacks
+    if not embed_key or not html_for_embed:
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message=(
+                f"Failed to fetch {service} embed key: API response missing required field(s) 'key' or 'html_for_embed'"
+            ),
+            details={"url": url, "article_key": article_key, "response": response},
+        )
+
+    return str(embed_key), str(html_for_embed)
 
 
 async def _fetch_note_embed_key(
@@ -228,20 +277,13 @@ async def _fetch_note_embed_key(
         response = await client.post("/v1/embed", json=payload)
 
     # Response structure: {"data": {"embedded_content": {"key": ..., "html_for_embed": ...}}}
-    data = response.get("data", {})
-    embedded_content = data.get("embedded_content", {})
-    embed_key = embedded_content.get("key")
-    html_for_embed = embedded_content.get("html_for_embed")
-
-    # Article 6: Validate required fields - no implicit fallbacks
-    if not embed_key or not html_for_embed:
-        raise NoteAPIError(
-            code=ErrorCode.API_ERROR,
-            message="Failed to fetch note embed key: API response missing required field(s) 'key' or 'html_for_embed'",
-            details={"url": url, "article_key": article_key, "response": response},
-        )
-
-    return embed_key, html_for_embed
+    return _extract_and_validate_embed_response(
+        response,
+        path=["data", "embedded_content"],
+        url=url,
+        article_key=article_key,
+        service="note",
+    )
 
 
 async def fetch_embed_key(
@@ -296,19 +338,14 @@ async def fetch_embed_key(
     async with NoteAPIClient(session) as client:
         response = await client.get("/v2/embed_by_external_api", params=params)
 
-    # Validate response
-    data = response.get("data", {})
-    embed_key = data.get("key")
-    html_for_embed = data.get("html_for_embed")
-
-    if not embed_key or not html_for_embed:
-        raise NoteAPIError(
-            code=ErrorCode.API_ERROR,
-            message=f"Failed to fetch {service} embed key: API returned empty response",
-            details={"url": url, "article_key": article_key, "response": response},
-        )
-
-    return embed_key, html_for_embed
+    # Response structure: {"data": {"key": ..., "html_for_embed": ...}}
+    return _extract_and_validate_embed_response(
+        response,
+        path=["data"],
+        url=url,
+        article_key=article_key,
+        service=service,
+    )
 
 
 def generate_embed_html_with_key(
@@ -318,15 +355,16 @@ def generate_embed_html_with_key(
 ) -> str:
     """Generate embed HTML with a server-registered key.
 
-    Unlike generate_embed_html(), this uses a server-registered key
-    which enables proper iframe rendering by note.com's frontend.
+    .. deprecated::
+        Use ``generate_embed_html(url, service, embed_key)`` instead.
 
     Args:
         url: Original URL (YouTube, Twitter, note.com, GitHub Gist, GitHub Repository,
              noteマネー, Zenn.dev, Google Slides, SpeakerDeck).
         embed_key: Server-registered embed key from fetch_embed_key().
         service: Service type ('youtube', 'twitter', 'note', 'gist', 'githubRepository',
-                 'googlepresentation', 'speakerdeck', 'oembed', 'external-article'). If None, auto-detected from URL.
+                 'googlepresentation', 'speakerdeck', 'oembed', 'external-article').
+                 If None, auto-detected from URL.
 
     Returns:
         HTML figure element string with server-registered key.
@@ -334,13 +372,14 @@ def generate_embed_html_with_key(
     Raises:
         ValueError: If URL is not a supported embed URL.
     """
-    if service is None:
-        service = get_embed_service(url)
+    import warnings
 
-    if service is None:
-        raise ValueError(f"Unsupported embed URL: {url}")
-
-    return _build_embed_figure_html(url, embed_key, service)
+    warnings.warn(
+        "generate_embed_html_with_key is deprecated. Use generate_embed_html(url, service=..., embed_key=...) instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return generate_embed_html(url, service, embed_key)
 
 
 # Pattern to find embed figure elements with their keys and URLs

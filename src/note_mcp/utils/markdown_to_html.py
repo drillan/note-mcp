@@ -177,6 +177,46 @@ def _restore_code_blocks(content: str, blocks: list[tuple[str, str]]) -> str:
     return content
 
 
+def protected_content_transformer(
+    prefix: str,
+) -> Callable[[Callable[[str], str]], Callable[[str], str]]:
+    """Create a decorator that protects code blocks during transformation.
+
+    This Higher-Order Function reduces code duplication for pattern-based
+    Markdown transformations that need to preserve code blocks.
+
+    The decorator:
+    1. Protects fenced (```) and inline (`) code blocks with placeholders
+    2. Applies the transformation function
+    3. Restores the original code blocks
+
+    Args:
+        prefix: Unique prefix for placeholders (e.g., "STOCK", "ALIGN", "TOC").
+                Use unique prefixes to avoid conflicts between transformations.
+
+    Returns:
+        Decorator function that wraps a transformation function.
+
+    Example:
+        >>> @protected_content_transformer("STOCK")
+        ... def convert_stock(content: str) -> str:
+        ...     return pattern.sub(replacement, content)
+        >>> convert_stock("text with `^5243` in code")  # code block preserved
+    """
+    import functools
+
+    def decorator(transform: Callable[[str], str]) -> Callable[[str], str]:
+        @functools.wraps(transform)
+        def wrapper(content: str) -> str:
+            with _protect_code_blocks(content, prefix) as (protected, blocks):
+                result = transform(protected)
+            return _restore_code_blocks(result, blocks)
+
+        return wrapper
+
+    return decorator
+
+
 def has_embed_url(content: str) -> bool:
     """Check if content contains URLs that should be embedded.
 
@@ -297,6 +337,7 @@ def _extract_citation(blockquote_content: str) -> tuple[str, str]:
     return modified_content, figcaption_html
 
 
+@protected_content_transformer("STOCK")
 def _convert_stock_notation(content: str) -> str:
     """Convert stock notation to noteマネー URLs.
 
@@ -305,7 +346,7 @@ def _convert_stock_notation(content: str) -> str:
     - $GOOG (US stock) → https://money.note.com/us-companies/GOOG
 
     Only converts notations that are alone on a line.
-    Code blocks are protected from conversion.
+    Code blocks are protected from conversion via decorator.
 
     Issue #216: Support stock chart embedding via notation.
 
@@ -315,21 +356,22 @@ def _convert_stock_notation(content: str) -> str:
     Returns:
         Content with stock notations converted to URLs
     """
-    with _protect_code_blocks(content, "STOCK") as (protected, blocks):
-        # Japanese stocks: ^5243 → https://money.note.com/companies/5243
-        protected = _STOCK_JP_PATTERN.sub(r"https://money.note.com/companies/\1", protected)
-        # US stocks: $GOOG → https://money.note.com/us-companies/GOOG
-        protected = _STOCK_US_PATTERN.sub(r"https://money.note.com/us-companies/\1", protected)
-
-    return _restore_code_blocks(protected, blocks)
+    # Japanese stocks: ^5243 → https://money.note.com/companies/5243
+    content = _STOCK_JP_PATTERN.sub(r"https://money.note.com/companies/\1", content)
+    # US stocks: $GOOG → https://money.note.com/us-companies/GOOG
+    content = _STOCK_US_PATTERN.sub(r"https://money.note.com/us-companies/\1", content)
+    return content
 
 
+@protected_content_transformer("ALIGN")
 def _convert_text_alignment(content: str) -> str:
     """Convert text alignment Markdown notation to internal placeholders.
 
     This function processes text alignment markers BEFORE markdown conversion.
     It converts the custom notation to placeholders that will be converted
     to proper HTML after markdown processing.
+
+    Code blocks are protected from conversion via decorator.
 
     Notation:
         ->text<- : center alignment
@@ -342,14 +384,12 @@ def _convert_text_alignment(content: str) -> str:
     Returns:
         Content with alignment markers converted to placeholders
     """
-    with _protect_code_blocks(content, "ALIGN") as (protected, blocks):
-        # Convert alignment markers to placeholders
-        # Order matters: center first (more specific), then right/left
-        protected = _TEXT_ALIGN_CENTER_PATTERN.sub(r"§§ALIGN_CENTER§§\1§§/ALIGN§§", protected)
-        protected = _TEXT_ALIGN_RIGHT_PATTERN.sub(r"§§ALIGN_RIGHT§§\1§§/ALIGN§§", protected)
-        protected = _TEXT_ALIGN_LEFT_PATTERN.sub(r"§§ALIGN_LEFT§§\1§§/ALIGN§§", protected)
-
-    return _restore_code_blocks(protected, blocks)
+    # Convert alignment markers to placeholders
+    # Order matters: center first (more specific), then right/left
+    content = _TEXT_ALIGN_CENTER_PATTERN.sub(r"§§ALIGN_CENTER§§\1§§/ALIGN§§", content)
+    content = _TEXT_ALIGN_RIGHT_PATTERN.sub(r"§§ALIGN_RIGHT§§\1§§/ALIGN§§", content)
+    content = _TEXT_ALIGN_LEFT_PATTERN.sub(r"§§ALIGN_LEFT§§\1§§/ALIGN§§", content)
+    return content
 
 
 def _apply_alignment(match: re.Match[str]) -> str:
@@ -654,11 +694,36 @@ def _has_toc_placeholder(content: str) -> bool:
     return bool(_TOC_PATTERN.search(content))
 
 
+def _replace_toc_markers(content: str) -> str:
+    """Replace [TOC] markers with placeholder (first only, rest removed).
+
+    Internal function that handles the stateful replacement logic.
+    Only the first [TOC] is converted to placeholder, subsequent ones are removed.
+
+    Args:
+        content: Content with potential [TOC] markers.
+
+    Returns:
+        Content with [TOC] markers processed.
+    """
+    first_replaced = False
+
+    def replace_toc(match: re.Match[str]) -> str:
+        nonlocal first_replaced
+        if not first_replaced:
+            first_replaced = True
+            return _TOC_PLACEHOLDER
+        return ""  # Remove subsequent [TOC]s
+
+    return _TOC_PATTERN.sub(replace_toc, content)
+
+
+@protected_content_transformer("TOC")
 def _convert_toc_to_placeholder(content: str) -> str:
     """Convert first [TOC] to HTML placeholder.
 
     Only the first [TOC] is converted. Subsequent ones are removed.
-    [TOC] inside code blocks is not processed.
+    [TOC] inside code blocks is not processed via decorator.
 
     Args:
         content: Markdown content with potential [TOC] markers.
@@ -666,20 +731,7 @@ def _convert_toc_to_placeholder(content: str) -> str:
     Returns:
         Content with [TOC] converted to placeholder.
     """
-    with _protect_code_blocks(content, "TOC") as (protected, blocks):
-        # Convert only the first [TOC] to placeholder
-        first_replaced = False
-
-        def replace_toc(match: re.Match[str]) -> str:
-            nonlocal first_replaced
-            if not first_replaced:
-                first_replaced = True
-                return _TOC_PLACEHOLDER
-            return ""  # Remove subsequent [TOC]s
-
-        result = _TOC_PATTERN.sub(replace_toc, protected)
-
-    return _restore_code_blocks(result, blocks)
+    return _replace_toc_markers(content)
 
 
 def _convert_toc_placeholder_to_html(html: str) -> str:
