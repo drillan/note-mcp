@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from note_mcp.api.articles import create_draft, get_article, list_articles, publish_article, update_article
-from note_mcp.models import Article, ArticleInput, ArticleStatus, Session
+from note_mcp.models import Article, ArticleInput, ArticleStatus, ErrorCode, Session
 
 if TYPE_CHECKING:
     pass
@@ -390,29 +390,56 @@ class TestPublishArticle:
 
     @pytest.mark.asyncio
     async def test_publish_existing_draft(self) -> None:
-        """Test publishing an existing draft article."""
+        """Test that publishing an existing draft returns the published article."""
         session = create_mock_session()
 
-        mock_response = {
+        # Mock response from PUT /v1/text_notes/{numeric_id} - minimal response
+        mock_put_response: dict[str, Any] = {
             "data": {
-                "id": "123456",
-                "key": "n1234567890ab",
-                "name": "Published Article",
-                "body": "<p>Content</p>",
-                "status": "published",
-                "hashtags": [],
-                "noteUrl": "https://note.com/testuser/n/n1234567890ab",
+                "result": True,
             }
         }
 
-        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+        # Mock article returned by get_article_via_api after publishing
+        mock_published_article = Article(
+            id="123456",
+            key="n1234567890ab",
+            title="Published Article",
+            body="Content",
+            status=ArticleStatus.PUBLISHED,
+            url="https://note.com/testuser/n/n1234567890ab",
+        )
+
+        with (
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
+            patch(
+                "note_mcp.api.articles.get_article_via_api",
+                new_callable=AsyncMock,
+                return_value=mock_published_article,
+            ) as mock_get_article,
+        ):
             mock_client = AsyncMock()
             mock_client_class.return_value = mock_client
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client.put = AsyncMock(return_value=mock_put_response)
+            mock_resolve.return_value = "123456"
 
-            article = await publish_article(session, article_id="123456")
+            article = await publish_article(session, article_id="n1234567890ab")
+
+            # Verify _resolve_numeric_note_id was called
+            mock_resolve.assert_called_once_with(session, "n1234567890ab")
+
+            # Verify PUT /v1/text_notes/{numeric_id} was called with status=published
+            mock_client.put.assert_called_once()
+            call_args = mock_client.put.call_args
+            assert call_args is not None
+            assert "/v1/text_notes/123456" in call_args[0][0]
+            assert call_args[1]["json"] == {"status": "published"}
+
+            # Verify get_article_via_api was called to fetch updated article
+            mock_get_article.assert_called_once_with(session, "n1234567890ab")
 
             assert article.id == "123456"
             assert article.status == ArticleStatus.PUBLISHED
@@ -462,6 +489,84 @@ class TestPublishArticle:
             await publish_article(session)
 
         assert "article_id" in str(exc_info.value) or "article_input" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_publish_rejects_numeric_article_id(self) -> None:
+        """Test that publish_article rejects numeric article IDs.
+
+        Issue #250: Numeric IDs are rejected early to prevent data inconsistency
+        where the article gets published but get_article_via_api fails.
+        """
+        from note_mcp.models import NoteAPIError
+
+        session = create_mock_session()
+
+        with pytest.raises(NoteAPIError) as exc_info:
+            await publish_article(session, article_id="123456")
+
+        assert "Numeric article ID" in str(exc_info.value)
+        assert "article key format" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_publish_validates_api_response(self) -> None:
+        """Test that publish_article validates API response for failure.
+
+        Issue #250: API may return success HTTP status but logical failure.
+        """
+        from note_mcp.models import NoteAPIError
+
+        session = create_mock_session()
+
+        # Mock response indicating logical failure
+        mock_put_response: dict[str, Any] = {
+            "data": {
+                "result": False,
+            }
+        }
+
+        with (
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
+        ):
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.put = AsyncMock(return_value=mock_put_response)
+            mock_resolve.return_value = "123456"
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await publish_article(session, article_id="n1234567890ab")
+
+            assert "Failed to publish article" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_publish_handles_put_request_failure(self) -> None:
+        """Test that publish_article propagates PUT request failures."""
+        from note_mcp.models import NoteAPIError
+
+        session = create_mock_session()
+
+        with (
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
+        ):
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.put = AsyncMock(
+                side_effect=NoteAPIError(
+                    code=ErrorCode.API_ERROR,
+                    message="Server error",
+                )
+            )
+            mock_resolve.return_value = "123456"
+
+            with pytest.raises(NoteAPIError) as exc_info:
+                await publish_article(session, article_id="n1234567890ab")
+
+            assert "Server error" in str(exc_info.value)
 
 
 class TestCreateDraftWithEmbeds:
