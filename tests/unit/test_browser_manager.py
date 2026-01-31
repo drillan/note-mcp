@@ -104,6 +104,121 @@ class TestBrowserManager:
         await manager.close()
 
 
+class TestBrowserManagerHeadlessParameter:
+    """Tests for BrowserManager headless parameter support."""
+
+    @pytest.fixture(autouse=True)
+    def reset_singleton(self) -> None:
+        """Reset singleton instance before each test."""
+        BrowserManager._instance = None
+        BrowserManager._browser = None
+        BrowserManager._context = None
+        BrowserManager._page = None
+        BrowserManager._lock = None
+        BrowserManager._playwright = None
+
+    @pytest.mark.asyncio
+    async def test_get_page_accepts_headless_parameter(self) -> None:
+        """Test that get_page accepts headless parameter."""
+        manager = BrowserManager.get_instance()
+
+        with patch("note_mcp.browser.manager.async_playwright") as mock_playwright:
+            mock_browser = AsyncMock()
+            mock_context = AsyncMock()
+            mock_page = AsyncMock()
+            mock_page.is_closed = MagicMock(return_value=False)
+
+            mock_pw = AsyncMock()
+            mock_pw.chromium.launch = AsyncMock(return_value=mock_browser)
+            mock_browser.new_context = AsyncMock(return_value=mock_context)
+            mock_context.new_page = AsyncMock(return_value=mock_page)
+
+            mock_playwright.return_value.start = AsyncMock(return_value=mock_pw)
+
+            page = await manager.get_page(headless=False)
+
+            assert page is mock_page
+            # Verify chromium.launch was called with headless=False
+            mock_pw.chromium.launch.assert_called_once_with(headless=False)
+
+    @pytest.mark.asyncio
+    async def test_get_page_headless_true_uses_headless_mode(self) -> None:
+        """Test that get_page with headless=True launches in headless mode."""
+        manager = BrowserManager.get_instance()
+
+        with patch("note_mcp.browser.manager.async_playwright") as mock_playwright:
+            mock_browser = AsyncMock()
+            mock_context = AsyncMock()
+            mock_page = AsyncMock()
+            mock_page.is_closed = MagicMock(return_value=False)
+
+            mock_pw = AsyncMock()
+            mock_pw.chromium.launch = AsyncMock(return_value=mock_browser)
+            mock_browser.new_context = AsyncMock(return_value=mock_context)
+            mock_context.new_page = AsyncMock(return_value=mock_page)
+
+            mock_playwright.return_value.start = AsyncMock(return_value=mock_pw)
+
+            page = await manager.get_page(headless=True)
+
+            assert page is mock_page
+            mock_pw.chromium.launch.assert_called_once_with(headless=True)
+
+    @pytest.mark.asyncio
+    async def test_get_page_default_uses_config(self) -> None:
+        """Test that get_page without headless parameter uses config default."""
+        manager = BrowserManager.get_instance()
+
+        with (
+            patch("note_mcp.browser.manager.async_playwright") as mock_playwright,
+            patch("note_mcp.browser.config.get_headless_mode", return_value=True) as mock_config,
+        ):
+            mock_browser = AsyncMock()
+            mock_context = AsyncMock()
+            mock_page = AsyncMock()
+            mock_page.is_closed = MagicMock(return_value=False)
+
+            mock_pw = AsyncMock()
+            mock_pw.chromium.launch = AsyncMock(return_value=mock_browser)
+            mock_browser.new_context = AsyncMock(return_value=mock_context)
+            mock_context.new_page = AsyncMock(return_value=mock_page)
+
+            mock_playwright.return_value.start = AsyncMock(return_value=mock_pw)
+
+            page = await manager.get_page()
+
+            assert page is mock_page
+            mock_config.assert_called_once()
+            mock_pw.chromium.launch.assert_called_once_with(headless=True)
+
+    @pytest.mark.asyncio
+    async def test_get_page_ignores_headless_when_browser_exists(self) -> None:
+        """Test that headless parameter is ignored when browser already exists.
+
+        This documents the expected behavior: once a browser is launched,
+        subsequent get_page() calls reuse it regardless of headless parameter.
+        Call close() first if you need to change the headless mode.
+        """
+        manager = BrowserManager.get_instance()
+
+        # Set up existing browser and page
+        mock_browser = AsyncMock()
+        mock_page = AsyncMock()
+        mock_page.is_closed = MagicMock(return_value=False)
+
+        BrowserManager._browser = mock_browser
+        BrowserManager._page = mock_page
+        BrowserManager._lock = asyncio.Lock()
+
+        # Call get_page with headless=False, but browser already exists
+        page = await manager.get_page(headless=False)
+
+        # Should return existing page, not launch new browser
+        assert page is mock_page
+        # Browser launch should NOT have been called
+        mock_browser.new_context.assert_not_called()
+
+
 class TestBrowserManagerLock:
     """Tests for BrowserManager locking behavior."""
 
