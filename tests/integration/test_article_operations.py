@@ -390,29 +390,62 @@ class TestPublishArticle:
 
     @pytest.mark.asyncio
     async def test_publish_existing_draft(self) -> None:
-        """Test publishing an existing draft article."""
+        """Test publishing an existing draft article.
+
+        Issue #250: publish_article uses PUT /v1/text_notes/{numeric_id}
+        instead of non-existent POST /v3/notes/{id}/publish endpoint.
+        The PUT endpoint returns minimal response, so we fetch the article
+        separately via get_article_via_api.
+        """
         session = create_mock_session()
 
-        mock_response = {
+        # Mock response from PUT /v1/text_notes/{numeric_id} - minimal response
+        mock_put_response: dict[str, Any] = {
             "data": {
-                "id": "123456",
-                "key": "n1234567890ab",
-                "name": "Published Article",
-                "body": "<p>Content</p>",
-                "status": "published",
-                "hashtags": [],
-                "noteUrl": "https://note.com/testuser/n/n1234567890ab",
+                "result": True,
             }
         }
 
-        with patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class:
+        # Mock article returned by get_article_via_api after publishing
+        mock_published_article = Article(
+            id="123456",
+            key="n1234567890ab",
+            title="Published Article",
+            body="Content",
+            status=ArticleStatus.PUBLISHED,
+            url="https://note.com/testuser/n/n1234567890ab",
+        )
+
+        with (
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
+            patch(
+                "note_mcp.api.articles.get_article_via_api",
+                new_callable=AsyncMock,
+                return_value=mock_published_article,
+            ) as mock_get_article,
+        ):
             mock_client = AsyncMock()
             mock_client_class.return_value = mock_client
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.post = AsyncMock(return_value=mock_response)
+            mock_client.put = AsyncMock(return_value=mock_put_response)
+            mock_resolve.return_value = "123456"
 
-            article = await publish_article(session, article_id="123456")
+            article = await publish_article(session, article_id="n1234567890ab")
+
+            # Verify _resolve_numeric_note_id was called
+            mock_resolve.assert_called_once_with(session, "n1234567890ab")
+
+            # Verify PUT /v1/text_notes/{numeric_id} was called with status=published
+            mock_client.put.assert_called_once()
+            call_args = mock_client.put.call_args
+            assert call_args is not None
+            assert "/v1/text_notes/123456" in call_args[0][0]
+            assert call_args[1]["json"] == {"status": "published"}
+
+            # Verify get_article_via_api was called to fetch updated article
+            mock_get_article.assert_called_once_with(session, "n1234567890ab")
 
             assert article.id == "123456"
             assert article.status == ArticleStatus.PUBLISHED

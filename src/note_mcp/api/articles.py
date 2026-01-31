@@ -823,13 +823,18 @@ async def publish_article(
 
     if article_id is not None:
         # Publish existing draft
+        # Issue #250: Use PUT /v1/text_notes/{numeric_id} instead of
+        # non-existent POST /v3/notes/{id}/publish endpoint
+        numeric_id = await _resolve_numeric_note_id(session, article_id)
+
+        # PUT /v1/text_notes returns minimal response,
+        # so we fetch the updated article separately
         payload: dict[str, Any] = {"status": "published"}
-        return await _execute_post(
-            session,
-            f"/v3/notes/{article_id}/publish",
-            _parse_article_response,
-            payload=payload,
-        )
+        async with NoteAPIClient(session) as client:
+            await client.put(f"/v1/text_notes/{numeric_id}", json=payload)
+
+        # Fetch and return updated article
+        return await get_article_via_api(session, article_id)
 
     # Create and publish new article
     assert article_input is not None  # Type narrowing
