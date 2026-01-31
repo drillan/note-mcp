@@ -59,6 +59,53 @@ class TestLoginFlow:
                 mock_manager.get_page.assert_called_once_with(headless=False)
 
     @pytest.mark.asyncio
+    async def test_login_calls_close_before_get_page(self) -> None:
+        """Test that login_with_browser calls close() before get_page().
+
+        This ensures the headless parameter is respected by forcing a fresh
+        browser launch, since get_page() ignores the parameter when a browser
+        already exists.
+        """
+        call_order: list[str] = []
+
+        with patch("note_mcp.auth.browser.BrowserManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.get_instance.return_value = mock_manager
+
+            mock_page = AsyncMock()
+            mock_page.goto = AsyncMock()
+            mock_page.wait_for_url = AsyncMock()
+            mock_page.url = "https://note.com/"  # Already logged in
+            mock_page.context = AsyncMock()
+            mock_page.context.cookies = AsyncMock(
+                return_value=[
+                    {"name": "_note_session_v5", "value": "session456"},
+                ]
+            )
+            mock_page.context.add_cookies = AsyncMock()
+            mock_page.evaluate = AsyncMock(return_value={"id": "", "urlname": "testuser"})
+
+            async def track_close() -> None:
+                call_order.append("close")
+
+            async def track_get_page(headless: bool | None = None) -> AsyncMock:
+                call_order.append("get_page")
+                return mock_page
+
+            mock_manager.close = AsyncMock(side_effect=track_close)
+            mock_manager.get_page = AsyncMock(side_effect=track_get_page)
+
+            with patch("note_mcp.auth.browser.SessionManager") as mock_session_manager_class:
+                mock_session_manager = MagicMock()
+                mock_session_manager.load.return_value = None
+                mock_session_manager_class.return_value = mock_session_manager
+
+                await login_with_browser(timeout=60)
+
+                # Verify close() was called before get_page()
+                assert call_order == ["close", "get_page"]
+
+    @pytest.mark.asyncio
     async def test_login_flow_extracts_cookies(self) -> None:
         """Test that login flow extracts cookies from browser."""
         with patch("note_mcp.auth.browser.BrowserManager") as mock_manager_class:

@@ -7,9 +7,12 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import logging
 from typing import TYPE_CHECKING, ClassVar
 
 from playwright.async_api import Page, async_playwright
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser, BrowserContext, Playwright
@@ -69,9 +72,13 @@ class BrowserManager:
                 else:
                     # Run cleanup directly if loop is not running
                     loop.run_until_complete(cls._async_cleanup())
-            except RuntimeError:
-                # No event loop, create one for cleanup
-                asyncio.run(cls._async_cleanup())
+            except RuntimeError as e:
+                # Only handle "no event loop" errors, re-raise others
+                error_msg = str(e).lower()
+                if "no running event loop" in error_msg or "no current event loop" in error_msg:
+                    asyncio.run(cls._async_cleanup())
+                else:
+                    raise
 
     @classmethod
     async def _async_cleanup(cls) -> None:
@@ -87,21 +94,21 @@ class BrowserManager:
 
     @classmethod
     async def _safe_close_browser(cls) -> None:
-        """Safely close browser, ignoring errors."""
+        """Safely close browser, logging errors at debug level."""
         try:
             if cls._browser is not None:
                 await cls._browser.close()
-        except Exception:  # noqa: S110 - intentionally broad for cleanup
-            pass
+        except Exception as e:  # noqa: BLE001 - intentionally broad for cleanup
+            logger.debug("Browser cleanup error (non-fatal): %s", e, exc_info=True)
 
     @classmethod
     async def _safe_stop_playwright(cls) -> None:
-        """Safely stop playwright, ignoring errors."""
+        """Safely stop playwright, logging errors at debug level."""
         try:
             if cls._playwright is not None:
                 await cls._playwright.stop()
-        except Exception:  # noqa: S110 - intentionally broad for cleanup
-            pass
+        except Exception as e:  # noqa: BLE001 - intentionally broad for cleanup
+            logger.debug("Playwright cleanup error (non-fatal): %s", e, exc_info=True)
 
     async def _ensure_browser(self, headless: bool | None = None) -> None:
         """Ensure browser is started.
@@ -141,7 +148,10 @@ class BrowserManager:
         Args:
             headless: If True, run in headless mode. If False, show browser window.
                      If None, use the default from config (NOTE_MCP_TEST_HEADLESS env var).
-                     Only applies when creating a new browser instance.
+
+                     IMPORTANT: This parameter is only used when launching a NEW browser.
+                     If a browser already exists, this parameter is SILENTLY IGNORED.
+                     Call close() first if you need to change the headless mode.
 
         Returns:
             Playwright Page instance

@@ -191,6 +191,33 @@ class TestBrowserManagerHeadlessParameter:
             mock_config.assert_called_once()
             mock_pw.chromium.launch.assert_called_once_with(headless=True)
 
+    @pytest.mark.asyncio
+    async def test_get_page_ignores_headless_when_browser_exists(self) -> None:
+        """Test that headless parameter is ignored when browser already exists.
+
+        This documents the expected behavior: once a browser is launched,
+        subsequent get_page() calls reuse it regardless of headless parameter.
+        Call close() first if you need to change the headless mode.
+        """
+        manager = BrowserManager.get_instance()
+
+        # Set up existing browser and page
+        mock_browser = AsyncMock()
+        mock_page = AsyncMock()
+        mock_page.is_closed = MagicMock(return_value=False)
+
+        BrowserManager._browser = mock_browser
+        BrowserManager._page = mock_page
+        BrowserManager._lock = asyncio.Lock()
+
+        # Call get_page with headless=False, but browser already exists
+        page = await manager.get_page(headless=False)
+
+        # Should return existing page, not launch new browser
+        assert page is mock_page
+        # Browser launch should NOT have been called
+        mock_browser.new_context.assert_not_called()
+
 
 class TestBrowserManagerLock:
     """Tests for BrowserManager locking behavior."""

@@ -540,7 +540,7 @@ async def login_with_browser(
                     user_id = username
                     logger.info(f"Extracted username from URL: {username}")
         except Exception as e:
-            logger.debug(f"Profile navigation method failed: {e}")
+            logger.warning(f"Profile navigation method failed: {e}")
 
     # Method 3: Fallback to API if browser method failed
     if not username:
