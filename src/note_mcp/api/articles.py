@@ -823,17 +823,35 @@ async def publish_article(
 
     if article_id is not None:
         # Publish existing draft
+        # Issue #250: Validate article_id format BEFORE making any API calls
+        # to prevent data inconsistency (article published but error returned)
+        if article_id.isdigit():
+            raise NoteAPIError(
+                code=ErrorCode.INVALID_INPUT,
+                message=(
+                    f"Numeric article ID '{article_id}' is not supported. "
+                    "Please use the article key format (e.g., 'n1234567890ab')."
+                ),
+                details={"article_id": article_id},
+            )
+
         # Issue #250: Use PUT /v1/text_notes/{numeric_id} instead of
         # non-existent POST /v3/notes/{id}/publish endpoint
         numeric_id = await _resolve_numeric_note_id(session, article_id)
 
-        # PUT /v1/text_notes returns minimal response,
-        # so we fetch the updated article separately
         payload: dict[str, Any] = {"status": "published"}
         async with NoteAPIClient(session) as client:
-            await client.put(f"/v1/text_notes/{numeric_id}", json=payload)
+            response = await client.put(f"/v1/text_notes/{numeric_id}", json=payload)
 
-        # Fetch and return updated article
+        # Validate API response for logical failure
+        data = response.get("data", {})
+        if data.get("result") is False:
+            raise NoteAPIError(
+                code=ErrorCode.API_ERROR,
+                message="Failed to publish article: API returned failure",
+                details={"article_id": article_id, "response": response},
+            )
+
         return await get_article_via_api(session, article_id)
 
     # Create and publish new article
