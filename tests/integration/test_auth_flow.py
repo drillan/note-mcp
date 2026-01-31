@@ -21,6 +21,44 @@ class TestLoginFlow:
     """Tests for browser-based login flow."""
 
     @pytest.mark.asyncio
+    async def test_login_uses_headful_mode(self) -> None:
+        """Test that login_with_browser always uses headful mode (headless=False).
+
+        This is critical because manual login requires the user to see and interact
+        with the browser window. Running in headless mode would block indefinitely
+        waiting for user input that can never happen.
+        """
+        with patch("note_mcp.auth.browser.BrowserManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.get_instance.return_value = mock_manager
+
+            mock_page = AsyncMock()
+            mock_page.goto = AsyncMock()
+            mock_page.wait_for_url = AsyncMock()
+            mock_page.url = "https://note.com/"  # Already logged in
+            mock_page.context = AsyncMock()
+            mock_page.context.cookies = AsyncMock(
+                return_value=[
+                    {"name": "_note_session_v5", "value": "session456"},
+                ]
+            )
+            mock_page.context.add_cookies = AsyncMock()
+            mock_page.evaluate = AsyncMock(return_value={"id": "", "urlname": "testuser"})
+
+            mock_manager.close = AsyncMock()
+            mock_manager.get_page = AsyncMock(return_value=mock_page)
+
+            with patch("note_mcp.auth.browser.SessionManager") as mock_session_manager_class:
+                mock_session_manager = MagicMock()
+                mock_session_manager.load.return_value = None  # No saved session
+                mock_session_manager_class.return_value = mock_session_manager
+
+                await login_with_browser(timeout=60)
+
+                # Verify get_page was called with headless=False
+                mock_manager.get_page.assert_called_once_with(headless=False)
+
+    @pytest.mark.asyncio
     async def test_login_flow_extracts_cookies(self) -> None:
         """Test that login flow extracts cookies from browser."""
         with patch("note_mcp.auth.browser.BrowserManager") as mock_manager_class:

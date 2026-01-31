@@ -103,17 +103,23 @@ class BrowserManager:
         except Exception:  # noqa: S110 - intentionally broad for cleanup
             pass
 
-    async def _ensure_browser(self) -> None:
-        """Ensure browser is started."""
+    async def _ensure_browser(self, headless: bool | None = None) -> None:
+        """Ensure browser is started.
+
+        Args:
+            headless: If True, run in headless mode. If False, show browser window.
+                     If None, use the default from config (NOTE_MCP_TEST_HEADLESS env var).
+        """
         if self._playwright is None:
             self.__class__._playwright = await async_playwright().start()
         playwright = self._playwright
         assert playwright is not None
 
         if self._browser is None:
-            from note_mcp.browser.config import get_headless_mode
+            if headless is None:
+                from note_mcp.browser.config import get_headless_mode
 
-            headless = get_headless_mode()
+                headless = get_headless_mode()
             self.__class__._browser = await playwright.chromium.launch(headless=headless)
         browser = self._browser
         assert browser is not None
@@ -126,11 +132,16 @@ class BrowserManager:
         if self._page is None or self._page.is_closed():
             self.__class__._page = await context.new_page()
 
-    async def get_page(self) -> Page:
+    async def get_page(self, headless: bool | None = None) -> Page:
         """Get a browser page, creating if necessary.
 
         Reuses existing page if available and not closed.
         Uses lock for thread-safe access.
+
+        Args:
+            headless: If True, run in headless mode. If False, show browser window.
+                     If None, use the default from config (NOTE_MCP_TEST_HEADLESS env var).
+                     Only applies when creating a new browser instance.
 
         Returns:
             Playwright Page instance
@@ -146,7 +157,7 @@ class BrowserManager:
                 return self._page
 
             # Create new browser/page if needed
-            await self._ensure_browser()
+            await self._ensure_browser(headless=headless)
             assert self._page is not None
             return self._page
 
