@@ -44,6 +44,10 @@ https://fin-py.connpass.com/event/381982/
 
 ## コード
 
+### GitHub Repository埋め込み
+
+https://github.com/drillan/note-mcp
+
 ### GitHub Gist埋め込み
 
 https://gist.github.com/drillan/71aab0a37b413be66bedf6c011d7cd37
