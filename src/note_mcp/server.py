@@ -408,6 +408,7 @@ async def note_get_preview_html(
 @mcp.tool()
 async def note_publish_article(
     article_id: Annotated[str | None, "公開する下書き記事のID（新規作成時は省略）"] = None,
+    file_path: Annotated[str | None, "タグを取得するMarkdownファイルのパス"] = None,
     title: Annotated[str | None, "記事タイトル（新規作成時は必須）"] = None,
     body: Annotated[str | None, "記事本文（Markdown形式、新規作成時は必須）"] = None,
     tags: Annotated[list[str] | None, "記事のタグ（#なしでも可）"] = None,
@@ -418,15 +419,21 @@ async def note_publish_article(
     article_idを指定すると既存の下書きを公開します。
     title/bodyを指定すると新規記事を作成して公開します。
 
+    既存の下書きを公開する際、tagsが未指定でfile_pathが指定されている場合、
+    Markdownファイルのフロントマターからタグを取得します。
+
     Args:
         article_id: 公開する下書き記事のID（新規作成時は省略）
+        file_path: タグを取得するMarkdownファイルのパス（既存下書き公開時のみ有効）
         title: 記事タイトル（新規作成時は必須）
         body: 記事本文（Markdown形式、新規作成時は必須）
-        tags: 記事のタグ（オプション）
+        tags: 記事のタグ（オプション、file_pathより優先）
 
     Returns:
         公開結果のメッセージ（記事URLを含む）
     """
+    from pathlib import Path
+
     session = _session_manager.load()
     if session is None or session.is_expired():
         return "セッションが無効です。note_loginでログインしてください。"
@@ -434,10 +441,20 @@ async def note_publish_article(
     # Determine whether to publish existing or create new
     try:
         if article_id is not None:
-            # Publish existing draft (Issue #252: pass tags to set during publish)
-            article = await publish_article(session, article_id=article_id, tags=tags)
+            # Publish existing draft
+            publish_tags = tags
+
+            # Issue #258: If tags not specified but file_path is, get tags from file
+            if publish_tags is None and file_path is not None:
+                try:
+                    parsed = parse_markdown_file(Path(file_path))
+                    publish_tags = parsed.tags if parsed.tags else []
+                except FileNotFoundError:
+                    return f"ファイルが見つかりません: {file_path}"
+
+            article = await publish_article(session, article_id=article_id, tags=publish_tags)
         elif title is not None and body is not None:
-            # Create and publish new article
+            # Create and publish new article (file_path is ignored for new articles)
             article_input = ArticleInput(
                 title=title,
                 body=body,
