@@ -451,6 +451,8 @@ async def note_publish_article(
                     publish_tags = parsed.tags if parsed.tags else []
                 except FileNotFoundError:
                     return f"ファイルが見つかりません: {file_path}"
+                except ValueError as e:
+                    return f"ファイル解析エラー: {e}"
 
             article = await publish_article(session, article_id=article_id, tags=publish_tags)
         elif title is not None and body is not None:

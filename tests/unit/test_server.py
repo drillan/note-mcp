@@ -640,3 +640,33 @@ class TestNotePublishArticle:
             assert "article_id" not in call_kwargs
 
             assert "公開しました" in result
+
+    @pytest.mark.asyncio
+    async def test_file_path_with_invalid_markdown_returns_error(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """file_pathのMarkdownが解析できない場合、エラーメッセージを返す。"""
+        # Create a markdown file without title (no frontmatter, no heading)
+        md_file = tmp_path / "no_title.md"
+        md_file.write_text("No frontmatter, no heading\n\nJust body content")
+
+        mock_session = MagicMock()
+
+        with (
+            patch("note_mcp.server._session_manager") as mock_session_manager,
+            patch("note_mcp.server.publish_article", new_callable=AsyncMock) as mock_publish,
+        ):
+            mock_session.is_expired.return_value = False
+            mock_session_manager.load.return_value = mock_session
+
+            from note_mcp.server import note_publish_article
+
+            fn = note_publish_article.fn
+            result = await fn(article_id="123456789", file_path=str(md_file))
+
+            # publish_article should NOT be called
+            mock_publish.assert_not_called()
+
+            # Result should contain error message
+            assert "ファイル解析エラー" in result
