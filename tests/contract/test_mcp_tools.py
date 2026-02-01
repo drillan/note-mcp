@@ -335,7 +335,7 @@ class TestToolSchemas:
         assert "properties" in schema
 
         # Exact properties match
-        expected_properties = {"article_id", "title", "body", "tags"}
+        expected_properties = {"article_id", "file_path", "title", "body", "tags"}
         actual_properties = set(schema.get("properties", {}).keys())
         assert actual_properties == expected_properties, (
             f"Schema mismatch: "
