@@ -1,8 +1,8 @@
 """Embed URL detection and HTML generation for note.com.
 
 This module provides functions for detecting embed URLs (YouTube, Twitter, note.com,
-GitHub Gist, GitHub Repository, noteマネー, Zenn.dev, Google Slides, SpeakerDeck, Qiita)
-and generating the required HTML structure for note.com embeds.
+GitHub Gist, GitHub Repository, noteマネー, Zenn.dev, Google Slides, SpeakerDeck, Qiita,
+connpass) and generating the required HTML structure for note.com embeds.
 
 This is the single source of truth for embed URL patterns (DRY principle).
 
@@ -24,6 +24,9 @@ Issue #223: SpeakerDeck presentation embed support added. SpeakerDeck URLs use
 
 Issue #244: Qiita article embed support added. Qiita URLs use 'external-article'
 service type (same as Zenn.dev) via the same /v2/embed_by_external_api endpoint.
+
+Issue #254: connpass event embed support added. connpass URLs use 'external-article'
+service type (same as Zenn.dev and Qiita) via the same /v2/embed_by_external_api endpoint.
 """
 
 from __future__ import annotations
@@ -67,6 +70,12 @@ ZENN_PATTERN = re.compile(r"^https?://zenn\.dev/[\w-]+/articles/[\w-]+$")
 # Example: https://qiita.com/driller/items/31c1ff4d0bf5813f624f (Issue #244)
 QIITA_PATTERN = re.compile(r"^https?://qiita\.com/[\w-]+/items/[\w]+$")
 
+# connpass: {group}.connpass.com/event/{event_id}/
+# Example: https://fin-py.connpass.com/event/381982/ (Issue #254)
+# Note: connpass uses subdomain format for group names
+# Note: www subdomain is excluded (connpass canonical URLs use group subdomain)
+CONNPASS_PATTERN = re.compile(r"^https?://(?!www\.)([\w-]+)\.connpass\.com/event/\d+/?$")
+
 # GitHub Repository: github.com/owner/repo (with optional trailing slash)
 # Example: https://github.com/anthropics/claude-code (Issue #226)
 # Note: This pattern must NOT match gist.github.com (handled by GIST_PATTERN)
@@ -99,6 +108,7 @@ EMBED_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (MONEY_PATTERN, "oembed"),
     (ZENN_PATTERN, "external-article"),
     (QIITA_PATTERN, "external-article"),  # Qiita also uses external-article (Issue #244)
+    (CONNPASS_PATTERN, "external-article"),  # connpass.com events (Issue #254)
 ]
 
 

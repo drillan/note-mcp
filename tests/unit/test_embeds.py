@@ -2819,3 +2819,289 @@ class TestResolveEmbedKeysQiita:
                 "https://qiita.com/driller/items/31c1ff4d0bf5813f624f",
                 "n1234567890ab",
             )
+
+
+# ============================================================================
+# Connpass embed tests (Issue #254)
+# ============================================================================
+
+
+class TestConnpassPattern:
+    """Tests for connpass event URL pattern (Issue #254)."""
+
+    def test_connpass_event_url(self) -> None:
+        """Test connpass event URL detection."""
+        from note_mcp.api.embeds import CONNPASS_PATTERN
+
+        # Valid connpass event URLs (subdomain format)
+        assert CONNPASS_PATTERN.match("https://fin-py.connpass.com/event/381982/")
+        assert CONNPASS_PATTERN.match("https://fin-py.connpass.com/event/381982")
+        assert CONNPASS_PATTERN.match("https://pycon-jp.connpass.com/event/123456/")
+        assert CONNPASS_PATTERN.match("http://example-group.connpass.com/event/12345/")
+
+    def test_connpass_pattern_rejects_invalid_urls(self) -> None:
+        """Test that invalid URLs are rejected."""
+        from note_mcp.api.embeds import CONNPASS_PATTERN
+
+        # Wrong domain
+        assert not CONNPASS_PATTERN.match("https://example.com/event/123/")
+        # No subdomain (connpass requires subdomain)
+        assert not CONNPASS_PATTERN.match("https://connpass.com/event/123/")
+        # www subdomain (not valid for connpass)
+        assert not CONNPASS_PATTERN.match("https://www.connpass.com/event/123/")
+        # Wrong path structure
+        assert not CONNPASS_PATTERN.match("https://fin-py.connpass.com/user/123/")
+        assert not CONNPASS_PATTERN.match("https://fin-py.connpass.com/")
+        # Missing event id
+        assert not CONNPASS_PATTERN.match("https://fin-py.connpass.com/event/")
+        assert not CONNPASS_PATTERN.match("https://fin-py.connpass.com/event")
+
+
+class TestConnpassPatternEdgeCases:
+    """Tests for connpass URL pattern edge cases (Issue #254)."""
+
+    def test_connpass_pattern_accepts_trailing_slash(self) -> None:
+        """Test that connpass URLs with trailing slashes are accepted.
+
+        Connpass canonical URLs typically include trailing slashes.
+        """
+        from note_mcp.api.embeds import CONNPASS_PATTERN
+
+        # Trailing slash should be accepted
+        assert CONNPASS_PATTERN.match("https://fin-py.connpass.com/event/381982/")
+        # Without trailing slash should also work
+        assert CONNPASS_PATTERN.match("https://fin-py.connpass.com/event/381982")
+
+    def test_connpass_pattern_rejects_query_parameters(self) -> None:
+        """Test that connpass URLs with query parameters are rejected.
+
+        Query parameters are not part of valid connpass event URLs.
+        """
+        from note_mcp.api.embeds import CONNPASS_PATTERN
+
+        # Query parameters should be rejected
+        assert not CONNPASS_PATTERN.match("https://fin-py.connpass.com/event/381982/?ref=series")
+        assert not CONNPASS_PATTERN.match("https://fin-py.connpass.com/event/381982?utm_source=share")
+
+    def test_connpass_pattern_rejects_non_event_paths(self) -> None:
+        """Test that non-event paths are rejected."""
+        from note_mcp.api.embeds import CONNPASS_PATTERN
+
+        # Various non-event paths
+        assert not CONNPASS_PATTERN.match("https://fin-py.connpass.com/user/drillan/")
+        assert not CONNPASS_PATTERN.match("https://fin-py.connpass.com/event/381982/participation/")
+        assert not CONNPASS_PATTERN.match("https://fin-py.connpass.com/event/381982/waitlist/")
+
+
+class TestGetEmbedServiceConnpass:
+    """Tests for get_embed_service function with connpass URLs (Issue #254)."""
+
+    def test_get_embed_service_returns_external_article_for_connpass(self) -> None:
+        """Test that get_embed_service returns 'external-article' for connpass URLs."""
+        from note_mcp.api.embeds import get_embed_service
+
+        assert get_embed_service("https://fin-py.connpass.com/event/381982/") == "external-article"
+        assert get_embed_service("https://pycon-jp.connpass.com/event/123456") == "external-article"
+
+
+class TestGenerateEmbedHtmlConnpass:
+    """Tests for generate_embed_html function with connpass URLs (Issue #254)."""
+
+    def test_connpass_embed_structure(self) -> None:
+        """Test connpass embed HTML structure."""
+        from note_mcp.api.embeds import generate_embed_html
+
+        url = "https://fin-py.connpass.com/event/381982/"
+        html = generate_embed_html(url)
+
+        # Verify required attributes
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="external-article"' in html
+        assert 'contenteditable="false"' in html
+        assert "embedded-content-key=" in html
+        assert "</figure>" in html
+
+
+class TestIsEmbedUrlConnpass:
+    """Tests for is_embed_url function with connpass URLs (Issue #254)."""
+
+    def test_connpass_urls_are_embed_urls(self) -> None:
+        """Test that connpass URLs are recognized as embed URLs."""
+        from note_mcp.api.embeds import is_embed_url
+
+        assert is_embed_url("https://fin-py.connpass.com/event/381982/") is True
+        assert is_embed_url("https://pycon-jp.connpass.com/event/123456") is True
+
+
+class TestFetchEmbedKeyConnpass:
+    """Tests for fetch_embed_key function with connpass URLs (Issue #254)."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_connpass_embed_key_uses_v2_endpoint(self) -> None:
+        """Test that connpass URL uses GET /v2/embed_by_external_api endpoint."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        mock_response = {
+            "data": {
+                "key": "embconnpass1234567890",
+                "html_for_embed": '<div class="external-article-widget"><a href="...">connpass event</a></div>',
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            embed_key, html_for_embed = await fetch_embed_key(
+                session,
+                "https://fin-py.connpass.com/event/381982/",
+                "n1234567890ab",
+            )
+
+            # Verify the API was called with correct params
+            mock_client.get.assert_called_once_with(
+                "/v2/embed_by_external_api",
+                params={
+                    "url": "https://fin-py.connpass.com/event/381982/",
+                    "service": "external-article",
+                    "embeddable_key": "n1234567890ab",
+                    "embeddable_type": "Note",
+                },
+            )
+            # Verify POST was NOT called
+            mock_client.post.assert_not_called()
+            # Verify returned values
+            assert embed_key == "embconnpass1234567890"
+            assert "external-article-widget" in html_for_embed
+
+    @pytest.mark.asyncio
+    async def test_fetch_connpass_embed_key_sends_correct_service(self) -> None:
+        """Test that connpass embed sends 'external-article' as service type."""
+        import time
+        from unittest.mock import AsyncMock, patch
+
+        from note_mcp.api.embeds import fetch_embed_key
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        mock_response = {
+            "data": {
+                "key": "embconnpass123",
+                "html_for_embed": "<div>connpass preview</div>",
+            }
+        }
+
+        with patch("note_mcp.api.embeds.NoteAPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = mock_response
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client_class.return_value = mock_client
+
+            await fetch_embed_key(
+                session,
+                "https://pycon-jp.connpass.com/event/123456/",
+                "narticlekey",
+            )
+
+            # Verify the params include service="external-article"
+            call_kwargs = mock_client.get.call_args[1]
+            params = call_kwargs.get("params", {})
+            assert params.get("service") == "external-article"
+
+
+class TestGenerateEmbedHtmlWithKeyConnpass:
+    """Tests for generate_embed_html_with_key function with connpass URLs (Issue #254)."""
+
+    def test_connpass_embed_with_server_key(self) -> None:
+        """Test generating connpass embed HTML with server-registered key."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://fin-py.connpass.com/event/381982/"
+        embed_key = "embconnpass1234567890"
+        html = generate_embed_html_with_key(url, embed_key)
+
+        assert "<figure" in html
+        assert f'data-src="{url}"' in html
+        assert 'embedded-service="external-article"' in html
+        assert f'embedded-content-key="{embed_key}"' in html
+        assert 'contenteditable="false"' in html
+        assert "</figure>" in html
+
+    def test_connpass_embed_auto_detect_service(self) -> None:
+        """Test that service is auto-detected as 'external-article' for connpass URLs."""
+        from note_mcp.api.embeds import generate_embed_html_with_key
+
+        url = "https://pycon-jp.connpass.com/event/123456/"
+        html = generate_embed_html_with_key(url, "embtest123")
+
+        assert 'embedded-service="external-article"' in html
+
+
+class TestResolveEmbedKeysConnpass:
+    """Tests for resolve_embed_keys function with connpass URLs (Issue #254)."""
+
+    @pytest.mark.asyncio
+    async def test_resolve_connpass_embed(self) -> None:
+        """Test resolving a connpass embed key."""
+        import time
+        from unittest.mock import patch
+
+        from note_mcp.api.embeds import resolve_embed_keys
+        from note_mcp.models import Session
+
+        session = Session(
+            cookies={"note_gql_session_id": "test", "XSRF-TOKEN": "test"},
+            user_id="123456",
+            username="testuser",
+            created_at=int(time.time()),
+        )
+
+        # HTML with random embed key for connpass
+        html_body = (
+            '<p name="p1" id="p1">Check out this event:</p>'
+            '<figure name="fig1" id="fig1" '
+            'data-src="https://fin-py.connpass.com/event/381982/" '
+            'embedded-service="external-article" '
+            'embedded-content-key="embrandomconnpass" '
+            'contenteditable="false"></figure>'
+        )
+
+        # Mock fetch_embed_key to return a server key
+        with patch("note_mcp.api.embeds.fetch_embed_key") as mock_fetch:
+            mock_fetch.return_value = (
+                "embconnpassserver123",
+                "<div>connpass preview</div>",
+            )
+
+            result = await resolve_embed_keys(session, html_body, "n1234567890ab")
+
+            # Verify the key was replaced
+            assert 'embedded-content-key="embconnpassserver123"' in result
+            assert 'embedded-content-key="embrandomconnpass"' not in result
+            mock_fetch.assert_called_once_with(
+                session,
+                "https://fin-py.connpass.com/event/381982/",
+                "n1234567890ab",
+            )
