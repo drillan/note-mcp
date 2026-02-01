@@ -24,6 +24,9 @@ Issue #223: SpeakerDeck presentation embed support added. SpeakerDeck URLs use
 
 Issue #244: Qiita article embed support added. Qiita URLs use 'external-article'
 service type (same as Zenn.dev) via the same /v2/embed_by_external_api endpoint.
+
+Issue #254: connpass event embed support added. connpass URLs use 'external-article'
+service type (same as Zenn.dev and Qiita) via the same /v2/embed_by_external_api endpoint.
 """
 
 from __future__ import annotations
