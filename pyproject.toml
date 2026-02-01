@@ -1,6 +1,6 @@
 [project]
 name = "note-mcp"
-version = "0.1.0"
+version = "0.0.1"
 description = "MCP server for managing note.com articles"
 readme = "README.md"
 requires-python = ">=3.13"

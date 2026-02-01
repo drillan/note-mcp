@@ -426,3 +426,247 @@ class TestNoteCreateFromFile:
             assert "⚠️ アイキャッチ画像アップロード失敗" in result
             assert "header.png" in result
             assert "Server error" in result
+
+
+class TestNotePublishArticle:
+    """Tests for note_publish_article function."""
+
+    @pytest.mark.asyncio
+    async def test_file_path_provides_tags_when_tags_not_specified(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """file_path指定時、タグがファイルから取得されて公開される。"""
+        # Create a test markdown file with tags
+        md_file = tmp_path / "test.md"
+        md_file.write_text("---\ntitle: Test Article\ntags:\n  - Python\n  - MCP\n---\n\nBody content")
+
+        mock_session = MagicMock()
+        mock_article = Article(
+            id="123456789",
+            key="n1234567890ab",
+            title="Test Article",
+            status=ArticleStatus.PUBLISHED,
+            body="Body content",
+            url="https://note.com/user/n/n1234567890ab",
+        )
+
+        with (
+            patch("note_mcp.server._session_manager") as mock_session_manager,
+            patch("note_mcp.server.publish_article", new_callable=AsyncMock) as mock_publish,
+        ):
+            mock_session.is_expired.return_value = False
+            mock_session_manager.load.return_value = mock_session
+            mock_publish.return_value = mock_article
+
+            from note_mcp.server import note_publish_article
+
+            fn = note_publish_article.fn
+            result = await fn(article_id="123456789", file_path=str(md_file))
+
+            # publish_article should be called with tags from file
+            mock_publish.assert_called_once()
+            call_kwargs = mock_publish.call_args[1]
+            assert call_kwargs["tags"] == ["Python", "MCP"]
+
+            # Result should indicate success
+            assert "公開しました" in result
+            assert "123456789" in result
+
+    @pytest.mark.asyncio
+    async def test_tags_parameter_takes_precedence_over_file_path(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """tagsとfile_path両方指定時、tagsが優先される。"""
+        # Create a test markdown file with tags
+        md_file = tmp_path / "test.md"
+        md_file.write_text("---\ntitle: Test Article\ntags:\n  - FileTag1\n  - FileTag2\n---\n\nBody")
+
+        mock_session = MagicMock()
+        mock_article = Article(
+            id="123456789",
+            key="n1234567890ab",
+            title="Test Article",
+            status=ArticleStatus.PUBLISHED,
+            body="Body",
+            url="https://note.com/user/n/n1234567890ab",
+        )
+
+        with (
+            patch("note_mcp.server._session_manager") as mock_session_manager,
+            patch("note_mcp.server.publish_article", new_callable=AsyncMock) as mock_publish,
+            patch("note_mcp.server.parse_markdown_file") as mock_parse,
+        ):
+            mock_session.is_expired.return_value = False
+            mock_session_manager.load.return_value = mock_session
+            mock_publish.return_value = mock_article
+
+            from note_mcp.server import note_publish_article
+
+            fn = note_publish_article.fn
+            # Specify both tags and file_path
+            result = await fn(
+                article_id="123456789",
+                tags=["ExplicitTag1", "ExplicitTag2"],
+                file_path=str(md_file),
+            )
+
+            # publish_article should be called with explicit tags, not file tags
+            mock_publish.assert_called_once()
+            call_kwargs = mock_publish.call_args[1]
+            assert call_kwargs["tags"] == ["ExplicitTag1", "ExplicitTag2"]
+
+            # parse_markdown_file should NOT be called when tags are provided
+            mock_parse.assert_not_called()
+
+            assert "公開しました" in result
+
+    @pytest.mark.asyncio
+    async def test_file_path_without_tags_publishes_without_tags(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """file_path指定、タグなしの場合、タグなしで公開される。"""
+        # Create a test markdown file without tags
+        md_file = tmp_path / "test.md"
+        md_file.write_text("---\ntitle: Test Article\n---\n\nBody without tags")
+
+        mock_session = MagicMock()
+        mock_article = Article(
+            id="123456789",
+            key="n1234567890ab",
+            title="Test Article",
+            status=ArticleStatus.PUBLISHED,
+            body="Body without tags",
+            url="https://note.com/user/n/n1234567890ab",
+        )
+
+        with (
+            patch("note_mcp.server._session_manager") as mock_session_manager,
+            patch("note_mcp.server.publish_article", new_callable=AsyncMock) as mock_publish,
+        ):
+            mock_session.is_expired.return_value = False
+            mock_session_manager.load.return_value = mock_session
+            mock_publish.return_value = mock_article
+
+            from note_mcp.server import note_publish_article
+
+            fn = note_publish_article.fn
+            result = await fn(article_id="123456789", file_path=str(md_file))
+
+            # publish_article should be called with empty tags list
+            mock_publish.assert_called_once()
+            call_kwargs = mock_publish.call_args[1]
+            assert call_kwargs["tags"] == []
+
+            assert "公開しました" in result
+
+    @pytest.mark.asyncio
+    async def test_file_path_not_found_returns_error(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """file_pathが存在しない場合、適切なエラーメッセージを返す。"""
+        non_existent_file = tmp_path / "non_existent.md"
+
+        mock_session = MagicMock()
+
+        with (
+            patch("note_mcp.server._session_manager") as mock_session_manager,
+            patch("note_mcp.server.publish_article", new_callable=AsyncMock) as mock_publish,
+        ):
+            mock_session.is_expired.return_value = False
+            mock_session_manager.load.return_value = mock_session
+
+            from note_mcp.server import note_publish_article
+
+            fn = note_publish_article.fn
+            result = await fn(article_id="123456789", file_path=str(non_existent_file))
+
+            # publish_article should NOT be called
+            mock_publish.assert_not_called()
+
+            # Result should contain error message
+            assert "ファイルが見つかりません" in result
+            assert str(non_existent_file) in result
+
+    @pytest.mark.asyncio
+    async def test_file_path_ignored_for_new_article(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """新規作成時（article_idなし）はfile_pathが無視される。"""
+        # Create a test markdown file with tags
+        md_file = tmp_path / "test.md"
+        md_file.write_text("---\ntitle: File Title\ntags:\n  - FileTag\n---\n\nFile Body")
+
+        mock_session = MagicMock()
+        mock_article = Article(
+            id="123456789",
+            key="n1234567890ab",
+            title="New Title",
+            status=ArticleStatus.PUBLISHED,
+            body="New Body",
+            url="https://note.com/user/n/n1234567890ab",
+        )
+
+        with (
+            patch("note_mcp.server._session_manager") as mock_session_manager,
+            patch("note_mcp.server.publish_article", new_callable=AsyncMock) as mock_publish,
+            patch("note_mcp.server.parse_markdown_file") as mock_parse,
+        ):
+            mock_session.is_expired.return_value = False
+            mock_session_manager.load.return_value = mock_session
+            mock_publish.return_value = mock_article
+
+            from note_mcp.server import note_publish_article
+
+            fn = note_publish_article.fn
+            # New article creation (no article_id)
+            result = await fn(
+                title="New Title",
+                body="New Body",
+                file_path=str(md_file),
+            )
+
+            # parse_markdown_file should NOT be called for new article
+            mock_parse.assert_not_called()
+
+            # publish_article should be called with article_input (not article_id)
+            mock_publish.assert_called_once()
+            call_kwargs = mock_publish.call_args[1]
+            assert "article_input" in call_kwargs
+            assert "article_id" not in call_kwargs
+
+            assert "公開しました" in result
+
+    @pytest.mark.asyncio
+    async def test_file_path_with_invalid_markdown_returns_error(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """file_pathのMarkdownが解析できない場合、エラーメッセージを返す。"""
+        # Create a markdown file without title (no frontmatter, no heading)
+        md_file = tmp_path / "no_title.md"
+        md_file.write_text("No frontmatter, no heading\n\nJust body content")
+
+        mock_session = MagicMock()
+
+        with (
+            patch("note_mcp.server._session_manager") as mock_session_manager,
+            patch("note_mcp.server.publish_article", new_callable=AsyncMock) as mock_publish,
+        ):
+            mock_session.is_expired.return_value = False
+            mock_session_manager.load.return_value = mock_session
+
+            from note_mcp.server import note_publish_article
+
+            fn = note_publish_article.fn
+            result = await fn(article_id="123456789", file_path=str(md_file))
+
+            # publish_article should NOT be called
+            mock_publish.assert_not_called()
+
+            # Result should contain error message
+            assert "ファイル解析エラー" in result
