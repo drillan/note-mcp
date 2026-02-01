@@ -393,6 +393,17 @@ class TestPublishArticle:
         """Test that publishing an existing draft returns the published article."""
         session = create_mock_session()
 
+        # Mock response from GET /v3/notes/{article_id} - raw article data
+        mock_get_response: dict[str, Any] = {
+            "data": {
+                "id": 123456,
+                "key": "n1234567890ab",
+                "name": "Published Article",
+                "body": "",
+                "status": "draft",
+            }
+        }
+
         # Mock response from PUT /v1/text_notes/{numeric_id} - minimal response
         mock_put_response: dict[str, Any] = {
             "data": {
@@ -423,6 +434,7 @@ class TestPublishArticle:
             mock_client_class.return_value = mock_client
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.get = AsyncMock(return_value=mock_get_response)
             mock_client.put = AsyncMock(return_value=mock_put_response)
             mock_resolve.return_value = "123456"
 
@@ -431,14 +443,25 @@ class TestPublishArticle:
             # Verify _resolve_numeric_note_id was called
             mock_resolve.assert_called_once_with(session, "n1234567890ab")
 
-            # Verify PUT /v1/text_notes/{numeric_id} was called with status=published
+            # Verify GET /v3/notes/{article_id} was called to fetch article title
+            mock_client.get.assert_called_once()
+
+            # Verify PUT /v1/text_notes/{numeric_id} was called with free_body and status
+            # Issue #252: PUT requires 'free_body' (not 'body') for publish
             mock_client.put.assert_called_once()
             call_args = mock_client.put.call_args
             assert call_args is not None
             assert "/v1/text_notes/123456" in call_args[0][0]
-            assert call_args[1]["json"] == {"status": "published"}
+            put_payload = call_args[1]["json"]
+            assert put_payload == {
+                "name": "Published Article",
+                "free_body": "",
+                "body_length": 0,
+                "status": "published",
+                "index": False,
+            }
 
-            # Verify get_article_via_api was called to fetch updated article
+            # Verify get_article_via_api was called once (after publish)
             mock_get_article.assert_called_once_with(session, "n1234567890ab")
 
             assert article.id == "123456"
@@ -517,6 +540,17 @@ class TestPublishArticle:
 
         session = create_mock_session()
 
+        # Mock response from GET /v3/notes/{article_id}
+        mock_get_response: dict[str, Any] = {
+            "data": {
+                "id": 123456,
+                "key": "n1234567890ab",
+                "name": "Test Article",
+                "body": "",
+                "status": "draft",
+            }
+        }
+
         # Mock response indicating logical failure
         mock_put_response: dict[str, Any] = {
             "data": {
@@ -532,6 +566,7 @@ class TestPublishArticle:
             mock_client_class.return_value = mock_client
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.get = AsyncMock(return_value=mock_get_response)
             mock_client.put = AsyncMock(return_value=mock_put_response)
             mock_resolve.return_value = "123456"
 
@@ -547,6 +582,17 @@ class TestPublishArticle:
 
         session = create_mock_session()
 
+        # Mock response from GET /v3/notes/{article_id}
+        mock_get_response: dict[str, Any] = {
+            "data": {
+                "id": 123456,
+                "key": "n1234567890ab",
+                "name": "Test Article",
+                "body": "",
+                "status": "draft",
+            }
+        }
+
         with (
             patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
             patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
@@ -555,6 +601,7 @@ class TestPublishArticle:
             mock_client_class.return_value = mock_client
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.get = AsyncMock(return_value=mock_get_response)
             mock_client.put = AsyncMock(
                 side_effect=NoteAPIError(
                     code=ErrorCode.API_ERROR,
@@ -567,6 +614,175 @@ class TestPublishArticle:
                 await publish_article(session, article_id="n1234567890ab")
 
             assert "Server error" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_publish_existing_draft_with_tags(self) -> None:
+        """Test that publishing an existing draft with tags includes tags in PUT request.
+
+        Issue #252: When publishing an existing draft with tags, the tags should be
+        included in the PUT request payload with # prefix format.
+        """
+        session = create_mock_session()
+
+        # Mock response from GET /v3/notes/{article_id} - raw article data with note_draft
+        mock_get_response: dict[str, Any] = {
+            "data": {
+                "id": 123456,
+                "key": "n1234567890ab",
+                "name": "Published Article with Tags",
+                "body": "",
+                "status": "draft",
+                "note_draft": {"body": "<p>Content</p>"},
+            }
+        }
+
+        # Mock response from PUT /v1/text_notes/{numeric_id} - minimal response
+        mock_put_response: dict[str, Any] = {
+            "data": {
+                "result": True,
+            }
+        }
+
+        # Mock article returned by get_article_via_api after publishing
+        mock_published_article = Article(
+            id="123456",
+            key="n1234567890ab",
+            title="Published Article with Tags",
+            body="Content",
+            status=ArticleStatus.PUBLISHED,
+            url="https://note.com/testuser/n/n1234567890ab",
+            tags=["Python", "test"],
+        )
+
+        with (
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
+            patch(
+                "note_mcp.api.articles.get_article_via_api",
+                new_callable=AsyncMock,
+                return_value=mock_published_article,
+            ) as mock_get_article,
+        ):
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.get = AsyncMock(return_value=mock_get_response)
+            mock_client.put = AsyncMock(return_value=mock_put_response)
+            mock_resolve.return_value = "123456"
+
+            article = await publish_article(session, article_id="n1234567890ab", tags=["Python", "test"])
+
+            # Verify _resolve_numeric_note_id was called
+            mock_resolve.assert_called_once_with(session, "n1234567890ab")
+
+            # Verify GET /v3/notes/{article_id} was called to fetch article data
+            mock_client.get.assert_called_once()
+            get_call_args = mock_client.get.call_args
+            assert get_call_args is not None
+            assert "/v3/notes/n1234567890ab" in get_call_args[0][0]
+
+            # Verify PUT /v1/text_notes/{numeric_id} was called with free_body, status, and hashtags
+            # Issue #252: PUT requires 'free_body' (not 'body') and hashtags with # prefix
+            # Body comes from note_draft.body since data.body is empty
+            mock_client.put.assert_called_once()
+            put_call_args = mock_client.put.call_args
+            assert put_call_args is not None
+            assert "/v1/text_notes/123456" in put_call_args[0][0]
+            put_payload = put_call_args[1]["json"]
+            assert put_payload == {
+                "name": "Published Article with Tags",
+                "free_body": "<p>Content</p>",
+                "body_length": 14,
+                "status": "published",
+                "index": False,
+                "hashtags": ["#Python", "#test"],
+            }
+
+            # Verify get_article_via_api was called once (after publish)
+            mock_get_article.assert_called_once_with(session, "n1234567890ab")
+
+            assert article.id == "123456"
+            assert article.status == ArticleStatus.PUBLISHED
+            assert "Python" in article.tags
+            assert "test" in article.tags
+
+    @pytest.mark.asyncio
+    async def test_publish_existing_draft_without_tags(self) -> None:
+        """Test that publishing an existing draft without tags skips tag saving.
+
+        Issue #252: Backward compatibility - when no tags are provided,
+        the draft_save API should NOT be called.
+        """
+        session = create_mock_session()
+
+        # Mock response from GET /v3/notes/{article_id} - raw article data
+        mock_get_response: dict[str, Any] = {
+            "data": {
+                "id": 123456,
+                "key": "n1234567890ab",
+                "name": "Published Article",
+                "body": "",
+                "status": "draft",
+            }
+        }
+
+        # Mock response from PUT /v1/text_notes/{numeric_id}
+        mock_put_response: dict[str, Any] = {
+            "data": {
+                "result": True,
+            }
+        }
+
+        # Mock article returned by get_article_via_api after publishing
+        mock_published_article = Article(
+            id="123456",
+            key="n1234567890ab",
+            title="Published Article",
+            body="Content",
+            status=ArticleStatus.PUBLISHED,
+            url="https://note.com/testuser/n/n1234567890ab",
+        )
+
+        with (
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+            patch("note_mcp.api.articles._resolve_numeric_note_id") as mock_resolve,
+            patch(
+                "note_mcp.api.articles.get_article_via_api",
+                new_callable=AsyncMock,
+                return_value=mock_published_article,
+            ) as mock_get_article,
+        ):
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.get = AsyncMock(return_value=mock_get_response)
+            mock_client.put = AsyncMock(return_value=mock_put_response)
+            mock_client.post = AsyncMock()  # Should not be called
+            mock_resolve.return_value = "123456"
+
+            await publish_article(session, article_id="n1234567890ab")
+
+            # Verify GET was called to fetch article title
+            mock_client.get.assert_called_once()
+
+            # Verify PUT for publish was called with free_body and status
+            # Issue #252: PUT requires 'free_body' (not 'body')
+            mock_client.put.assert_called_once()
+            put_call_args = mock_client.put.call_args
+            assert put_call_args is not None
+            put_payload = put_call_args[1]["json"]
+            assert put_payload == {
+                "name": "Published Article",
+                "free_body": "",
+                "body_length": 0,
+                "status": "published",
+                "index": False,
+            }
+
+            # Verify get_article_via_api was called once (after publish)
+            mock_get_article.assert_called_once_with(session, "n1234567890ab")
 
 
 class TestCreateDraftWithEmbeds:

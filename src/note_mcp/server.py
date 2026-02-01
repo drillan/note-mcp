@@ -434,8 +434,8 @@ async def note_publish_article(
     # Determine whether to publish existing or create new
     try:
         if article_id is not None:
-            # Publish existing draft
-            article = await publish_article(session, article_id=article_id)
+            # Publish existing draft (Issue #252: pass tags to set during publish)
+            article = await publish_article(session, article_id=article_id, tags=tags)
         elif title is not None and body is not None:
             # Create and publish new article
             article_input = ArticleInput(

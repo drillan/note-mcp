@@ -321,9 +321,10 @@ def _parse_article_response(response: dict[str, Any]) -> Article:
 
 
 def _normalize_tags(tags: list[str] | None) -> list[dict[str, Any]] | None:
-    """Normalize tags to API format.
+    """Normalize tags to API format for draft_save.
 
     Removes leading '#' and converts to hashtag dict format.
+    This format is used by POST /v1/text_notes/draft_save.
 
     Args:
         tags: List of tags (may include '#' prefix)
@@ -335,6 +336,23 @@ def _normalize_tags(tags: list[str] | None) -> list[dict[str, Any]] | None:
         return None
     normalized = [tag.lstrip("#") for tag in tags]
     return [{"hashtag": {"name": tag}} for tag in normalized]
+
+
+def _normalize_tags_for_publish(tags: list[str] | None) -> list[str] | None:
+    """Normalize tags to API format for publish.
+
+    Ensures tags have '#' prefix as required by PUT /v1/text_notes/{id}.
+    This format is used when publishing articles.
+
+    Args:
+        tags: List of tags (may or may not include '#' prefix)
+
+    Returns:
+        List of hashtag strings with '#' prefix, or None if no tags
+    """
+    if not tags:
+        return None
+    return [f"#{tag.lstrip('#')}" for tag in tags]
 
 
 def _build_article_payload(
@@ -798,6 +816,7 @@ async def publish_article(
     session: Session,
     article_id: str | None = None,
     article_input: ArticleInput | None = None,
+    tags: list[str] | None = None,
 ) -> Article:
     """Publish an article.
 
@@ -807,6 +826,8 @@ async def publish_article(
         session: Authenticated session
         article_id: ID of existing draft to publish (mutually exclusive with article_input)
         article_input: New article content to create and publish (mutually exclusive with article_id)
+        tags: Tags to set on the article when publishing an existing draft (optional).
+            For new articles, use article_input.tags instead.
 
     Returns:
         Published Article object
@@ -839,8 +860,42 @@ async def publish_article(
         # non-existent POST /v3/notes/{id}/publish endpoint
         numeric_id = await _resolve_numeric_note_id(session, article_id)
 
-        payload: dict[str, Any] = {"status": "published"}
         async with NoteAPIClient(session) as client:
+            # Fetch article title (required for both draft_save and PUT)
+            article_response = await client.get(f"/v3/notes/{article_id}")
+            article_data = article_response.get("data", {})
+            # For drafts, title is in note_draft.name; for published, it's in name
+            article_title = article_data.get("name", "")
+            if not article_title:
+                note_draft = article_data.get("note_draft")
+                if isinstance(note_draft, dict):
+                    article_title = note_draft.get("name", "")
+            # For drafts, prefer note_draft.body which has full HTML including headings
+            # data.body may be a stripped/sanitized version
+            # Use `or ""` to handle None values (key exists but value is None)
+            note_draft = article_data.get("note_draft")
+            if isinstance(note_draft, dict) and note_draft.get("body"):
+                article_body = note_draft.get("body") or ""
+            else:
+                article_body = article_data.get("body") or ""
+
+            # Publish the article
+            # Issue #252: PUT /v1/text_notes/{id} requires 'free_body' (not 'body')
+            # and hashtags in ["#tag1", "#tag2"] format (not dict format)
+            payload: dict[str, Any] = {
+                "name": article_title,
+                "free_body": article_body,
+                "body_length": len(article_body),
+                "status": "published",
+                "index": False,
+            }
+
+            # Add tags if provided (using publish format with # prefix)
+            if tags:
+                hashtags = _normalize_tags_for_publish(tags)
+                if hashtags:
+                    payload["hashtags"] = hashtags
+
             response = await client.put(f"/v1/text_notes/{numeric_id}", json=payload)
 
         # Validate API response for logical failure
@@ -858,22 +913,22 @@ async def publish_article(
     assert article_input is not None  # Type narrowing
     html_body = markdown_to_html(article_input.body)
 
-    payload = {
+    new_article_payload: dict[str, Any] = {
         "name": article_input.title,
         "body": html_body,
         "status": "published",
     }
 
-    # Add tags if present
-    hashtags = _normalize_tags(article_input.tags)
-    if hashtags:
-        payload["hashtags"] = hashtags
+    # Add tags if present (using dict format for /v3/notes endpoint)
+    new_article_hashtags = _normalize_tags(article_input.tags)
+    if new_article_hashtags:
+        new_article_payload["hashtags"] = new_article_hashtags
 
     return await _execute_post(
         session,
         "/v3/notes",
         _parse_article_response,
-        payload=payload,
+        payload=new_article_payload,
     )
 
 
