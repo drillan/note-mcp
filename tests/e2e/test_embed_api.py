@@ -654,3 +654,48 @@ $GOOG
         finally:
             # Clean up created article
             await delete_draft_with_retry(real_session, article_key)
+
+
+class TestConnpassEmbedApiConversion:
+    """Test connpass event embed conversion via API (Issue #254)."""
+
+    async def test_connpass_embed_via_api(
+        self,
+        real_session: Session,
+    ) -> None:
+        """connpassイベントURLがAPIでfigure要素に変換される.
+
+        - ブラウザを起動せずにAPIのみで下書き作成
+        - connpassイベントURLがfigure要素に変換される
+        - embedded-service="external-article"属性が設定される
+        """
+        # Arrange - Use real connpass event URL (fin-py勉強会)
+        connpass_url = "https://fin-py.connpass.com/event/381982/"
+        body = f"""connpassイベント埋め込みテスト
+
+{connpass_url}
+
+上記にconnpassイベントカードが表示されます。"""
+
+        # Act
+        result = await note_create_draft.fn(
+            title="[E2E-TEST] connpass Embed via API",
+            body=body,
+            tags=["e2e-test", "embed-api"],
+        )
+
+        # Assert - API response
+        assert "下書きを作成しました" in result
+
+        # Verify embed figure is present in raw HTML
+        article_key = extract_article_key(result)
+        try:
+            article_html = await get_article_html(article_key)
+
+            # Verify embed figure is present
+            assert 'embedded-service="external-article"' in article_html
+            assert f'data-src="{connpass_url}"' in article_html
+            assert "embedded-content-key=" in article_html
+        finally:
+            # Clean up created article
+            await delete_draft_with_retry(real_session, article_key)

@@ -36,6 +36,12 @@ https://zenn.dev/driller/articles/0669cf98e07ffa
 
 https://qiita.com/driller/items/31c1ff4d0bf5813f624f
 
+## イベント
+
+### connpassイベント埋め込み
+
+https://fin-py.connpass.com/event/381982/
+
 ## コード
 
 ### GitHub Gist埋め込み
