@@ -218,20 +218,66 @@ AIアシスタントと一緒に記事を書いてみましょう。
 | 名前 | 型 | 必須 | 説明 |
 |------|-----|------|------|
 | `article_id` | str | いいえ | 公開する下書き記事のID（新規作成時は省略） |
+| `file_path` | str | いいえ | タグを取得するMarkdownファイルのパス |
 | `title` | str | いいえ | 記事タイトル（新規作成時は必須） |
 | `body` | str | いいえ | 記事本文（Markdown形式、新規作成時は必須） |
 | `tags` | list[str] | いいえ | 記事のタグ |
+| `magazine_keys` | list[str] | いいえ | 追加するマガジンキー |
+| `circle_plan_keys` | list[str] | いいえ | 公開先メンバーシッププランキー |
+| `price` | int | いいえ | 有料記事の価格（円）。無料公開は0 |
+| `separator_uuid` | str | いいえ | 有料エリア境界にする本文ブロックUUID |
+| `limited` | bool | いいえ | 限定公開フラグ |
+| `disable_comment` | bool | いいえ | コメントを無効化するか |
 
 **使用パターン**
 
 1. **既存の下書きを公開**: `article_id`を指定
 2. **新規作成と同時に公開**: `title`と`body`を指定
+3. **有料・限定記事を公開**: `note_get_separator_candidates`で取得した`separator_uuid`と`price`を指定
 
 **戻り値**
 
 ```
 記事を公開しました。ID: 12345678、URL: https://note.com/username/n1234567890ab
 ```
+
+---
+
+### note_get_separator_candidates
+
+下書き本文から、有料エリア境界に使える本文ブロックUUID候補を取得します。
+
+**パラメータ**
+
+| 名前 | 型 | 必須 | 説明 |
+|------|-----|------|------|
+| `article_id` | str | はい | 候補を取得する下書き記事のIDまたはキー |
+
+---
+
+### note_set_paid_settings
+
+下書きに価格と有料エリア境界を保存します。公開は行いません。
+
+**パラメータ**
+
+| 名前 | 型 | 必須 | 説明 |
+|------|-----|------|------|
+| `article_id` | str | はい | 有料設定を保存する下書き記事のIDまたはキー |
+| `price` | int | いいえ | 有料記事の価格（円）。無料に戻す場合は0 |
+| `separator_uuid` | str | いいえ | 有料エリア境界にする本文ブロックUUID |
+
+---
+
+### note_list_my_magazines
+
+自分が所有するマガジン一覧を取得します。公開時の`magazine_keys`確認に使用します。
+
+---
+
+### note_list_circle_plans
+
+記事に紐づけ可能なメンバーシッププラン一覧を取得します。公開時の`circle_plan_keys`確認に使用します。
 
 ---
 

@@ -1,7 +1,7 @@
 """Unit tests for article operations."""
 
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -11,11 +11,15 @@ from note_mcp.api.articles import (
     _execute_delete,
     _execute_get,
     _execute_post,
+    _extract_paywall_separator,
+    _html_text_content_length,
     _parse_article_response,
     _parse_create_response,
     delete_all_drafts,
     get_article_raw_html,
     get_article_via_api,
+    get_separator_candidates,
+    set_paid_settings,
 )
 from note_mcp.models import (
     Article,
@@ -92,18 +96,14 @@ class TestParseArticleResponse:
 class TestBuildArticlePayload:
     """Tests for _build_article_payload function."""
 
-    def test_body_length_matches_html_not_markdown(self) -> None:
-        """body_length should match HTML body length, not Markdown body length.
+    def test_body_length_matches_editor_text_content_not_html(self) -> None:
+        """body_length should match editor textContent length, not HTML length.
 
-        This is critical because note.com API validates body_length against
-        the actual body content. Using Markdown length when body is HTML
-        causes 400 errors.
+        note.com's editor computes bodyLength from ProseMirror textContent.
+        Matching that value keeps API-created drafts aligned with editor saves.
         """
-        # Markdown body (short)
-        markdown_body = "![image](https://example.com/img.png)"
-
-        # HTML body (much longer after conversion)
         html_body = (
+            '<p name="p1" id="p1">Intro<br>Line</p>'
             '<figure name="abc123" id="abc123">'
             '<img src="https://example.com/img.png" alt="" width="620" height="457">'
             "<figcaption></figcaption></figure>"
@@ -111,15 +111,151 @@ class TestBuildArticlePayload:
 
         article_input = ArticleInput(
             title="Test Article",
-            body=markdown_body,
+            body="Intro\nLine\n\n![image](https://example.com/img.png)",
         )
 
         payload = _build_article_payload(article_input, html_body)
 
-        # body_length must match HTML body length, not Markdown body length
-        assert payload["body_length"] == len(html_body)
-        assert payload["body_length"] != len(markdown_body)
+        assert payload["body_length"] == len("IntroLine")
+        assert payload["body_length"] != len(html_body)
         assert payload["body"] == html_body
+
+    def test_payload_extracts_separator_and_removes_paywall_line(self) -> None:
+        """Paywall marker should become separator field and not stay in body."""
+        separator_uuid = "11111111-1111-4111-8111-111111111111"
+        paid_uuid = "22222222-2222-4222-8222-222222222222"
+        html_body = (
+            f'<p name="{separator_uuid}" id="{separator_uuid}">Free intro</p>'
+            "<paywall-line></paywall-line>"
+            f'<p name="{paid_uuid}" id="{paid_uuid}">Paid detail</p>'
+        )
+        article_input = ArticleInput(title="Paid Draft", body="Free intro\n\nPaid detail")
+
+        payload = _build_article_payload(article_input, html_body)
+
+        assert payload["separator"] == separator_uuid
+        assert "<paywall-line" not in str(payload["body"])
+        assert payload["body_length"] == len("Free introPaid detail")
+
+
+class TestPaywallHelpers:
+    """Tests for paid article helper functions."""
+
+    def test_extract_paywall_separator_uses_previous_block_name(self) -> None:
+        """Separator should be the block UUID immediately before paywall-line."""
+        separator_uuid = "11111111-1111-4111-8111-111111111111"
+        html_body = (
+            f'<h2 name="{separator_uuid}" id="{separator_uuid}">Free heading</h2>'
+            "<paywall-line></paywall-line>"
+            '<p name="22222222-2222-4222-8222-222222222222">Paid paragraph</p>'
+        )
+
+        assert _extract_paywall_separator(html_body) == separator_uuid
+
+    def test_html_text_content_length_matches_dom_text_content(self) -> None:
+        """Text content length should ignore tags and br elements."""
+        html_body = '<p name="p1">First<br>Second</p><figure><img alt=""></figure>'
+
+        assert _html_text_content_length(html_body) == len("FirstSecond")
+
+    @pytest.mark.asyncio
+    async def test_get_separator_candidates_prefers_note_draft_body(self) -> None:
+        """Candidate listing should use draft body because it has latest UUIDs."""
+        session = Session(
+            cookies={"note_gql_auth_token": "test_token"},
+            user_id="test_user",
+            username="testuser",
+            created_at=1700000000,
+        )
+        draft_uuid = "11111111-1111-4111-8111-111111111111"
+        published_uuid = "99999999-9999-4999-8999-999999999999"
+        raw_data: dict[str, Any] = {
+            "body": f'<p name="{published_uuid}" id="{published_uuid}">Published</p>',
+            "note_draft": {
+                "body": (
+                    f'<h2 name="{draft_uuid}" id="{draft_uuid}">Paid Section</h2>'
+                    '<p name="22222222-2222-4222-8222-222222222222">Long paid body</p>'
+                )
+            },
+        }
+
+        with patch("note_mcp.api.articles._fetch_raw_note_data", return_value=raw_data):
+            candidates = await get_separator_candidates(session, "n1234567890ab")
+
+        assert candidates == [
+            {"uuid": draft_uuid, "level": "h2", "text": "Paid Section"},
+            {
+                "uuid": "22222222-2222-4222-8222-222222222222",
+                "level": "p",
+                "text": "Long paid body",
+            },
+        ]
+
+    @pytest.mark.asyncio
+    async def test_set_paid_settings_saves_draft_without_publishing(self) -> None:
+        """Paid settings should be saved with draft_save, not publish endpoint."""
+        session = Session(
+            cookies={"note_gql_auth_token": "test_token"},
+            user_id="test_user",
+            username="testuser",
+            created_at=1700000000,
+        )
+        separator_uuid = "11111111-1111-4111-8111-111111111111"
+        html_body = (
+            f'<p name="{separator_uuid}" id="{separator_uuid}">Free intro</p>'
+            '<p name="22222222-2222-4222-8222-222222222222">Paid detail</p>'
+        )
+        raw_data: dict[str, Any] = {
+            "id": 12345,
+            "key": "n1234567890ab",
+            "name": "Published title",
+            "body": "<p>Published body</p>",
+            "price": 500,
+            "separator": separator_uuid,
+            "is_limited": True,
+            "note_draft": {
+                "name": "Draft title",
+                "body": html_body,
+            },
+        }
+        post_response = {"data": {"result": "saved", "updated_at": 1700000001}}
+
+        with (
+            patch("note_mcp.api.articles._resolve_numeric_note_id", return_value="12345"),
+            patch("note_mcp.api.articles._fetch_raw_note_data", side_effect=[raw_data, raw_data]),
+            patch("note_mcp.api.articles.NoteAPIClient") as mock_client_class,
+        ):
+            mock_client = MagicMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.post = AsyncMock(return_value=post_response)
+            mock_client_class.return_value = mock_client
+
+            result = await set_paid_settings(
+                session,
+                "n1234567890ab",
+                price=500,
+                separator_uuid=separator_uuid,
+            )
+
+        mock_client.post.assert_awaited_once()
+        endpoint = mock_client.post.call_args[0][0]
+        payload = mock_client.post.call_args.kwargs["json"]
+
+        assert endpoint == "/v1/text_notes/draft_save?id=12345&is_temp_saved=true"
+        assert payload["name"] == "Draft title"
+        assert payload["body"] == html_body
+        assert payload["body_length"] == len("Free introPaid detail")
+        assert payload["price"] == 500
+        assert payload["separator"] == separator_uuid
+        assert "status" not in payload
+        assert result == {
+            "article_id": "12345",
+            "article_key": "n1234567890ab",
+            "price": 500,
+            "separator": separator_uuid,
+            "is_limited": True,
+        }
 
     def test_body_length_with_no_body(self) -> None:
         """body_length should not be set when include_body=False."""

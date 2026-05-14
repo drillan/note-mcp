@@ -1,0 +1,66 @@
+Migration inventory:
+  active: instruction files - 2 found
+    - CLAUDE.md
+    - AGENTS.md
+  active: skills - 7 found
+    - api-investigator
+    - code-quality-gate
+    - constitution-checker
+    - doc-updater
+    - issue-reporter
+    - mcp-development
+    - tdd-workflow
+  active: command sources - 15 found
+    provider: source command (15)
+      - add-worktree
+      - merge-pr
+      - refactor-scan
+      - review-pr-comments
+      - speckit.analyze
+      - speckit.checklist
+      - speckit.clarify
+      - speckit.constitution
+      - speckit.implement
+      - speckit.plan
+      - speckit.specify
+      - speckit.tasks
+      - speckit.taskstoissues
+      - speckit.verify
+      - start-issue
+  inactive: subagents - none found
+Migration surfaces:
+  active: AGENTS.md - 1 instruction file(s) found.
+  active: skills - 22 skill(s) converted.
+  inactive: MCP config - No settings or MCP config found.
+  inactive: subagents - No subagents found.
+Migration report:
+  symlinked: AGENTS.md - Linked to CLAUDE.md.
+  manual_fix_required: .agents/skills/api-investigator/SKILL.md - Manual review required for Claude skill fields: `allowed-tools`.
+  manual_fix_required: .agents/skills/code-quality-gate/SKILL.md - Manual review required for Claude skill fields: `allowed-tools`.
+  manual_fix_required: .agents/skills/constitution-checker/SKILL.md - Manual review required for Claude skill fields: `allowed-tools`.
+  manual_fix_required: .agents/skills/doc-updater/SKILL.md - Manual review required for Claude skill fields: `allowed-tools`.
+  manual_fix_required: .agents/skills/issue-reporter/SKILL.md - Manual review required for Claude skill fields: `allowed-tools`.
+  manual_fix_required: .agents/skills/mcp-development/SKILL.md - Manual review required for Claude skill fields: `allowed-tools`.
+  manual_fix_required: .agents/skills/tdd-workflow/SKILL.md - Manual review required for Claude skill fields: `allowed-tools`.
+  manual_fix_required: .agents/skills/source-command-add-worktree/SKILL.md - Converted source command `add-worktree` to a single-file Codex skill; review invocation and template placeholder semantics.
+  manual_fix_required: .agents/skills/source-command-merge-pr/SKILL.md - Converted source command `merge-pr` to a single-file Codex skill; review invocation and template placeholder semantics.
+  manual_fix_required: .agents/skills/source-command-refactor-scan/SKILL.md - Converted source command `refactor-scan` to a single-file Codex skill; review invocation and template placeholder semantics.
+  manual_fix_required: .agents/skills/source-command-review-pr-comments/SKILL.md - Converted source command `review-pr-comments` to a single-file Codex skill; review invocation and template placeholder semantics.
+  manual_fix_required: .agents/skills/source-command-speckit-analyze/SKILL.md - Converted source command `speckit.analyze` to a single-file Codex skill; review invocation and template placeholder semantics.
+  manual_fix_required: .agents/skills/source-command-speckit-checklist/SKILL.md - Converted source command `speckit.checklist` to a single-file Codex skill; review invocation and template placeholder semantics.
+  manual_fix_required: .agents/skills/source-command-speckit-clarify/SKILL.md - Converted source command `speckit.clarify` to a single-file Codex skill; review invocation and template placeholder semantics.
+  manual_fix_required: .agents/skills/source-command-speckit-constitution/SKILL.md - Converted source command `speckit.constitution` to a single-file Codex skill; review invocation and template placeholder semantics.
+  manual_fix_required: .agents/skills/source-command-speckit-implement/SKILL.md - Converted source command `speckit.implement` to a single-file Codex skill; review invocation and template placeholder semantics.
+  manual_fix_required: .agents/skills/source-command-speckit-plan/SKILL.md - Converted source command `speckit.plan` to a single-file Codex skill; review invocation and template placeholder semantics.
+  manual_fix_required: .agents/skills/source-command-speckit-specify/SKILL.md - Converted source command `speckit.specify` to a single-file Codex skill; review invocation and template placeholder semantics.
+  manual_fix_required: .agents/skills/source-command-speckit-tasks/SKILL.md - Converted source command `speckit.tasks` to a single-file Codex skill; review invocation and template placeholder semantics.
+  manual_fix_required: .agents/skills/source-command-speckit-taskstoissues/SKILL.md - Converted source command `speckit.taskstoissues` to a single-file Codex skill; review invocation and template placeholder semantics.
+  manual_fix_required: .agents/skills/source-command-speckit-verify/SKILL.md - Converted source command `speckit.verify` to a single-file Codex skill; review invocation and template placeholder semantics.
+  manual_fix_required: .agents/skills/source-command-start-issue/SKILL.md - Converted source command `start-issue` to a single-file Codex skill; review invocation and template placeholder semantics.
+  overwritten: .agents/skills/doc-updater - Existing Codex skill will be replaced.
+  overwritten: .agents/skills/api-investigator - Existing Codex skill will be replaced.
+  overwritten: .agents/skills/constitution-checker - Existing Codex skill will be replaced.
+  overwritten: .agents/skills/mcp-development - Existing Codex skill will be replaced.
+  overwritten: .agents/skills/issue-reporter - Existing Codex skill will be replaced.
+  overwritten: .agents/skills/code-quality-gate - Existing Codex skill will be replaced.
+  overwritten: .agents/skills/tdd-workflow - Existing Codex skill will be replaced.

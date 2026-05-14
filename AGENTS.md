@@ -1,0 +1,311 @@
+# AGENTS.md
+
+This file provides guidance to Codex when working with code in this repository.
+
+## Project Constitution
+
+このプロジェクトは `.specify/memory/constitution.md` で定義された原則に従います。
+
+**非交渉的原則（例外なし）**:
+- **Article 1**: Test-First Imperative - すべての実装はTDDに従う
+- **Article 5**: Code Quality Standards - 品質基準の完全遵守
+- **Article 6**: Data Accuracy Mandate - 推測・ハードコード禁止
+- **Article 7**: DRY Principle - コード重複禁止
+- **Article 9**: Python Type Safety Mandate - 包括的な型注釈必須
+- **Article 11**: Naming Convention Compliance - 命名規則への準拠（詳細: `.codex/git-conventions.md`）
+
+実装前に必ず constitution を確認してください。
+
+## Development Environment
+
+### Package Management
+
+```bash
+# 依存関係のインストール
+uv sync
+
+# 開発用依存関係のインストール
+uv sync --group dev
+
+# ドキュメント用依存関係のインストール
+uv sync --group docs
+
+# すべてのグループをインストール
+uv sync --all-groups
+```
+
+### Running Tests
+
+```bash
+# すべてのテストを実行
+uv run pytest
+
+# 特定のテストファイルを実行
+uv run pytest tests/path/to/test_file.py
+
+# 詳細出力付きで実行
+uv run pytest -v
+
+# 特定のテストを実行
+uv run pytest tests/test_file.py::TestClass::test_function -v
+```
+
+### Code Quality
+
+```bash
+# Linterの実行（自動修正あり）
+uv run ruff check --fix .
+
+# フォーマッターの実行
+uv run ruff format .
+
+# 型チェックの実行
+uv run mypy .
+
+# コミット前の完全チェック（必須）
+uv run ruff check --fix . && uv run ruff format . && uv run mypy .
+```
+
+設定は `pyproject.toml` に記載されています。
+
+### Type Safety
+
+**Constitution Article 9** に基づき、型安全性は非交渉的要件です。
+
+必須要件:
+- すべての関数、メソッド、変数に型アノテーションを付与
+- コミット前に `uv run mypy .` を実行
+- `Any`型の使用を避け、具体的な型を使用
+- 型エラーは無視せず、必ず解決
+
+## MCP Server Development
+
+このプロジェクトはnote.com用のMCPサーバーです。**Constitution Article 3** に従います。
+
+### MCP Protocol Requirements
+
+- MCPツールは明確なスキーマ定義を持つこと
+- 入力パラメータはPydanticモデルで検証すること
+- エラーレスポンスは適切なMCPエラー形式で返すこと
+
+### Playwright Integration
+
+note.comへのコンテンツ操作は完全にAPI経由で行われます。
+Playwright/ブラウザ自動化は**ログイン**と**プレビュー表示**にのみ使用されます。
+
+- ブラウザインスタンスは適切にライフサイクル管理すること
+- 作業ウィンドウの再利用を優先すること
+- セッション情報はOSのセキュアストレージに保存すること
+
+### Playwright Headless Mode
+
+E2Eテストおよびブラウザ自動化はデフォルトで**headlessモード**（ブラウザウィンドウ非表示）で実行されます。
+
+```bash
+# デフォルト: headlessモード（ブラウザウィンドウ非表示）
+uv run pytest tests/e2e/
+
+# ブラウザウィンドウを表示してデバッグする場合
+NOTE_MCP_TEST_HEADLESS=false uv run pytest tests/e2e/
+```
+
+環境変数 `NOTE_MCP_TEST_HEADLESS`:
+- 未設定 or `true`: headlessモード（デフォルト、CI/CD向け）
+- `false`: headedモード（ブラウザウィンドウ表示、デバッグ向け）
+
+### Ruby Notation (ルビ記法)
+
+note.comはルビ（ふりがな）記法をサポートしています。
+
+**記法フォーマット:**
+```
+｜漢字《かんじ》
+```
+
+- `｜` (全角縦線) + 対象テキスト + `《` + ルビテキスト + `》`
+
+**動作メカニズム:**
+
+| 段階 | 処理内容 |
+|------|---------|
+| 入力 | `｜漢字《かんじ》` |
+| `markdown_to_html()` | そのまま保持（変換なし） |
+| note.com API | プレーンテキストとして保存 |
+| フロントエンド表示 | `<ruby>漢字<rt>かんじ</rt></ruby>` に変換 |
+
+**重要な注意事項:**
+
+| 方法 | 結果 |
+|------|------|
+| ルビ記法をそのまま送信 | ✅ 正常動作 |
+| `<ruby>`タグを直接送信 | ❌ サニタイズされる |
+
+**検証済みの動作（2026-01-13）:**
+
+| 入力パターン | 結果 |
+|-------------|------|
+| `｜漢字《かんじ》` | ✅ ルビとして表示 |
+| `｜日本《にほん》の｜東京《とうきょう》` | ✅ 複数ルビ対応 |
+| `**｜重要《じゅうよう》**` | ❌ 太字が適用されない（Issue #169） |
+| コードブロック内のルビ記法 | ✅ 保護される（変換されない） |
+
+### Session Management
+
+- 認証状態はセッション管理で適切に維持すること
+- セッション期限切れ時は適切なエラーメッセージを返すこと
+
+### Test URLs (実在するURL)
+
+テスト・動作確認時は**必ず以下の実在するURL**を使用すること。架空のURLを生成してはならない。
+
+| サービス | URL |
+|---------|-----|
+| YouTube | https://www.youtube.com/watch?v=NMHcEDcympM |
+| X (Twitter) | https://x.com/patraqushe/status/1326880858007990275 |
+| note.com | https://note.com/drillan/n/n7379c02632c9 |
+| GitHub Gist | https://gist.github.com/drillan/71aab0a37b413be66bedf6c011d7cd37 |
+| GitHub Repository | https://github.com/drillan/note-mcp |
+
+## Available Skills
+
+プロジェクト固有のスキルが `.agents/skills/` に用意されています。
+
+### API Investigation (`api-investigator`)
+
+note.com APIの調査・解析を支援するスキルです。mitmproxyとPlaywrightを使用してHTTPトラフィックをキャプチャ・分析します。
+
+**主な用途:**
+- 未ドキュメントのAPIエンドポイント調査
+- リクエスト/レスポンスパターンの分析
+- 新機能実装前のAPI動作確認
+
+**クイックスタート:**
+```bash
+# Docker環境で起動
+docker compose up --build
+
+# MCPツール経由で使用
+# investigator_start_capture → investigator_navigate → investigator_get_traffic
+```
+
+**詳細:** `.agents/skills/api-investigator/SKILL.md` を参照
+
+### Other Skills
+
+- **issue-reporter** - 作業進捗をGitHub issueに自動報告
+- **code-quality-gate** - コード品質基準の完全遵守を保証
+- **constitution-checker** - プロジェクト憲法への準拠を検証
+- **tdd-workflow** - TDDワークフローを強制
+- **doc-updater** - コード変更時にドキュメントを自動更新
+- **mcp-development** - MCPサーバー開発のベストプラクティス
+
+## Development Principles
+
+開発原則の詳細は **Constitution** を参照してください。以下は主要な原則の概要です：
+
+### Issue Workflow
+
+issue対応時は以下のワークフローに従う。
+
+**標準ワークフロー:**
+
+| Step | 作業内容 | コマンド/操作 |
+|------|---------|--------------|
+| 1 | issueを作成 | GitHub上で手動作成 |
+| 2 | issueを読み込み、ブランチ作成、計画立案 | `$source-command-start-issue <issue番号>` |
+| 3 | 計画承認後、TDDワークフローに従って実装 | TDD実装 |
+| 4 | PR作成 | `GitHub/yeet または Codex の git/PR ワークフロー` |
+| 5 | PRレビュー | `GitHub PR review workflow` |
+| 6 | レビューコメント対応 | `$source-command-review-pr-comments` |
+| 7 | PRマージ | `$source-command-merge-pr <PR番号>` |
+
+**ブランチ・コミット・worktree命名規則:**
+
+@.codex/git-conventions.md
+
+**進捗記録（issue-reporter）:**
+
+ワークフロー実施中、以下のタイミングでissue-reporterスキルに従い対象issueにコメントを投稿する:
+
+| タイミング | 報告タイプ | 例 |
+|-----------|-----------|-----|
+| 計画立案完了時 | Plan | 実装計画、予想される課題 |
+| 重要な知見発見時 | Insight | API仕様の発見、設計変更の決定 |
+| 問題・ブロッカー発覚時 | Problem | テスト失敗の原因、実装上の障害 |
+
+詳細: `.agents/skills/issue-reporter/SKILL.md`
+
+### Test-Driven Development (Article 1)
+
+1. ユニットテストを先に作成
+2. テストをユーザーに承認してもらう
+3. テストが失敗する（Redフェーズ）ことを確認
+4. 実装してテストを通す（Greenフェーズ）
+5. リファクタリング
+
+### Documentation Integrity (Article 2)
+
+- 実装前に仕様を確認
+- 仕様が曖昧な場合は実装を停止し、明確化を要求
+- ドキュメント変更時はユーザー承認を取得
+
+### Code Quality (Article 5)
+
+- コミット前に品質ツールを実行
+- すべてのエラーを解消してからコミット
+- 時間制約を理由とした品質妥協は禁止
+
+### Data Accuracy (Article 6)
+
+禁止事項:
+- マジックナンバーや固定文字列の直接埋め込み
+- 環境依存値の埋め込み
+- データ取得失敗時の自動デフォルト値割り当て
+
+### DRY Principle (Article 7)
+
+- 実装前に既存コードを検索・確認
+- 3回以上の繰り返しパターンは関数化・モジュール化
+- 重複検出時は作業を停止し、リファクタリング計画を立案
+
+## Key Development Guidelines
+
+### Code Style
+
+- **命名規則**: クラスはPascalCase、関数/変数はsnake_case、定数はUPPER_SNAKE_CASE
+- **型ヒント**: すべての関数・メソッドに型アノテーション（Article 9）
+- **Docstrings**: Google-style形式を推奨（Article 10）
+- **行の長さ**: ruff設定に従う
+- **インポート**: ruffによる自動ソート
+
+### Documentation Standards
+
+- 公開関数、クラス、モジュールには包括的なdocstringを記載
+- Google-style形式を採用
+- Docstringは型アノテーションと一致させる
+
+## Documentation
+
+詳細なガイドラインは `@.codex/docs.md` を参照。
+
+### File Locations
+
+- すべてのドキュメント: `docs/*.md`
+- ドキュメント設定: `docs/conf.py`
+- ビルドシステム: `docs/Makefile`
+
+## Technology Stack
+
+- **Runtime**: Python >= 3.11
+- **Package Manager**: uv
+- **Testing**: pytest >= 8.4.1
+- **Linting/Formatting**: ruff >= 0.12.4
+- **Type Checking**: mypy >= 1.19.1
+- **Documentation**: Sphinx >= 8.2.3, MyST-Parser >= 4.0.1
+
+## Recent Changes
+
+- 2026-01-13: Removed Playwright-based editor helpers (Issue #131), content operations now API-only
+- 2026-01-13: Added Issue Workflow section with branch naming conventions
+- 2025-12-31: Added Available Skills section with api-investigator導線
+- 2025-12-20: Updated CLAUDE.md based on Constitution v1.0.0

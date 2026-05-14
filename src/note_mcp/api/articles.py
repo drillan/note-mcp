@@ -7,9 +7,13 @@ from __future__ import annotations
 
 import html
 import logging
+import time
 import uuid
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
+
+from bs4 import BeautifulSoup
+from bs4.element import PageElement, Tag
 
 from note_mcp.api.client import NoteAPIClient
 from note_mcp.api.embeds import resolve_embed_keys
@@ -34,6 +38,12 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+PAYWALL_LINE_TAG_NAME: str = "paywall-line"
+TABLE_OF_CONTENTS_TAG_NAME: str = "table-of-contents"
+SEPARATOR_CANDIDATE_TAGS: tuple[str, ...] = ("h2", "h3", "h4", "p")
+SEPARATOR_TEXT_PREVIEW_LENGTH: int = 80
+SEPARATOR_TEXT_PREVIEW_TRUNCATE_AT: int = SEPARATOR_TEXT_PREVIEW_LENGTH - 3
 
 # =============================================================================
 # Issue #174: Generic API Execution Helper Functions
@@ -273,19 +283,8 @@ async def update_article_raw_html(
     # Resolve to numeric ID (API requirement)
     numeric_id = await _resolve_numeric_note_id(session, article_id)
 
-    # Build payload with raw HTML body (no conversion)
-    payload: dict[str, Any] = {
-        "name": title,
-        "body": html_body,
-        "body_length": len(html_body),
-        "index": False,
-        "is_lead_form": False,
-    }
-
-    # Add tags if provided
-    hashtags = _normalize_tags(tags)
-    if hashtags:
-        payload["hashtags"] = hashtags
+    article_input = ArticleInput(title=title, body="", tags=tags or [])
+    payload = _build_article_payload(article_input, html_body=html_body)
 
     return await _execute_post(
         session,
@@ -377,14 +376,83 @@ def _build_article_payload(
     }
 
     if include_body and html_body is not None:
-        payload["body"] = html_body
-        payload["body_length"] = len(html_body)
+        separator = _extract_paywall_separator(html_body)
+        body = _remove_editor_control_elements(html_body)
+        payload["body"] = body
+        payload["body_length"] = _html_text_content_length(body)
+        if separator:
+            payload["separator"] = separator
 
     hashtags = _normalize_tags(article_input.tags)
     if hashtags:
         payload["hashtags"] = hashtags
 
     return payload
+
+
+def _html_text_content_length(html_body: str) -> int:
+    """Calculate the body length the same way note.com's editor does.
+
+    The editor sends ProseMirror `textContent.length` as `body_length`, not the
+    serialized HTML length. BeautifulSoup's text extraction is equivalent for
+    the block structures this server generates because `<br>` contributes no
+    text node to DOM `textContent`.
+
+    Args:
+        html_body: Serialized note body HTML.
+
+    Returns:
+        Length of the text content.
+    """
+    soup = BeautifulSoup(html_body, "html.parser")
+    return len(soup.get_text())
+
+
+def _extract_paywall_separator(html_body: str) -> str | None:
+    """Extract note.com's paywall separator UUID from body HTML.
+
+    The note editor represents the visual paid-area line as a `paywall-line`
+    custom element while editing. On save, it removes that element from `body`
+    and sends `separator` as the UUID in the previous block's `name` attribute.
+
+    Args:
+        html_body: Serialized note body HTML.
+
+    Returns:
+        Previous block UUID when a paywall marker is present, otherwise None.
+    """
+    soup = BeautifulSoup(html_body, "html.parser")
+    paywall_line = soup.find(PAYWALL_LINE_TAG_NAME)
+    if not isinstance(paywall_line, Tag):
+        return None
+
+    previous: PageElement | None = paywall_line.find_previous_sibling()
+    while previous is not None and not isinstance(previous, Tag):
+        previous = previous.previous_sibling
+
+    if not isinstance(previous, Tag):
+        return None
+
+    separator = previous.get("name")
+    return separator if isinstance(separator, str) and separator else None
+
+
+def _remove_editor_control_elements(html_body: str) -> str:
+    """Remove editor-only custom elements before saving body HTML.
+
+    Args:
+        html_body: Serialized note body HTML.
+
+    Returns:
+        HTML body without editor-only control tags.
+    """
+    if PAYWALL_LINE_TAG_NAME not in html_body.lower():
+        return html_body
+
+    soup = BeautifulSoup(html_body, "html.parser")
+    for tag in soup.find_all(PAYWALL_LINE_TAG_NAME):
+        tag.decompose()
+    return str(soup)
 
 
 def _is_article_key_format(article_id: str) -> bool:
@@ -817,6 +885,13 @@ async def publish_article(
     article_id: str | None = None,
     article_input: ArticleInput | None = None,
     tags: list[str] | None = None,
+    *,
+    magazine_keys: list[str] | None = None,
+    circle_plan_keys: list[str] | None = None,
+    price: int | None = None,
+    separator_uuid: str | None = None,
+    limited: bool | None = None,
+    disable_comment: bool | None = None,
 ) -> Article:
     """Publish an article.
 
@@ -828,6 +903,12 @@ async def publish_article(
         article_input: New article content to create and publish (mutually exclusive with article_id)
         tags: Tags to set on the article when publishing an existing draft (optional).
             For new articles, use article_input.tags instead.
+        magazine_keys: Magazine keys to attach when publishing an existing draft.
+        circle_plan_keys: Membership plan keys for member-only publishing.
+        price: Paid article price in JPY. Use 0 to publish as free.
+        separator_uuid: UUID of the block that marks the paid-area boundary.
+        limited: Paid/article-limited flag for note.com's publish API.
+        disable_comment: Whether to disable comments.
 
     Returns:
         Published Article object
@@ -882,10 +963,12 @@ async def publish_article(
             # Publish the article
             # Issue #252: PUT /v1/text_notes/{id} requires 'free_body' (not 'body')
             # and hashtags in ["#tag1", "#tag2"] format (not dict format)
+            article_body = _remove_editor_control_elements(article_body)
+
             payload: dict[str, Any] = {
                 "name": article_title,
                 "free_body": article_body,
-                "body_length": len(article_body),
+                "body_length": _html_text_content_length(article_body),
                 "status": "published",
                 "index": False,
             }
@@ -895,6 +978,21 @@ async def publish_article(
                 hashtags = _normalize_tags_for_publish(tags)
                 if hashtags:
                     payload["hashtags"] = hashtags
+
+            if magazine_keys is not None:
+                payload["magazine_keys"] = list(magazine_keys)
+            if circle_plan_keys is not None:
+                payload["circle_permissions"] = (
+                    [{"kind": "circle_plan", "keys": list(circle_plan_keys)}] if circle_plan_keys else []
+                )
+            if price is not None:
+                payload["price"] = price
+            if separator_uuid is not None:
+                payload["separator"] = separator_uuid
+            if limited is not None:
+                payload["limited"] = limited
+            if disable_comment is not None:
+                payload["disable_comment"] = disable_comment
 
             response = await client.put(f"/v1/text_notes/{numeric_id}", json=payload)
 
@@ -1253,4 +1351,219 @@ async def delete_all_drafts(
         deleted_articles=deleted_articles,
         failed_articles=failed_articles,
         message=message,
+    )
+
+
+async def get_separator_candidates(
+    session: Session,
+    article_id: str,
+) -> list[dict[str, str]]:
+    """List block UUIDs that can be used as a paid-area separator.
+
+    note.com's editor stores the paid-area boundary as the `separator` field,
+    whose value is the `name` UUID of a top-level body block. Drafts keep the
+    latest editor body in `note_draft.body`, so this function prefers it over
+    the published body.
+
+    Args:
+        session: Authenticated session.
+        article_id: Article key or numeric ID.
+
+    Returns:
+        List of candidate blocks with `uuid`, `level`, and `text`.
+    """
+    raw = await _fetch_raw_note_data(session, article_id)
+    html_body = _select_raw_body(raw)
+    soup = BeautifulSoup(html_body, "html.parser")
+
+    candidates: list[dict[str, str]] = []
+    for tag in soup.find_all(SEPARATOR_CANDIDATE_TAGS):
+        if not isinstance(tag, Tag):
+            continue
+        uuid_value = tag.get("name")
+        if not isinstance(uuid_value, str) or not uuid_value:
+            continue
+        text = tag.get_text().strip()
+        if len(text) > SEPARATOR_TEXT_PREVIEW_LENGTH:
+            text = f"{text[:SEPARATOR_TEXT_PREVIEW_TRUNCATE_AT]}..."
+        candidates.append(
+            {
+                "uuid": uuid_value,
+                "level": tag.name,
+                "text": text,
+            }
+        )
+    return candidates
+
+
+async def set_paid_settings(
+    session: Session,
+    article_id: str,
+    *,
+    price: int | None = None,
+    separator_uuid: str | None = None,
+) -> dict[str, Any]:
+    """Set draft paid settings without publishing.
+
+    Saves the current draft body back through the editor-compatible
+    `draft_save` endpoint while adding `price` and/or `separator`.
+
+    Args:
+        session: Authenticated session.
+        article_id: Article key or numeric ID.
+        price: Paid article price in JPY. Use 0 to make the draft free.
+        separator_uuid: Existing body block UUID. Empty string clears it.
+
+    Returns:
+        Confirmed paid settings from the refreshed note payload.
+
+    Raises:
+        ValueError: If both optional settings are omitted.
+        NoteAPIError: If required note data is missing or the API fails.
+    """
+    if price is None and separator_uuid is None:
+        raise ValueError("At least one of price or separator_uuid must be provided")
+
+    numeric_id = await _resolve_numeric_note_id(session, article_id)
+    raw = await _fetch_raw_note_data(session, article_id)
+    article_key = _select_raw_article_key(raw, article_id)
+    body = _select_raw_body(raw)
+    title = _select_raw_title(raw)
+
+    payload: dict[str, Any] = {
+        "name": title,
+        "body": body,
+        "body_length": _html_text_content_length(body),
+        "index": False,
+        "is_lead_form": False,
+    }
+    if price is not None:
+        payload["price"] = price
+    if separator_uuid is not None:
+        payload["separator"] = separator_uuid
+
+    response = await _execute_post(
+        session,
+        f"/v1/text_notes/draft_save?id={numeric_id}&is_temp_saved=true",
+        lambda draft_response: draft_response,
+        payload=payload,
+    )
+    _validate_draft_save_response(response, article_id)
+
+    refreshed = await _fetch_raw_note_data(session, article_key)
+    return {
+        "article_id": numeric_id,
+        "article_key": _select_raw_article_key(refreshed, article_key),
+        "price": refreshed.get("price"),
+        "separator": refreshed.get("separator"),
+        "is_limited": refreshed.get("is_limited"),
+    }
+
+
+async def _fetch_raw_note_data(
+    session: Session,
+    article_id: str,
+) -> dict[str, Any]:
+    """Fetch raw `/v3/notes/{key}` note data used by the editor."""
+    article_key = await _resolve_article_key(session, article_id)
+    async with NoteAPIClient(session) as client:
+        response = await client.get(
+            f"/v3/notes/{article_key}",
+            params={
+                "draft": "true",
+                "draft_reedit": "false",
+                "ts": int(time.time() * 1000),
+            },
+        )
+
+    data = response.get("data")
+    if not isinstance(data, dict):
+        raise NoteAPIError(
+            code=ErrorCode.API_ERROR,
+            message="Invalid API response: missing raw note data",
+            details={"article_id": article_id, "response": response},
+        )
+    return data
+
+
+async def _resolve_article_key(
+    session: Session,
+    article_id: str,
+) -> str:
+    """Resolve an article key from key or numeric ID input."""
+    if _is_article_key_format(article_id):
+        return article_id
+    if not article_id.isdigit():
+        raise NoteAPIError(
+            code=ErrorCode.INVALID_INPUT,
+            message=(f"Invalid article ID '{article_id}'. Use a note key like 'n1234567890ab' or a numeric ID."),
+            details={"article_id": article_id},
+        )
+
+    page = 1
+    while page <= DELETE_ALL_DRAFTS_MAX_PAGES:
+        result = await list_articles(session, status=None, page=page, limit=10)
+        for article in result.articles:
+            if article.id == article_id:
+                return article.key
+        if not result.has_more:
+            break
+        page += 1
+
+    raise NoteAPIError(
+        code=ErrorCode.ARTICLE_NOT_FOUND,
+        message=f"Article key not found for numeric ID '{article_id}'.",
+        details={"article_id": article_id},
+    )
+
+
+def _select_raw_body(raw: dict[str, Any]) -> str:
+    """Select the latest HTML body from raw note data."""
+    note_draft = raw.get("note_draft")
+    if isinstance(note_draft, dict):
+        draft_body = note_draft.get("body")
+        if isinstance(draft_body, str) and draft_body:
+            return draft_body
+
+    body = raw.get("body")
+    if isinstance(body, str) and body:
+        return body
+
+    raise NoteAPIError(
+        code=ErrorCode.API_ERROR,
+        message="Raw note data does not contain a body to save.",
+        details={"raw_keys": sorted(raw.keys())},
+    )
+
+
+def _select_raw_title(raw: dict[str, Any]) -> str:
+    """Select the latest title from raw note data."""
+    note_draft = raw.get("note_draft")
+    if isinstance(note_draft, dict):
+        draft_title = note_draft.get("name")
+        if isinstance(draft_title, str) and draft_title:
+            return draft_title
+
+    title = raw.get("name")
+    if isinstance(title, str) and title:
+        return title
+
+    raise NoteAPIError(
+        code=ErrorCode.API_ERROR,
+        message="Raw note data does not contain a title to save.",
+        details={"raw_keys": sorted(raw.keys())},
+    )
+
+
+def _select_raw_article_key(raw: dict[str, Any], fallback: str) -> str:
+    """Select article key from raw note data."""
+    raw_key = raw.get("key")
+    if isinstance(raw_key, str) and raw_key:
+        return raw_key
+    if _is_article_key_format(fallback):
+        return fallback
+    raise NoteAPIError(
+        code=ErrorCode.API_ERROR,
+        message="Raw note data does not contain an article key.",
+        details={"fallback": fallback, "raw_keys": sorted(raw.keys())},
     )
