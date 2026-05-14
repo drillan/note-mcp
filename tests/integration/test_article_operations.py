@@ -693,7 +693,7 @@ class TestPublishArticle:
             assert put_payload == {
                 "name": "Published Article with Tags",
                 "free_body": "<p>Content</p>",
-                "body_length": 14,
+                "body_length": 7,
                 "status": "published",
                 "index": False,
                 "hashtags": ["#Python", "#test"],

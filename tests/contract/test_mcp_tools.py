@@ -335,7 +335,19 @@ class TestToolSchemas:
         assert "properties" in schema
 
         # Exact properties match
-        expected_properties = {"article_id", "file_path", "title", "body", "tags"}
+        expected_properties = {
+            "article_id",
+            "file_path",
+            "title",
+            "body",
+            "tags",
+            "magazine_keys",
+            "circle_plan_keys",
+            "price",
+            "separator_uuid",
+            "limited",
+            "disable_comment",
+        }
         actual_properties = set(schema.get("properties", {}).keys())
         assert actual_properties == expected_properties, (
             f"Schema mismatch: "
@@ -448,6 +460,106 @@ class TestToolSchemas:
             f"missing={expected_required - actual_required}"
         )
 
+    def test_note_set_paid_settings_tool_exists(self) -> None:
+        """Test that note_set_paid_settings tool is registered."""
+        tools = get_tools()
+        assert "note_set_paid_settings" in tools
+
+    def test_note_set_paid_settings_schema(self) -> None:
+        """Test note_set_paid_settings tool schema matches exactly."""
+        tools = get_tools()
+        paid_tool = tools["note_set_paid_settings"]
+
+        assert paid_tool.parameters is not None
+        schema = paid_tool.parameters
+        assert "properties" in schema
+
+        expected_properties = {"article_id", "price", "separator_uuid"}
+        actual_properties = set(schema.get("properties", {}).keys())
+        assert actual_properties == expected_properties, (
+            f"Schema mismatch: "
+            f"extra={actual_properties - expected_properties}, "
+            f"missing={expected_properties - actual_properties}"
+        )
+
+        expected_required = {"article_id"}
+        actual_required = set(schema.get("required", []))
+        assert actual_required == expected_required, (
+            f"Required mismatch: "
+            f"extra={actual_required - expected_required}, "
+            f"missing={expected_required - actual_required}"
+        )
+
+    def test_note_get_separator_candidates_tool_exists(self) -> None:
+        """Test that note_get_separator_candidates tool is registered."""
+        tools = get_tools()
+        assert "note_get_separator_candidates" in tools
+
+    def test_note_get_separator_candidates_schema(self) -> None:
+        """Test note_get_separator_candidates tool schema matches exactly."""
+        tools = get_tools()
+        candidates_tool = tools["note_get_separator_candidates"]
+
+        assert candidates_tool.parameters is not None
+        schema = candidates_tool.parameters
+        assert "properties" in schema
+
+        expected_properties = {"article_id"}
+        actual_properties = set(schema.get("properties", {}).keys())
+        assert actual_properties == expected_properties, (
+            f"Schema mismatch: "
+            f"extra={actual_properties - expected_properties}, "
+            f"missing={expected_properties - actual_properties}"
+        )
+
+        expected_required = {"article_id"}
+        actual_required = set(schema.get("required", []))
+        assert actual_required == expected_required, (
+            f"Required mismatch: "
+            f"extra={actual_required - expected_required}, "
+            f"missing={expected_required - actual_required}"
+        )
+
+    def test_note_list_circle_plans_tool_exists(self) -> None:
+        """Test that note_list_circle_plans tool is registered."""
+        tools = get_tools()
+        assert "note_list_circle_plans" in tools
+
+    def test_note_list_circle_plans_schema(self) -> None:
+        """Test note_list_circle_plans tool schema matches exactly."""
+        tools = get_tools()
+        plans_tool = tools["note_list_circle_plans"]
+
+        assert plans_tool.parameters is not None
+        schema = plans_tool.parameters
+        assert "properties" in schema
+
+        actual_properties = set(schema.get("properties", {}).keys())
+        assert actual_properties == set()
+
+        actual_required = set(schema.get("required", []))
+        assert actual_required == set()
+
+    def test_note_list_my_magazines_tool_exists(self) -> None:
+        """Test that note_list_my_magazines tool is registered."""
+        tools = get_tools()
+        assert "note_list_my_magazines" in tools
+
+    def test_note_list_my_magazines_schema(self) -> None:
+        """Test note_list_my_magazines tool schema matches exactly."""
+        tools = get_tools()
+        magazines_tool = tools["note_list_my_magazines"]
+
+        assert magazines_tool.parameters is not None
+        schema = magazines_tool.parameters
+        assert "properties" in schema
+
+        actual_properties = set(schema.get("properties", {}).keys())
+        assert actual_properties == set()
+
+        actual_required = set(schema.get("required", []))
+        assert actual_required == set()
+
 
 class TestToolDescriptions:
     """Tests for tool descriptions."""
@@ -518,6 +630,10 @@ class TestRequireSessionTools:
         "note_upload_body_image",
         "note_show_preview",
         "note_get_preview_html",
+        "note_set_paid_settings",
+        "note_get_separator_candidates",
+        "note_list_circle_plans",
+        "note_list_my_magazines",
     ]
 
     @pytest.mark.parametrize("tool_name", REQUIRE_SESSION_TOOLS)

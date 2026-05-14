@@ -88,7 +88,8 @@ Claude Desktopの`claude_desktop_config.json`に追加：
 ```
 1. note_login でログイン
 2. note_create_draft でタイトルと本文を指定して下書き作成
-3. note_publish_article で公開
+3. 有料記事の場合は note_get_separator_candidates と note_set_paid_settings で境界・価格を保存
+4. note_publish_article で公開
 ```
 
 詳細は[クイックスタートガイド](quickstart.md)を参照してください。

@@ -16,11 +16,14 @@ from note_mcp.api.articles import (
     delete_all_drafts,
     delete_draft,
     get_article,
+    get_separator_candidates,
     list_articles,
     publish_article,
+    set_paid_settings,
     update_article,
 )
 from note_mcp.api.images import insert_image_via_api, upload_body_image, upload_eyecatch_image
+from note_mcp.api.magazines import list_circle_plans, list_my_magazines
 from note_mcp.api.preview import get_preview_html
 from note_mcp.auth.browser import login_with_browser
 from note_mcp.auth.session import SessionManager
@@ -412,6 +415,12 @@ async def note_publish_article(
     title: Annotated[str | None, "記事タイトル（新規作成時は必須）"] = None,
     body: Annotated[str | None, "記事本文（Markdown形式、新規作成時は必須）"] = None,
     tags: Annotated[list[str] | None, "記事のタグ（#なしでも可）"] = None,
+    magazine_keys: Annotated[list[str] | None, "追加するマガジンキーのリスト"] = None,
+    circle_plan_keys: Annotated[list[str] | None, "公開先メンバーシッププランキーのリスト"] = None,
+    price: Annotated[int | None, "有料記事の価格（円）。無料公開は0。"] = None,
+    separator_uuid: Annotated[str | None, "有料エリア境界にする本文ブロックUUID"] = None,
+    limited: Annotated[bool | None, "限定公開フラグ"] = None,
+    disable_comment: Annotated[bool | None, "コメントを無効化するか"] = None,
 ) -> str:
     """記事を公開します。
 
@@ -428,6 +437,12 @@ async def note_publish_article(
         title: 記事タイトル（新規作成時は必須）
         body: 記事本文（Markdown形式、新規作成時は必須）
         tags: 記事のタグ（オプション、file_pathより優先）
+        magazine_keys: 追加するマガジンキー（既存下書き公開時のみ有効）
+        circle_plan_keys: 公開先メンバーシッププランキー（既存下書き公開時のみ有効）
+        price: 有料記事の価格（既存下書き公開時のみ有効）
+        separator_uuid: 有料エリア境界にする本文ブロックUUID（既存下書き公開時のみ有効）
+        limited: 限定公開フラグ（既存下書き公開時のみ有効）
+        disable_comment: コメントを無効化するか（既存下書き公開時のみ有効）
 
     Returns:
         公開結果のメッセージ（記事URLを含む）
@@ -454,7 +469,17 @@ async def note_publish_article(
                 except ValueError as e:
                     return f"ファイル解析エラー: {e}"
 
-            article = await publish_article(session, article_id=article_id, tags=publish_tags)
+            article = await publish_article(
+                session,
+                article_id=article_id,
+                tags=publish_tags,
+                magazine_keys=magazine_keys,
+                circle_plan_keys=circle_plan_keys,
+                price=price,
+                separator_uuid=separator_uuid,
+                limited=limited,
+                disable_comment=disable_comment,
+            )
         elif title is not None and body is not None:
             # Create and publish new article (file_path is ignored for new articles)
             article_input = ArticleInput(
@@ -470,6 +495,113 @@ async def note_publish_article(
 
     url_info = f"、URL: {article.url}" if article.url else ""
     return f"記事を公開しました。ID: {article.id}{url_info}"
+
+
+@mcp.tool()
+@require_session
+@handle_api_error
+async def note_get_separator_candidates(
+    session: Session,
+    article_id: Annotated[str, "候補を取得する下書き記事のIDまたはキー"],
+) -> str:
+    """有料エリア境界に使える本文ブロックUUID候補を取得します。
+
+    note公式エディタは有料境界を本文ブロックのUUIDとして保存します。
+    このツールは最新の下書き本文から見出し・段落ブロックを抽出します。
+
+    Args:
+        article_id: 候補を取得する下書き記事のIDまたはキー
+
+    Returns:
+        UUID候補の一覧
+    """
+    candidates = await get_separator_candidates(session, article_id)
+    if not candidates:
+        return "有料エリア境界に使える候補が見つかりませんでした。"
+
+    lines = [
+        f"{index}. uuid={candidate['uuid']} / {candidate['level']} / {candidate['text']}"
+        for index, candidate in enumerate(candidates, start=1)
+    ]
+    return "有料エリア境界候補:\n" + "\n".join(lines)
+
+
+@mcp.tool()
+@require_session
+@handle_api_error
+async def note_set_paid_settings(
+    session: Session,
+    article_id: Annotated[str, "有料設定を保存する下書き記事のIDまたはキー"],
+    price: Annotated[int | None, "有料記事の価格（円）。無料に戻す場合は0。"] = None,
+    separator_uuid: Annotated[str | None, "有料エリア境界にする本文ブロックUUID"] = None,
+) -> str:
+    """下書きに有料設定を保存します（公開はしません）。
+
+    note公式エディタと同じ `draft_save` 経路で price/separator を保存します。
+    先に note_get_separator_candidates で現在の本文UUIDを確認してください。
+
+    Args:
+        article_id: 有料設定を保存する下書き記事のIDまたはキー
+        price: 有料記事の価格（円）
+        separator_uuid: 有料エリア境界にする本文ブロックUUID
+
+    Returns:
+        保存結果
+    """
+    settings = await set_paid_settings(
+        session,
+        article_id,
+        price=price,
+        separator_uuid=separator_uuid,
+    )
+    return (
+        "下書きの有料設定を保存しました。\n"
+        f"記事ID: {settings['article_id']}\n"
+        f"記事キー: {settings['article_key']}\n"
+        f"価格: {settings['price']}\n"
+        f"separator: {settings['separator']}\n"
+        f"限定: {settings['is_limited']}"
+    )
+
+
+@mcp.tool()
+@require_session
+@handle_api_error
+async def note_list_my_magazines(session: Session) -> str:
+    """自分が所有するマガジン一覧を取得します。
+
+    Returns:
+        マガジンキーと名前の一覧
+    """
+    magazines = await list_my_magazines(session)
+    if not magazines:
+        return "マガジンが見つかりませんでした。"
+
+    lines = [
+        f"{index}. key={magazine.get('key')} / {magazine.get('name', '')}"
+        for index, magazine in enumerate(magazines, start=1)
+    ]
+    return "マガジン一覧:\n" + "\n".join(lines)
+
+
+@mcp.tool()
+@require_session
+@handle_api_error
+async def note_list_circle_plans(session: Session) -> str:
+    """記事に紐づけ可能なメンバーシッププラン一覧を取得します。
+
+    Returns:
+        メンバーシッププランキーと名前の一覧
+    """
+    plans = await list_circle_plans(session)
+    if not plans:
+        return "メンバーシッププランが見つかりませんでした。"
+
+    lines = [
+        f"{index}. key={plan.get('key')} / {plan.get('name', '')} / price={plan.get('price')}"
+        for index, plan in enumerate(plans, start=1)
+    ]
+    return "メンバーシッププラン一覧:\n" + "\n".join(lines)
 
 
 @mcp.tool()
